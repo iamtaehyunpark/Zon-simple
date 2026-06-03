@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'app.dart';
+import 'firebase_options.dart';
 import 'core/notifications/notification_service.dart';
 
 Future<void> main() async {
@@ -59,11 +60,14 @@ Future<void> main() async {
     debugPrint('Error initializing Supabase: $e');
   }
 
-  // Initialize Firebase (safeguarded against missing GoogleService-Info.plist)
+  // Initialize Firebase with explicit options so it doesn't depend on the
+  // GoogleService-Info.plist being bundled into the iOS target.
   try {
-    await Firebase.initializeApp();
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
-    debugPrint('Warning: Firebase initialization failed. Ensure GoogleService-Info.plist is configured. Error: $e');
+    debugPrint('Warning: Firebase initialization failed. Error: $e');
   }
 
   // Initialize notifications (non-blocking)

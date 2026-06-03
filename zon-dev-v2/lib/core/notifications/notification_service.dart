@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -36,9 +37,24 @@ class NotificationService {
     final initial = await _fcm.getInitialMessage();
     if (initial != null) _routeFromMessage(initial);
 
-    final token = await _fcm.getToken();
-    if (token != null) await _registerToken(token);
+    // Register for token refreshes first so we still capture the token once
+    // APNs delivers it later (e.g. after the Push capability is configured).
     _fcm.onTokenRefresh.listen(_registerToken);
+
+    // On iOS, getToken() throws if the APNs token isn't available yet (no Push
+    // entitlement, simulator, or APNs not configured in Firebase). Guard it so
+    // initialization still completes and local notifications keep working.
+    try {
+      if (Platform.isIOS && await _fcm.getAPNSToken() == null) {
+        debugPrint('APNs token not available yet — skipping FCM token fetch. '
+            'It will register via onTokenRefresh once APNs is configured.');
+        return;
+      }
+      final token = await _fcm.getToken();
+      if (token != null) await _registerToken(token);
+    } catch (e) {
+      debugPrint('FCM token fetch skipped: $e');
+    }
   }
 
   Future<void> requestPermission() async {
