@@ -59,12 +59,13 @@ Location data collected passively
 | State Management | Riverpod | `@riverpod` code generation |
 | Navigation | go_router | Declarative routing only |
 | Backend | Supabase | PostgreSQL + Auth + Storage + Realtime + Edge Functions |
+| Auth | Supabase Auth + flutter_web_auth_2 | OAuth (Apple/Google) via native in-app ASWebAuthenticationSession; manual getOAuthSignInUrl → getSessionFromUrl |
 | Maps | Mapbox Flutter SDK | Full-screen overlay style |
 | Location | geolocator + geofence_service | iOS "While Using" permission only |
 | Background location | iOS CLLocationManager (significant-change) | NOT "Always Allow" |
 | Photo access | photo_manager | iOS Photos Framework, EXIF parsing |
-| Geocoding | Mapbox Geocoding API | Coordinates → place name. Call sparingly. |
-| Place search | Google Places API | External place ID matching |
+| Geocoding | — | Standalone reverse-geocode subsystem removed (unused). Reverse geocoding, if needed, comes from the place provider. |
+| Place search | Kakao Local API (Korea) + Google Places (worldwide) | Coordinate-grounded nearby + text search; stores `external_place_id`. Routed by `placeServiceFor(lat,lng)`. |
 | HTTP | Dio | With auth interceptors |
 | Local storage | Hive | Cached route events, draft Stamps |
 | Push notifications | firebase_messaging | FCM for significant-change nudges |

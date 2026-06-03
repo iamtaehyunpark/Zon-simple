@@ -94,9 +94,10 @@ Create `.env.example`:
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 MAPBOX_TOKEN=pk.your-mapbox-token
+KAKAO_REST_API_KEY=your-kakao-rest-api-key
 GOOGLE_PLACES_API_KEY=your-google-places-key
-FCM_SERVER_KEY=your-fcm-key
 ```
+(FCM uses a Firebase service account on the server, not a client key.)
 
 Create `.env` (with actual values if available, otherwise copy .env.example).
 
