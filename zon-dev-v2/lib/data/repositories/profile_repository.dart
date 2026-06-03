@@ -5,6 +5,7 @@ import '../models/user_profile.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/supabase/supabase_provider.dart';
 import '../../core/auth/auth_provider.dart';
+import 'base_repository.dart';
 
 part 'profile_repository.g.dart';
 
@@ -14,18 +15,16 @@ ProfileRepository profileRepository(ProfileRepositoryRef ref) => ProfileReposito
       currentUserId: ref.watch(currentUserProvider)?.id,
     );
 
-class ProfileRepository {
-  final SupabaseClient _client;
-  final String? _currentUserId;
-  ProfileRepository(this._client, {String? currentUserId})
-      : _currentUserId = currentUserId;
-
-  bool get _isDevMode => _currentUserId == kDevMockUserId;
-  String? get _userId => _currentUserId ?? _client.auth.currentUser?.id;
+class ProfileRepository with BaseRepository {
+  @override
+  final SupabaseClient client;
+  @override
+  final String? currentUserId;
+  ProfileRepository(this.client, {this.currentUserId});
 
   Future<Either<AppException, UserProfile>> getProfile(String userId) async {
     try {
-      final data = await _client
+      final data = await client
           .from('profiles')
           .select()
           .eq('id', userId)
@@ -37,7 +36,7 @@ class ProfileRepository {
   }
 
   Future<Either<AppException, UserProfile>> getMyProfile() async {
-    final userId = _userId;
+    final userId = this.userId;
     if (userId == null) return left(const AuthError('Unauthorized'));
     return getProfile(userId);
   }
@@ -46,9 +45,9 @@ class ProfileRepository {
     Map<String, dynamic> updates,
   ) async {
     try {
-      final userId = _userId;
+      final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (_isDevMode) {
+      if (isDevMode) {
         return right(UserProfile(
           id: kDevMockUserId,
           username: (updates['username'] as String?) ?? 'dev_user',
@@ -56,7 +55,7 @@ class ProfileRepository {
           avatarUrl: updates['avatar_url'] as String?,
         ));
       }
-      final data = await _client
+      final data = await client
           .from('profiles')
           .update({...updates, 'updated_at': DateTime.now().toIso8601String()})
           .eq('id', userId)
@@ -70,24 +69,24 @@ class ProfileRepository {
 
   Future<Either<AppException, bool>> follow(String targetUserId) async {
     try {
-      final userId = _userId;
+      final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (_isDevMode) return right(true);
-      final existing = await _client
+      if (isDevMode) return right(true);
+      final existing = await client
           .from('follows')
           .select()
           .eq('follower_id', userId)
           .eq('following_id', targetUserId)
           .maybeSingle();
       if (existing != null) {
-        await _client
+        await client
             .from('follows')
             .delete()
             .eq('follower_id', userId)
             .eq('following_id', targetUserId);
         return right(false);
       } else {
-        await _client.from('follows').insert({
+        await client.from('follows').insert({
           'follower_id': userId,
           'following_id': targetUserId,
         });
@@ -100,9 +99,9 @@ class ProfileRepository {
 
   Future<bool> isFollowing(String targetUserId) async {
     try {
-      final userId = _userId;
+      final userId = this.userId;
       if (userId == null) return false;
-      final existing = await _client
+      final existing = await client
           .from('follows')
           .select()
           .eq('follower_id', userId)

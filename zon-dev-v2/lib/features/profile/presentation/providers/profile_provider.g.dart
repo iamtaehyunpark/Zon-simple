@@ -157,7 +157,7 @@ class _IsFollowingProviderElement extends AutoDisposeFutureProviderElement<bool>
   String get targetUserId => (origin as IsFollowingProvider).targetUserId;
 }
 
-String _$profileNotifierHash() => r'03df7f2e65abac20a9cffa8bd64f9e2b1630dd46';
+String _$profileNotifierHash() => r'5bd3535bc927a9123a3092c49cc82c7f7326a399';
 
 abstract class _$ProfileNotifier
     extends BuildlessAutoDisposeNotifier<AsyncValue<UserProfile?>> {
@@ -305,7 +305,7 @@ class _ProfileNotifierProviderElement
 }
 
 String _$profileStampsNotifierHash() =>
-    r'388d649a38f79c33c8fcecfe9163de4a66762899';
+    r'507520663eeff836de5cecc0411b07f71952fc71';
 
 abstract class _$ProfileStampsNotifier
     extends BuildlessAutoDisposeNotifier<AsyncValue<List<Stamp>>> {

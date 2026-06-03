@@ -6,7 +6,7 @@ part of 'timeline_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$timelineNotifierHash() => r'6d3168bc89086d91c24df669a3defbd1bb78dce8';
+String _$timelineNotifierHash() => r'41b0ee745d99c697426662e809693eb63856ab5b';
 
 /// See also [TimelineNotifier].
 @ProviderFor(TimelineNotifier)

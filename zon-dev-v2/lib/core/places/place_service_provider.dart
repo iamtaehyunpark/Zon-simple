@@ -17,7 +17,4 @@ PlaceService placeServiceFor(PlaceServiceForRef ref, double lat, double lng) {
   return GooglePlaceService();
 }
 
-/// Convenience: resolve provider name for display / analytics.
-@riverpod
-String placeProviderName(PlaceProviderNameRef ref, double lat, double lng) =>
-    isKorea(lat, lng) ? 'kakao' : 'google_places';
+

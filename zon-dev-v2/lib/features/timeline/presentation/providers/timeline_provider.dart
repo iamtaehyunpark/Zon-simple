@@ -29,11 +29,8 @@ class TimelineNotifier extends _$TimelineNotifier {
     }
 
     final stampRepo = ref.read(stampRepositoryProvider);
-    final stampsResult = await stampRepo.getMyStamps(limit: 200);
-    final stamps = stampsResult.getOrElse((_) => []);
-
-    final monthStamps = stamps.where((s) =>
-        s.visitedAt.year == month.year && s.visitedAt.month == month.month);
+    final stampsResult = await stampRepo.getMyStampsForMonth(month);
+    final monthStamps = stampsResult.getOrElse((_) => []);
 
     final grouped = <DateTime, List<Stamp>>{};
     for (final s in monthStamps) {

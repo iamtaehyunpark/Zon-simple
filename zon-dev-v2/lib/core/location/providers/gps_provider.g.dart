@@ -22,7 +22,7 @@ final gpsServiceProvider = AutoDisposeProvider<GpsService>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef GpsServiceRef = AutoDisposeProviderRef<GpsService>;
-String _$gpsNotifierHash() => r'9798600447858e43472eb6ccbe7777685eedb548';
+String _$gpsNotifierHash() => r'3b50d819a397a6a0904cf514894fd46ae6b0fc0b';
 
 /// See also [GpsNotifier].
 @ProviderFor(GpsNotifier)

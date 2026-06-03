@@ -21,8 +21,6 @@ class KakaoPlaceService implements PlaceService {
           headers: {'Authorization': 'KakaoAK $restApiKey'},
         ));
 
-  @override
-  PlaceProvider get provider => PlaceProvider.kakao;
 
   /// Kakao has no "all categories" call, so `nearby` fans out across the
   /// category groups worth surfacing in a place diary and merges by distance.

@@ -6,7 +6,7 @@ part of 'auth_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$authStateStreamHash() => r'8c1245f73d001b64029b60796b1342f4ca539bda';
+String _$authStateStreamHash() => r'c96fcdae3376723f595b52aa04a98221bac00eb8';
 
 /// See also [authStateStream].
 @ProviderFor(authStateStream)
@@ -23,7 +23,7 @@ final authStateStreamProvider = AutoDisposeStreamProvider<AuthState>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef AuthStateStreamRef = AutoDisposeStreamProviderRef<AuthState>;
-String _$currentUserHash() => r'634639ed6940963d5eda49a93ea1be329ead5296';
+String _$currentUserHash() => r'2e299deb015abe928509ed38a2b2a89eaeae7e83';
 
 /// See also [currentUser].
 @ProviderFor(currentUser)

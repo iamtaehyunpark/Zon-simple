@@ -177,7 +177,9 @@ class __$$ExternalPlaceImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$ExternalPlaceImpl implements _ExternalPlace {
+class _$ExternalPlaceImpl
+    with DiagnosticableTreeMixin
+    implements _ExternalPlace {
   const _$ExternalPlaceImpl(
       {required this.externalPlaceId,
       required this.externalSource,
@@ -203,8 +205,22 @@ class _$ExternalPlaceImpl implements _ExternalPlace {
   final String? category;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'ExternalPlace(externalPlaceId: $externalPlaceId, externalSource: $externalSource, name: $name, lat: $lat, lng: $lng, address: $address, category: $category)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'ExternalPlace'))
+      ..add(DiagnosticsProperty('externalPlaceId', externalPlaceId))
+      ..add(DiagnosticsProperty('externalSource', externalSource))
+      ..add(DiagnosticsProperty('name', name))
+      ..add(DiagnosticsProperty('lat', lat))
+      ..add(DiagnosticsProperty('lng', lng))
+      ..add(DiagnosticsProperty('address', address))
+      ..add(DiagnosticsProperty('category', category));
   }
 
   @override
@@ -398,12 +414,18 @@ class __$$IdleImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$IdleImpl implements _Idle {
+class _$IdleImpl with DiagnosticableTreeMixin implements _Idle {
   const _$IdleImpl();
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.idle()';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties..add(DiagnosticsProperty('type', 'CheckinState.idle'));
   }
 
   @override
@@ -548,12 +570,18 @@ class __$$LocatingImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$LocatingImpl implements _Locating {
+class _$LocatingImpl with DiagnosticableTreeMixin implements _Locating {
   const _$LocatingImpl();
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.locating()';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties..add(DiagnosticsProperty('type', 'CheckinState.locating'));
   }
 
   @override
@@ -753,7 +781,9 @@ class __$$PlaceSelectedImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$PlaceSelectedImpl implements _PlaceSelected {
+class _$PlaceSelectedImpl
+    with DiagnosticableTreeMixin
+    implements _PlaceSelected {
   const _$PlaceSelectedImpl(
       {required this.lat,
       required this.lng,
@@ -788,8 +818,20 @@ class _$PlaceSelectedImpl implements _PlaceSelected {
   }
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.placeSelected(lat: $lat, lng: $lng, nearbyStamps: $nearbyStamps, suggestedPlace: $suggestedPlace, placeSuggestions: $placeSuggestions)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'CheckinState.placeSelected'))
+      ..add(DiagnosticsProperty('lat', lat))
+      ..add(DiagnosticsProperty('lng', lng))
+      ..add(DiagnosticsProperty('nearbyStamps', nearbyStamps))
+      ..add(DiagnosticsProperty('suggestedPlace', suggestedPlace))
+      ..add(DiagnosticsProperty('placeSuggestions', placeSuggestions));
   }
 
   @override
@@ -1008,7 +1050,7 @@ class __$$EditingImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$EditingImpl implements _Editing {
+class _$EditingImpl with DiagnosticableTreeMixin implements _Editing {
   const _$EditingImpl(
       {required this.draft, required final List<Stamp> nearbyStamps})
       : _nearbyStamps = nearbyStamps;
@@ -1024,8 +1066,17 @@ class _$EditingImpl implements _Editing {
   }
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.editing(draft: $draft, nearbyStamps: $nearbyStamps)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'CheckinState.editing'))
+      ..add(DiagnosticsProperty('draft', draft))
+      ..add(DiagnosticsProperty('nearbyStamps', nearbyStamps));
   }
 
   @override
@@ -1194,12 +1245,18 @@ class __$$SavingImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$SavingImpl implements _Saving {
+class _$SavingImpl with DiagnosticableTreeMixin implements _Saving {
   const _$SavingImpl();
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.saving()';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties..add(DiagnosticsProperty('type', 'CheckinState.saving'));
   }
 
   @override
@@ -1370,15 +1427,23 @@ class __$$CompleteImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$CompleteImpl implements _Complete {
+class _$CompleteImpl with DiagnosticableTreeMixin implements _Complete {
   const _$CompleteImpl(this.stamp);
 
   @override
   final Stamp stamp;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.complete(stamp: $stamp)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'CheckinState.complete'))
+      ..add(DiagnosticsProperty('stamp', stamp));
   }
 
   @override
@@ -1555,15 +1620,23 @@ class __$$ErrorImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$ErrorImpl implements _Error {
+class _$ErrorImpl with DiagnosticableTreeMixin implements _Error {
   const _$ErrorImpl(this.message);
 
   @override
   final String message;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.error(message: $message)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'CheckinState.error'))
+      ..add(DiagnosticsProperty('message', message));
   }
 
   @override

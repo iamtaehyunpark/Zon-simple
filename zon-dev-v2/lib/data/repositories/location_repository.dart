@@ -6,6 +6,7 @@ import '../models/enums.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/supabase/supabase_provider.dart';
 import '../../core/auth/auth_provider.dart';
+import 'base_repository.dart';
 
 part 'location_repository.g.dart';
 
@@ -15,27 +16,25 @@ LocationRepository locationRepository(LocationRepositoryRef ref) => LocationRepo
       currentUserId: ref.watch(currentUserProvider)?.id,
     );
 
-class LocationRepository {
-  final SupabaseClient _client;
-  final String? _currentUserId;
-  LocationRepository(this._client, {String? currentUserId})
-      : _currentUserId = currentUserId;
-
-  bool get _isDevMode => _currentUserId == kDevMockUserId;
-  String? get _userId => _currentUserId ?? _client.auth.currentUser?.id;
+class LocationRepository with BaseRepository {
+  @override
+  final SupabaseClient client;
+  @override
+  final String? currentUserId;
+  LocationRepository(this.client, {this.currentUserId});
 
   Future<Either<AppException, int>> batchIngest(
     List<RawLocationEvent> events,
   ) async {
     try {
-      final userId = _userId;
+      final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (_isDevMode) return right(events.length);
+      if (isDevMode) return right(events.length);
 
-      final session = _client.auth.currentSession;
+      final session = client.auth.currentSession;
       if (session == null) return left(const AuthError('Unauthorized'));
 
-      final response = await _client.functions.invoke(
+      final response = await client.functions.invoke(
         'ingest-location',
         body: events
             .map((e) => {
@@ -60,9 +59,9 @@ class LocationRepository {
     DateTime date,
   ) async {
     try {
-      final userId = _userId;
+      final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      final data = await _client.rpc('route_events_for_day', params: {
+      final data = await client.rpc('route_events_for_day', params: {
         'p_user_id': userId,
         'p_date': date.toIso8601String().substring(0, 10),
       });

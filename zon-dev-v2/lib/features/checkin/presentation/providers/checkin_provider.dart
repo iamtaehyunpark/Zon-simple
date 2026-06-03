@@ -107,7 +107,7 @@ class CheckinNotifier extends _$CheckinNotifier {
   }) async {
     try {
       final service = ref.read(placeServiceForProvider(lat, lng));
-      debugPrint('[PlaceService] using ${service.provider.name} at ($lat,$lng) query="${query ?? 'nearby'}"');
+      debugPrint('[PlaceService] using ${service.runtimeType} at ($lat,$lng) query="${query ?? 'nearby'}"');
       final results = query != null && query.trim().isNotEmpty
           ? await service.search(query.trim(), lat, lng)
           : await service.nearby(lat, lng);

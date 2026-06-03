@@ -30,9 +30,6 @@ class PlaceResult {
       };
 }
 
-/// Which place provider is active for a given coordinate.
-enum PlaceProvider { kakao, google }
-
 /// Korea bounding box (roughly). Used for auto-detection.
 bool isKorea(double lat, double lng) =>
     lat >= 33.0 && lat <= 38.9 && lng >= 124.0 && lng <= 132.0;

@@ -4,6 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/supabase/supabase_provider.dart';
 import '../../core/auth/auth_provider.dart';
+import 'base_repository.dart';
 
 part 'comment_repository.g.dart';
 
@@ -35,18 +36,17 @@ CommentRepository commentRepository(CommentRepositoryRef ref) => CommentReposito
       currentUserId: ref.watch(currentUserProvider)?.id,
     );
 
-class CommentRepository {
-  final SupabaseClient _client;
-  final String? _currentUserId;
-  CommentRepository(this._client, {String? currentUserId})
-      : _currentUserId = currentUserId;
-
-  bool get _isDevMode => _currentUserId == kDevMockUserId;
+class CommentRepository with BaseRepository {
+  @override
+  final SupabaseClient client;
+  @override
+  final String? currentUserId;
+  CommentRepository(this.client, {this.currentUserId});
 
   Future<Either<AppException, List<StampComment>>> getComments(
       String stampId) async {
     try {
-      final data = await _client
+      final data = await client
           .from('stamp_comments')
           .select('*, profiles(username, avatar_url)')
           .eq('stamp_id', stampId)
@@ -63,9 +63,9 @@ class CommentRepository {
     String? parentId,
   }) async {
     try {
-      final userId = _currentUserId ?? _client.auth.currentUser?.id;
+      final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (_isDevMode) {
+      if (isDevMode) {
         return right(StampComment(
           id: 'dev-${DateTime.now().millisecondsSinceEpoch}',
           stampId: stampId,
@@ -76,7 +76,7 @@ class CommentRepository {
           username: 'dev_user',
         ));
       }
-      final data = await _client
+      final data = await client
           .from('stamp_comments')
           .insert({
             'stamp_id': stampId,
@@ -93,9 +93,9 @@ class CommentRepository {
   }
 
   Future<Either<AppException, Unit>> deleteComment(String id) async {
-    if (_isDevMode) return right(unit);
+    if (isDevMode) return right(unit);
     try {
-      await _client.from('stamp_comments').delete().eq('id', id);
+      await client.from('stamp_comments').delete().eq('id', id);
       return right(unit);
     } catch (e) {
       return left(NetworkError(e.toString()));
