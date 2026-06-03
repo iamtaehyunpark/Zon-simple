@@ -71,7 +71,7 @@ class NaverPlaceService implements PlaceService {
         if ((r as Map)['name'] == 'roadaddr') {
           road = (r['land'] as Map?)?['name'] as String?;
         }
-        if ((r as Map)['name'] == 'admcode') {
+        if (r['name'] == 'admcode') {
           final region = r['region'] as Map?;
           dong = (region?['area3'] as Map?)?['name'] as String?;
           gu   = (region?['area2'] as Map?)?['name'] as String?;

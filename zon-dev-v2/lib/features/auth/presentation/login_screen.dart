@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../app.dart';
 import '../../../core/auth/auth_provider.dart';
@@ -12,34 +14,47 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  // Custom URL scheme registered in ios/Runner/Info.plist. The native auth
+  // session intercepts redirects to this scheme and hands the callback back.
+  static const _callbackScheme = 'app.getzon';
+  static const _redirectUrl = '$_callbackScheme://login-callback';
+
   bool _loading = false;
   String? _error;
 
-  Future<void> _signInWithApple() async {
+  Future<void> _signInWithOAuth(OAuthProvider provider) async {
     setState(() { _loading = true; _error = null; });
+    final auth = Supabase.instance.client.auth;
     try {
-      await Supabase.instance.client.auth.signInWithOAuth(
-        OAuthProvider.apple,
-        redirectTo: 'app.getzon://login-callback',
+      // 1. Build the provider's authorization URL (this also stores the PKCE
+      //    verifier that the exchange in step 3 needs).
+      final res = await auth.getOAuthSignInUrl(
+        provider: provider,
+        redirectTo: _redirectUrl,
       );
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
 
-  Future<void> _signInWithGoogle() async {
-    setState(() { _loading = true; _error = null; });
-    try {
-      await Supabase.instance.client.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: 'app.getzon://login-callback',
+      // 2. Present it in a native in-app auth session (ASWebAuthenticationSession
+      //    on iOS). It dismisses itself the instant the callback scheme fires and
+      //    returns the callback URL — no external Safari, no stuck sheet.
+      final callback = await FlutterWebAuth2.authenticate(
+        url: res.url,
+        callbackUrlScheme: _callbackScheme,
       );
+
+      // 3. Exchange the returned code for a session. onAuthStateChange then
+      //    fires signedIn → GoRouter redirects to /feed and disposes this
+      //    screen, so the spinner naturally goes away.
+      await auth.getSessionFromUrl(Uri.parse(callback));
+    } on PlatformException catch (e) {
+      // The user dismissed the auth sheet — not an error, just stop spinning.
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          if (e.code != 'CANCELED') _error = e.message ?? e.code;
+        });
+      }
     } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
@@ -84,14 +99,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               _AuthButton(
                 label: 'Continue with Apple',
                 icon: Icons.apple,
-                onTap: _loading ? null : _signInWithApple,
+                onTap: _loading
+                    ? null
+                    : () => _signInWithOAuth(OAuthProvider.apple),
                 dark: true,
               ),
               const SizedBox(height: 12),
               _AuthButton(
                 label: 'Continue with Google',
                 icon: Icons.g_mobiledata,
-                onTap: _loading ? null : _signInWithGoogle,
+                onTap: _loading
+                    ? null
+                    : () => _signInWithOAuth(OAuthProvider.google),
                 dark: false,
               ),
               const SizedBox(height: 12),

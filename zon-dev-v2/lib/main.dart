@@ -46,6 +46,11 @@ Future<void> main() async {
       await Supabase.initialize(
         url: supabaseUrl,
         anonKey: supabaseAnonKey,
+        // OAuth is handled in-app via flutter_web_auth_2 + getSessionFromUrl
+        // (see LoginScreen), so disable the built-in deep-link observer to
+        // avoid a second, failing exchange of the same one-time auth code.
+        authOptions:
+            const FlutterAuthClientOptions(detectSessionInUri: false),
       );
     } else {
       debugPrint('Warning: SUPABASE_URL or SUPABASE_ANON_KEY is missing.');
