@@ -53,8 +53,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final stampRepo = ref.read(stampRepositoryProvider);
     final locationRepo = ref.read(locationRepositoryProvider);
 
-    final stampsResult = await stampRepo.getMyStamps(limit: 100);
-    final routeResult = await locationRepo.getRouteForDay(_selectedDate);
+    final (stampsResult, routeResult) = await (
+      stampRepo.getMyStamps(limit: 100),
+      locationRepo.getRouteForDay(_selectedDate),
+    ).wait;
 
     if (mounted) {
       setState(() {

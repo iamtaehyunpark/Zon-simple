@@ -22,12 +22,13 @@ class LocationRepository {
       : _currentUserId = currentUserId;
 
   bool get _isDevMode => _currentUserId == kDevMockUserId;
+  String? get _userId => _currentUserId ?? _client.auth.currentUser?.id;
 
   Future<Either<AppException, int>> batchIngest(
     List<RawLocationEvent> events,
   ) async {
     try {
-      final userId = _currentUserId ?? _client.auth.currentUser?.id;
+      final userId = _userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
       if (_isDevMode) return right(events.length);
 
@@ -59,7 +60,7 @@ class LocationRepository {
     DateTime date,
   ) async {
     try {
-      final userId = _currentUserId ?? _client.auth.currentUser?.id;
+      final userId = _userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
       final data = await _client.rpc('route_events_for_day', params: {
         'p_user_id': userId,

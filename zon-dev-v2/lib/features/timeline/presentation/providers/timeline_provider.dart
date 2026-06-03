@@ -35,21 +35,15 @@ class TimelineNotifier extends _$TimelineNotifier {
     final monthStamps = stamps.where((s) =>
         s.visitedAt.year == month.year && s.visitedAt.month == month.month);
 
-    final grouped = <String, List<Stamp>>{};
+    final grouped = <DateTime, List<Stamp>>{};
     for (final s in monthStamps) {
-      final key =
-          '${s.visitedAt.year}-${s.visitedAt.month.toString().padLeft(2, '0')}-${s.visitedAt.day.toString().padLeft(2, '0')}';
-      grouped.putIfAbsent(key, () => []).add(s);
+      final day = DateTime(s.visitedAt.year, s.visitedAt.month, s.visitedAt.day);
+      grouped.putIfAbsent(day, () => []).add(s);
     }
 
-    final days = grouped.entries.map((e) {
-      final parts = e.key.split('-');
-      return DayData(
-        date: DateTime(
-            int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2])),
-        stamps: e.value,
-      );
-    }).toList()
+    final days = grouped.entries
+        .map((e) => DayData(date: e.key, stamps: e.value))
+        .toList()
       ..sort((a, b) => b.date.compareTo(a.date));
 
     state = AsyncValue.data(days);

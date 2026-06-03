@@ -21,6 +21,7 @@ class ProfileRepository {
       : _currentUserId = currentUserId;
 
   bool get _isDevMode => _currentUserId == kDevMockUserId;
+  String? get _userId => _currentUserId ?? _client.auth.currentUser?.id;
 
   Future<Either<AppException, UserProfile>> getProfile(String userId) async {
     try {
@@ -36,7 +37,7 @@ class ProfileRepository {
   }
 
   Future<Either<AppException, UserProfile>> getMyProfile() async {
-    final userId = _currentUserId ?? _client.auth.currentUser?.id;
+    final userId = _userId;
     if (userId == null) return left(const AuthError('Unauthorized'));
     return getProfile(userId);
   }
@@ -45,7 +46,7 @@ class ProfileRepository {
     Map<String, dynamic> updates,
   ) async {
     try {
-      final userId = _currentUserId ?? _client.auth.currentUser?.id;
+      final userId = _userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
       if (_isDevMode) {
         return right(UserProfile(
@@ -69,7 +70,7 @@ class ProfileRepository {
 
   Future<Either<AppException, bool>> follow(String targetUserId) async {
     try {
-      final userId = _currentUserId ?? _client.auth.currentUser?.id;
+      final userId = _userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
       if (_isDevMode) return right(true);
       final existing = await _client
@@ -99,7 +100,7 @@ class ProfileRepository {
 
   Future<bool> isFollowing(String targetUserId) async {
     try {
-      final userId = _currentUserId ?? _client.auth.currentUser?.id;
+      final userId = _userId;
       if (userId == null) return false;
       final existing = await _client
           .from('follows')

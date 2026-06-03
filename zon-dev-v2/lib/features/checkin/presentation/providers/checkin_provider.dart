@@ -85,10 +85,11 @@ class CheckinNotifier extends _$CheckinNotifier {
 
   Future<void> selectPlace(double lat, double lng) async {
     final repo = ref.read(stampRepositoryProvider);
-    final nearbyResult = await repo.nearbyStamps(lat, lng);
+    final (nearbyResult, places) = await (
+      repo.nearbyStamps(lat, lng),
+      _fetchSuggestions(lat, lng),
+    ).wait;
     final nearby = nearbyResult.getOrElse((_) => []);
-
-    final places = await _fetchSuggestions(lat, lng);
 
     state = CheckinState.placeSelected(
       lat: lat,

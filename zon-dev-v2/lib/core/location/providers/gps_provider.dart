@@ -20,9 +20,7 @@ class GpsNotifier extends _$GpsNotifier {
 
   @override
   AsyncValue<Position?> build() {
-    final user = ref.watch(currentUserProvider);
-    if (user == null) return const AsyncValue.data(null);
-    ref.onDispose(_stop);
+    if (ref.watch(currentUserProvider) != null) ref.onDispose(_stop);
     return const AsyncValue.data(null);
   }
 
