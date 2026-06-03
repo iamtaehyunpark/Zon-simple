@@ -15,15 +15,49 @@ import 'features/photo_import/presentation/photo_suggestion_screen.dart';
 
 const kBrandGreen = Color(0xFF1D9E75);
 
+class _RouterRefreshNotifier extends ChangeNotifier {
+  void notify() => notifyListeners();
+}
+
 final _routerProvider = Provider<GoRouter>((ref) {
-  final notifier = _AuthNotifier(ref);
+  final notifier = _RouterRefreshNotifier();
+
+  // Listen to auth changes and notify GoRouter to trigger redirect evaluation
+  ref.listen(devLoggedInProvider, (_, __) {
+    debugPrint('GoRouter: devLoggedInProvider state changed, notifying listeners.');
+    notifier.notify();
+  });
+
+  ref.listen(authStateStreamProvider, (_, __) {
+    debugPrint('GoRouter: authStateStreamProvider state changed, notifying listeners.');
+    notifier.notify();
+  });
 
   return GoRouter(
     initialLocation: '/feed',
     refreshListenable: notifier,
     redirect: (ctx, state) {
-      final isLoggedIn =
-          Supabase.instance.client.auth.currentUser != null;
+      bool isLoggedIn = false;
+      
+      // 1. Check real Supabase Auth
+      try {
+        isLoggedIn = Supabase.instance.client.auth.currentUser != null;
+      } catch (e) {
+        debugPrint('GoRouter Auth Redirect Error: $e');
+      }
+
+      // 2. Check Dev Bypass Auth
+      try {
+        final isDevLoggedIn = ref.read(devLoggedInProvider);
+        if (isDevLoggedIn) {
+          isLoggedIn = true;
+        }
+      } catch (e) {
+        debugPrint('GoRouter Dev Auth Check Error: $e');
+      }
+
+      debugPrint('GoRouter redirect evaluation: isLoggedIn=$isLoggedIn, currentPath=${state.matchedLocation}');
+
       final isOnLogin = state.matchedLocation == '/login';
       if (!isLoggedIn && !isOnLogin) return '/login';
       if (isLoggedIn && isOnLogin) return '/feed';
@@ -94,14 +128,6 @@ final _routerProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
-
-class _AuthNotifier extends ChangeNotifier {
-  _AuthNotifier(Ref ref) {
-    ref.listen(authStateStreamProvider, (_, next) {
-      notifyListeners();
-    });
-  }
-}
 
 class ZonApp extends ConsumerStatefulWidget {
   const ZonApp({super.key});

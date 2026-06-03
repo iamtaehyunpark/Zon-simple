@@ -12,14 +12,13 @@ class FeedNotifier extends _$FeedNotifier {
 
   @override
   AsyncValue<List<Stamp>> build() {
-    Future.microtask(loadFeed);
+    Future.microtask(_load);
     return const AsyncValue.loading();
   }
 
-  Future<void> loadFeed() async {
+  Future<void> _load() async {
     _offset = 0;
     _hasMore = true;
-    state = const AsyncValue.loading();
     final repo = ref.read(stampRepositoryProvider);
     final result = await repo.getFeedStamps(limit: _pageSize, offset: 0);
     state = result.fold(
@@ -48,7 +47,7 @@ class FeedNotifier extends _$FeedNotifier {
     );
   }
 
-  Future<void> refresh() => loadFeed();
+  Future<void> refresh() => _load();
 
   Future<void> toggleLike(String stampId) async {
     final repo = ref.read(stampRepositoryProvider);

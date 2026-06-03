@@ -1,6 +1,5 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../supabase/supabase_provider.dart';
 import 'place_models.dart';
 import 'place_service.dart';
 import 'naver_place_service.dart';
@@ -18,15 +17,19 @@ PlaceService placeServiceFor(PlaceServiceForRef ref, double lat, double lng) {
   if (isKorea(lat, lng)) {
     final clientId = dotenv.env['NAVER_CLIENT_ID'] ?? '';
     final clientSecret = dotenv.env['NAVER_CLIENT_SECRET'] ?? '';
+    final mapClientId = dotenv.env['NAVER_MAP_CLIENT_ID'] ?? '';
+    final mapClientSecret = dotenv.env['NAVER_MAP_CLIENT_SECRET'] ?? '';
     if (clientId.isNotEmpty && clientSecret.isNotEmpty) {
       return NaverPlaceService(
         clientId: clientId,
         clientSecret: clientSecret,
+        mapClientId: mapClientId,
+        mapClientSecret: mapClientSecret,
       );
     }
   }
   // Global fallback
-  return GooglePlaceService(ref.watch(supabaseClientProvider));
+  return GooglePlaceService();
 }
 
 /// Convenience: resolve provider name for display / analytics.

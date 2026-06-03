@@ -11,22 +11,65 @@ import 'core/notifications/notification_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await dotenv.load();
+  // Load .env
+  try {
+    await dotenv.load();
+  } catch (e) {
+    debugPrint('Error loading .env file: $e');
+  }
 
-  MapboxOptions.setAccessToken(dotenv.env['MAPBOX_TOKEN']!);
+  // Set Mapbox token
+  try {
+    final mapboxToken = dotenv.env['MAPBOX_TOKEN'];
+    if (mapboxToken != null && mapboxToken.isNotEmpty) {
+      MapboxOptions.setAccessToken(mapboxToken);
+    } else {
+      debugPrint('Warning: MAPBOX_TOKEN is missing or empty.');
+    }
+  } catch (e) {
+    debugPrint('Error setting Mapbox token: $e');
+  }
 
-  await Hive.initFlutter();
+  // Initialize Hive
+  try {
+    await Hive.initFlutter();
+    await Hive.openBox('dev_settings');
+  } catch (e) {
+    debugPrint('Error initializing Hive: $e');
+  }
 
-  await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL']!,
-    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
-  );
+  // Initialize Supabase
+  try {
+    final supabaseUrl = dotenv.env['SUPABASE_URL'];
+    final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+    if (supabaseUrl != null && supabaseAnonKey != null) {
+      await Supabase.initialize(
+        url: supabaseUrl,
+        anonKey: supabaseAnonKey,
+      );
+    } else {
+      debugPrint('Warning: SUPABASE_URL or SUPABASE_ANON_KEY is missing.');
+    }
+  } catch (e) {
+    debugPrint('Error initializing Supabase: $e');
+  }
 
-  // GoogleService-Info.plist (iOS) is read automatically
-  await Firebase.initializeApp();
+  // Initialize Firebase (safeguarded against missing GoogleService-Info.plist)
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('Warning: Firebase initialization failed. Ensure GoogleService-Info.plist is configured. Error: $e');
+  }
 
   // Initialize notifications (non-blocking)
-  NotificationService().initialize().catchError((_) {});
+  try {
+    NotificationService().initialize().catchError((e) {
+      debugPrint('Notification initialization error: $e');
+    });
+  } catch (e) {
+    debugPrint('Error starting notification service: $e');
+  }
 
   runApp(const ProviderScope(child: ZonApp()));
 }
+

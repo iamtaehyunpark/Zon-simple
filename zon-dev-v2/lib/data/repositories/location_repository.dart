@@ -5,21 +5,32 @@ import '../models/raw_location_event.dart';
 import '../models/enums.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/supabase/supabase_provider.dart';
+import '../../core/auth/auth_provider.dart';
 
 part 'location_repository.g.dart';
 
 @riverpod
-LocationRepository locationRepository(LocationRepositoryRef ref) =>
-    LocationRepository(ref.watch(supabaseClientProvider));
+LocationRepository locationRepository(LocationRepositoryRef ref) => LocationRepository(
+      ref.watch(supabaseClientProvider),
+      currentUserId: ref.watch(currentUserProvider)?.id,
+    );
 
 class LocationRepository {
   final SupabaseClient _client;
-  LocationRepository(this._client);
+  final String? _currentUserId;
+  LocationRepository(this._client, {String? currentUserId})
+      : _currentUserId = currentUserId;
+
+  bool get _isDevMode => _currentUserId == kDevMockUserId;
 
   Future<Either<AppException, int>> batchIngest(
     List<RawLocationEvent> events,
   ) async {
     try {
+      final userId = _currentUserId ?? _client.auth.currentUser?.id;
+      if (userId == null) return left(const AuthError('Unauthorized'));
+      if (_isDevMode) return right(events.length);
+
       final session = _client.auth.currentSession;
       if (session == null) return left(const AuthError('Unauthorized'));
 
@@ -48,7 +59,7 @@ class LocationRepository {
     DateTime date,
   ) async {
     try {
-      final userId = _client.auth.currentUser?.id;
+      final userId = _currentUserId ?? _client.auth.currentUser?.id;
       if (userId == null) return left(const AuthError('Unauthorized'));
       final data = await _client.rpc('route_events_for_day', params: {
         'p_user_id': userId,

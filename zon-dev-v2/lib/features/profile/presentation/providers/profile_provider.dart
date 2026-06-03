@@ -1,4 +1,5 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../../../core/auth/auth_provider.dart';
 import '../../../../data/models/user_profile.dart';
 import '../../../../data/models/stamp.dart';
 import '../../../../data/repositories/stamp_repository.dart';
@@ -10,24 +11,30 @@ part 'profile_provider.g.dart';
 class ProfileNotifier extends _$ProfileNotifier {
   @override
   AsyncValue<UserProfile?> build(String userId) {
-    Future.microtask(() => loadProfile(userId));
+    Future.microtask(() => _fetch(userId));
     return const AsyncValue.loading();
   }
 
-  Future<void> loadProfile(String userId) async {
-    state = const AsyncValue.loading();
-    final repo = ref.read(profileRepositoryProvider);
-    final result = await repo.getProfile(userId);
+  // Keep previous data visible while re-fetching (no loading flash).
+  Future<void> _fetch(String userId) async {
+    if (userId == kDevMockUserId) {
+      state = const AsyncValue.data(UserProfile(
+        id: kDevMockUserId,
+        username: 'dev_user',
+        bio: 'Mock dev account',
+      ));
+      return;
+    }
+    final result = await ref.read(profileRepositoryProvider).getProfile(userId);
     state = result.fold(
       (err) => AsyncError(err, StackTrace.current),
-      (profile) => AsyncValue.data(profile),
+      AsyncValue.data,
     );
   }
 
   Future<void> toggleFollow(String targetUserId) async {
-    final repo = ref.read(profileRepositoryProvider);
-    await repo.follow(targetUserId);
-    await loadProfile(targetUserId);
+    await ref.read(profileRepositoryProvider).follow(targetUserId);
+    await _fetch(userId);
     ref.invalidate(isFollowingProvider(targetUserId));
   }
 }
@@ -36,17 +43,21 @@ class ProfileNotifier extends _$ProfileNotifier {
 class ProfileStampsNotifier extends _$ProfileStampsNotifier {
   @override
   AsyncValue<List<Stamp>> build(String userId) {
-    Future.microtask(() => loadStamps(userId));
+    Future.microtask(() => _fetch(userId));
     return const AsyncValue.loading();
   }
 
-  Future<void> loadStamps(String userId) async {
-    state = const AsyncValue.loading();
-    final repo = ref.read(stampRepositoryProvider);
-    final result = await repo.getUserStamps(userId, publicOnly: true);
+  Future<void> _fetch(String userId) async {
+    if (userId == kDevMockUserId) {
+      state = const AsyncValue.data([]);
+      return;
+    }
+    final result = await ref
+        .read(stampRepositoryProvider)
+        .getUserStamps(userId, publicOnly: true);
     state = result.fold(
       (err) => AsyncError(err, StackTrace.current),
-      (stamps) => AsyncValue.data(stamps),
+      AsyncValue.data,
     );
   }
 }

@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../data/models/stamp.dart';
 import 'providers/profile_provider.dart';
-import '../../auth/presentation/login_screen.dart';
+import '../../../core/auth/auth_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
   final String? userId;
@@ -13,12 +13,12 @@ class ProfileScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final currentUser = Supabase.instance.client.auth.currentUser;
+    final currentUser = ref.watch(currentUserProvider);
     final targetId = userId ?? currentUser?.id;
 
     if (targetId == null) {
       return const Scaffold(
-        body: Center(child: LoginScreen()),
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
@@ -88,7 +88,12 @@ class ProfileScreen extends ConsumerWidget {
                         IconButton(
                           icon: const Icon(Icons.logout),
                           onPressed: () async {
-                            await Supabase.instance.client.auth.signOut();
+                            try {
+                              await Supabase.instance.client.auth.signOut();
+                            } catch (e) {
+                              debugPrint('Supabase signout failed: $e');
+                            }
+                            ref.read(devLoggedInProvider.notifier).logout();
                           },
                         ),
                       ]

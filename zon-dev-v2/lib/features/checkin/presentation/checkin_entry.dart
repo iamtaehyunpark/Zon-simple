@@ -182,7 +182,8 @@ class _PlaceSelectionBody extends StatelessWidget {
           padding: const EdgeInsets.all(16),
           child: TextField(
             controller: searchCtrl,
-            onChanged: onSearch,
+            onSubmitted: onSearch,
+            textInputAction: TextInputAction.search,
             decoration: InputDecoration(
               hintText: 'Search for a place...',
               prefixIcon: const Icon(Icons.search),
@@ -195,7 +196,10 @@ class _PlaceSelectionBody extends StatelessWidget {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       ),
                     )
-                  : null,
+                  : IconButton(
+                      icon: const Icon(Icons.search),
+                      onPressed: () => onSearch(searchCtrl.text),
+                    ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),

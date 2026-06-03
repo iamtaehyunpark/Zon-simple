@@ -26,11 +26,9 @@ dependencies:
 
   # Location
   geolocator: ^12.0.0
-  geofence_service: ^6.0.0+1
 
-  # Photo access + EXIF
+  # Photo access + EXIF (photo_manager handles EXIF natively via latlngAsync)
   photo_manager: ^3.3.0
-  exif: ^3.3.0
 
   # Notifications
   firebase_messaging: ^16.0.0
@@ -45,20 +43,15 @@ dependencies:
 
   # Networking
   dio: ^5.4.3
-  connectivity_plus: ^6.0.3
 
   # Media
-  image_picker: ^1.1.0
   flutter_image_compress: ^2.2.0
   cached_network_image: ^3.3.1
-  video_player: ^2.8.3
 
   # Utils
   flutter_dotenv: ^5.1.0
   intl: ^0.19.0
   path_provider: ^2.1.3
-  share_plus: ^10.0.0
-  permission_handler: ^11.3.1
   uuid: ^4.4.0
   fpdart: ^1.1.0
   firebase_core: ^4.0.0

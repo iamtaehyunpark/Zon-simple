@@ -3,6 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/supabase/supabase_provider.dart';
+import '../../core/auth/auth_provider.dart';
 
 part 'comment_repository.g.dart';
 
@@ -29,12 +30,18 @@ class StampComment {
 }
 
 @riverpod
-CommentRepository commentRepository(CommentRepositoryRef ref) =>
-    CommentRepository(ref.watch(supabaseClientProvider));
+CommentRepository commentRepository(CommentRepositoryRef ref) => CommentRepository(
+      ref.watch(supabaseClientProvider),
+      currentUserId: ref.watch(currentUserProvider)?.id,
+    );
 
 class CommentRepository {
   final SupabaseClient _client;
-  CommentRepository(this._client);
+  final String? _currentUserId;
+  CommentRepository(this._client, {String? currentUserId})
+      : _currentUserId = currentUserId;
+
+  bool get _isDevMode => _currentUserId == kDevMockUserId;
 
   Future<Either<AppException, List<StampComment>>> getComments(
       String stampId) async {
@@ -56,8 +63,19 @@ class CommentRepository {
     String? parentId,
   }) async {
     try {
-      final userId = _client.auth.currentUser?.id;
+      final userId = _currentUserId ?? _client.auth.currentUser?.id;
       if (userId == null) return left(const AuthError('Unauthorized'));
+      if (_isDevMode) {
+        return right(StampComment(
+          id: 'dev-${DateTime.now().millisecondsSinceEpoch}',
+          stampId: stampId,
+          userId: userId,
+          parentId: parentId,
+          body: body,
+          createdAt: DateTime.now(),
+          username: 'dev_user',
+        ));
+      }
       final data = await _client
           .from('stamp_comments')
           .insert({
@@ -75,6 +93,7 @@ class CommentRepository {
   }
 
   Future<Either<AppException, Unit>> deleteComment(String id) async {
+    if (_isDevMode) return right(unit);
     try {
       await _client.from('stamp_comments').delete().eq('id', id);
       return right(unit);

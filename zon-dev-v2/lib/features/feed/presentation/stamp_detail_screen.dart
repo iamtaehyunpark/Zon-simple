@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../app.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../data/repositories/stamp_repository.dart';
 import '../../../data/repositories/comment_repository.dart';
 import '../../../data/models/stamp.dart';
@@ -319,7 +319,7 @@ class _CommentTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final myId = Supabase.instance.client.auth.currentUser?.id;
+    final myId = ref.watch(currentUserProvider)?.id;
     final isOwn = comment.userId == myId;
 
     return ListTile(

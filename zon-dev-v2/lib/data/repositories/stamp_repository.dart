@@ -5,23 +5,31 @@ import '../models/stamp.dart';
 import '../models/enums.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/supabase/supabase_provider.dart';
+import '../../core/auth/auth_provider.dart';
 
 part 'stamp_repository.g.dart';
 
 @riverpod
-StampRepository stampRepository(StampRepositoryRef ref) =>
-    StampRepository(ref.watch(supabaseClientProvider));
+StampRepository stampRepository(StampRepositoryRef ref) => StampRepository(
+      ref.watch(supabaseClientProvider),
+      currentUserId: ref.watch(currentUserProvider)?.id,
+    );
 
 class StampRepository {
   final SupabaseClient _client;
-  StampRepository(this._client);
+  final String? _currentUserId;
+  StampRepository(this._client, {String? currentUserId})
+      : _currentUserId = currentUserId;
+
+  bool get _isDevMode => _currentUserId == kDevMockUserId;
 
   Future<Either<AppException, List<Stamp>>> getMyStamps({
     int limit = 30,
     int offset = 0,
   }) async {
+    if (_isDevMode) return right([]);
     try {
-      final userId = _client.auth.currentUser?.id;
+      final userId = _currentUserId ?? _client.auth.currentUser?.id;
       if (userId == null) return left(const AuthError('Unauthorized'));
       final data = await _client
           .from('stamps')
@@ -39,6 +47,7 @@ class StampRepository {
     int limit = 30,
     int offset = 0,
   }) async {
+    if (_isDevMode) return right([]);
     try {
       final data = await _client
           .from('v_feed_stamps')
@@ -56,8 +65,9 @@ class StampRepository {
     int limit = 30,
     int offset = 0,
   }) async {
+    if (_isDevMode) return right([]);
     try {
-      final userId = _client.auth.currentUser?.id;
+      final userId = _currentUserId ?? _client.auth.currentUser?.id;
       if (userId == null) return left(const AuthError('Unauthorized'));
       final followingIds = await _getFollowingIds(userId);
       final query = followingIds.isEmpty
@@ -72,7 +82,7 @@ class StampRepository {
       final stamps = data.map(_fromRow).toList();
       return right(await _withEngagement(stamps));
     } catch (e) {
-      return getPublicStamps(limit: limit, offset: offset);
+      return left(NetworkError(e.toString()));
     }
   }
 
@@ -124,8 +134,24 @@ class StampRepository {
 
   Future<Either<AppException, Stamp>> createStamp(StampDraft draft) async {
     try {
-      final userId = _client.auth.currentUser?.id;
+      final userId = _currentUserId ?? _client.auth.currentUser?.id;
       if (userId == null) return left(const AuthError('Unauthorized'));
+      if (_isDevMode) {
+        return right(Stamp(
+          id: 'dev-${DateTime.now().millisecondsSinceEpoch}',
+          userId: userId,
+          placeName: draft.placeName,
+          lat: draft.lat,
+          lng: draft.lng,
+          externalPlaceId: draft.externalPlaceId,
+          externalSource: draft.externalSource,
+          visibility: draft.visibility,
+          caption: draft.caption,
+          sensoryTags: draft.sensoryTags,
+          taggedUserIds: draft.taggedUserIds,
+          visitedAt: DateTime.now(),
+        ));
+      }
       final data = await _client
           .from('stamps')
           .insert({
@@ -168,6 +194,7 @@ class StampRepository {
   }
 
   Future<Either<AppException, Unit>> deleteStamp(String id) async {
+    if (_isDevMode) return right(unit);
     try {
       await _client.from('stamps').delete().eq('id', id);
       return right(unit);
@@ -178,8 +205,9 @@ class StampRepository {
 
   Future<Either<AppException, Unit>> toggleLike(String stampId) async {
     try {
-      final userId = _client.auth.currentUser?.id;
+      final userId = _currentUserId ?? _client.auth.currentUser?.id;
       if (userId == null) return left(const AuthError('Unauthorized'));
+      if (_isDevMode) return right(unit);
       final existing = await _client
           .from('stamp_likes')
           .select()
@@ -206,8 +234,9 @@ class StampRepository {
 
   Future<Either<AppException, Unit>> toggleSave(String stampId) async {
     try {
-      final userId = _client.auth.currentUser?.id;
+      final userId = _currentUserId ?? _client.auth.currentUser?.id;
       if (userId == null) return left(const AuthError('Unauthorized'));
+      if (_isDevMode) return right(unit);
       final existing = await _client
           .from('stamp_saves')
           .select()
@@ -238,8 +267,9 @@ class StampRepository {
     double radiusM = 100,
   }) async {
     try {
-      final userId = _client.auth.currentUser?.id;
+      final userId = _currentUserId ?? _client.auth.currentUser?.id;
       if (userId == null) return left(const AuthError('Unauthorized'));
+      if (_isDevMode) return right([]);
       final data = await _client.rpc('stamps_within_radius', params: {
         'p_user_id': userId,
         'user_lat': lat,
@@ -254,7 +284,7 @@ class StampRepository {
 
   /// Merge isLiked/isSaved state for the current user into a list of stamps.
   Future<List<Stamp>> _withEngagement(List<Stamp> stamps) async {
-    final userId = _client.auth.currentUser?.id;
+    final userId = _currentUserId ?? _client.auth.currentUser?.id;
     if (userId == null || stamps.isEmpty) return stamps;
     final ids = stamps.map((s) => s.id).toList();
 

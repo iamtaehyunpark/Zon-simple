@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../data/models/stamp.dart';
@@ -104,13 +105,15 @@ class CheckinNotifier extends _$CheckinNotifier {
     String? query,
   }) async {
     try {
-      // Provider is selected automatically: Naver for Korea, Google elsewhere.
       final service = ref.read(placeServiceForProvider(lat, lng));
-      final results = query != null && query.isNotEmpty
-          ? await service.search(query, lat, lng)
+      debugPrint('[PlaceService] using ${service.provider.name} at ($lat,$lng) query="${query ?? 'nearby'}"');
+      final results = query != null && query.trim().isNotEmpty
+          ? await service.search(query.trim(), lat, lng)
           : await service.nearby(lat, lng);
+      debugPrint('[PlaceService] got ${results.length} results');
       return results.map(ExternalPlace.fromResult).toList();
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[PlaceService] error: $e\n$st');
       return [];
     }
   }

@@ -36,7 +36,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadData());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData();
+      ref.read(gpsNotifierProvider.notifier).startTracking();
+    });
   }
 
   Future<void> _loadData() async {
@@ -66,6 +69,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Future<void> _updateMapLayers() async {
     final map = _mapController;
     if (map == null) return;
+
+    // Enable location puck/blue dot
+    try {
+      await map.location.updateSettings(
+        LocationComponentSettings(
+          enabled: true,
+          pulsingEnabled: true,
+          showAccuracyRing: true,
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error enabling Mapbox location puck: $e');
+    }
 
     // Draw route polyline
     if (_routeEvents.length >= 2) {
@@ -149,6 +165,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen to GPS position updates to auto-center the camera on first load
+    ref.listen(gpsNotifierProvider, (previous, next) {
+      final pos = next.valueOrNull;
+      if (pos != null && (previous == null || previous.valueOrNull == null)) {
+        _mapController?.flyTo(
+          CameraOptions(
+            center: Point(
+              coordinates: Position(pos.longitude, pos.latitude),
+            ),
+            zoom: 14.0,
+          ),
+          MapAnimationOptions(duration: 800),
+        );
+      }
+    });
+
     final gpsState = ref.watch(gpsNotifierProvider);
     final currentPosition = gpsState.valueOrNull;
 
