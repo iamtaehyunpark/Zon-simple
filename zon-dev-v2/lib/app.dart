@@ -33,33 +33,20 @@ final _routerProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterRefreshNotifier();
 
   // Re-evaluate redirects whenever Supabase auth state changes (login/logout).
-  ref.listen(authStateStreamProvider, (_, __) {
-    debugPrint('GoRouter: authStateStreamProvider state changed, notifying listeners.');
-    notifier.notify();
-  });
+  ref.listen(authStateStreamProvider, (_, __) => notifier.notify());
 
   return GoRouter(
     initialLocation: '/feed',
     refreshListenable: notifier,
     redirect: (ctx, state) {
-      bool isLoggedIn = false;
-      try {
-        isLoggedIn = Supabase.instance.client.auth.currentUser != null;
-      } catch (e) {
-        debugPrint('GoRouter Auth Redirect Error: $e');
-      }
-
+      final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
       final loc = state.matchedLocation;
-      debugPrint('GoRouter redirect: isLoggedIn=$isLoggedIn, loc=$loc');
 
-      if (!isLoggedIn) {
-        // Unauthenticated: everything funnels to /login.
-        return loc == '/login' ? null : '/login';
-      }
+      // Unauthenticated: everything funnels to /login.
+      if (!isLoggedIn) return loc == '/login' ? null : '/login';
 
-      // Authenticated: keep users out of /login, and off the bare '/' that the
-      // OAuth deep-link callback (app.getzon://login-callback) resolves to —
-      // we define no '/' route, so landing there would break navigation.
+      // Authenticated: keep users off /login and the bare '/' that the OAuth
+      // deep-link callback resolves to (we define no '/' route).
       if (loc == '/login' || loc == '/') return '/feed';
       return null;
     },

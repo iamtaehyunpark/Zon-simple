@@ -46,7 +46,6 @@ class CheckInRepository with BaseRepository {
             'source': draft.source.name,
             'tagged_user_ids': draft.taggedUserIds,
             'visited_at': DateTime.now().toIso8601String(),
-            'tz_offset_min': DateTime.now().timeZoneOffset.inMinutes,
           })
           .select()
           .single();
@@ -206,7 +205,6 @@ class CheckInRepository with BaseRepository {
             'tagged_user_ids': taggedUserIds,
             'cover_photo_url': coverUrl,
             'visited_at': ci['visited_at'],
-            'tz_offset_min': ci['tz_offset_min'],
           })
           .select('id')
           .single();

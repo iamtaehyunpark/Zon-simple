@@ -23,25 +23,6 @@ class StampRepository with BaseRepository {
   final String? currentUserId;
   StampRepository(this.client, {this.currentUserId});
 
-  Future<Either<AppException, List<Stamp>>> getMyStamps({
-    int limit = 30,
-    int offset = 0,
-  }) async {
-    try {
-      final userId = this.userId;
-      if (userId == null) return left(const AuthError('Unauthorized'));
-      final data = await client
-          .from('stamps')
-          .select()
-          .eq('user_id', userId)
-          .order('visited_at', ascending: false)
-          .range(offset, offset + limit - 1);
-      return right(data.map(_fromRow).toList());
-    } catch (e) {
-      return left(NetworkError(e.toString()));
-    }
-  }
-
   Future<Either<AppException, List<Stamp>>> getMyStampsForDay(
       DateTime day) async {
     try {
@@ -166,36 +147,6 @@ class StampRepository with BaseRepository {
         stamp = stamp.copyWith(isLiked: like != null, isSaved: save != null);
       }
       return right(stamp);
-    } catch (e) {
-      return left(NetworkError(e.toString()));
-    }
-  }
-
-  Future<Either<AppException, Stamp>> createStamp(StampDraft draft) async {
-    try {
-      final userId = this.userId;
-      if (userId == null) return left(const AuthError('Unauthorized'));
-      final data = await client
-          .from('stamps')
-          .insert({
-            'user_id': userId,
-            'place_name': draft.placeName,
-            'normalized_place_name': draft.placeName.toLowerCase().trim(),
-            'lat': draft.lat,
-            'lng': draft.lng,
-            'external_place_id': draft.externalPlaceId,
-            'external_source': draft.externalSource,
-            'visibility': draft.visibility.name,
-            'caption': draft.caption,
-            'sensory_tags': draft.sensoryTags,
-            'tagged_user_ids': draft.taggedUserIds,
-            'visited_at': DateTime.now().toIso8601String(),
-            'tz_offset_min': DateTime.now().timeZoneOffset.inMinutes,
-            if (draft.checkInId != null) 'check_in_id': draft.checkInId,
-          })
-          .select()
-          .single();
-      return right(_fromRow(data));
     } catch (e) {
       return left(NetworkError(e.toString()));
     }
