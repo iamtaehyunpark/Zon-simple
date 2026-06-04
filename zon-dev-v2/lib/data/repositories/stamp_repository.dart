@@ -149,7 +149,27 @@ class StampRepository with BaseRepository {
           .select()
           .eq('id', id)
           .single();
-      return right(_fromRow(data));
+      var stamp = _fromRow(data);
+      // Resolve the current user's like/save state for this stamp.
+      final uid = userId;
+      if (uid != null) {
+        final (like, save) = await (
+          client
+              .from('stamp_likes')
+              .select('stamp_id')
+              .eq('stamp_id', id)
+              .eq('user_id', uid)
+              .maybeSingle(),
+          client
+              .from('stamp_saves')
+              .select('stamp_id')
+              .eq('stamp_id', id)
+              .eq('user_id', uid)
+              .maybeSingle(),
+        ).wait;
+        stamp = stamp.copyWith(isLiked: like != null, isSaved: save != null);
+      }
+      return right(stamp);
     } catch (e) {
       return left(NetworkError(e.toString()));
     }

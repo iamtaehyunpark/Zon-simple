@@ -116,6 +116,9 @@ class _StampDetailBody extends ConsumerWidget {
             IconButton(
               icon: Icon(
                 stamp.isSaved ? Icons.bookmark : Icons.bookmark_border,
+                color: stamp.isSaved
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
               ),
               onPressed: () async {
                 await ref.read(stampRepositoryProvider).toggleSave(stampId);
