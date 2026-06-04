@@ -280,6 +280,7 @@ class MainShell extends StatelessWidget {
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showCreateMenu(context),
         backgroundColor: kBrandGreen,
+        tooltip: 'Create',
         child: const Icon(Icons.add, color: Colors.white),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,

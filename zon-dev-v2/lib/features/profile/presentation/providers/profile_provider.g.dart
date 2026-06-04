@@ -305,7 +305,7 @@ class _ProfileNotifierProviderElement
 }
 
 String _$profileStampsNotifierHash() =>
-    r'fcb87e9eb2877ae7c7b173c0e72f33278fe240f2';
+    r'9a054010a5a948c975e14075b1207a12c4ef777f';
 
 abstract class _$ProfileStampsNotifier
     extends BuildlessAutoDisposeNotifier<AsyncValue<List<Stamp>>> {

@@ -7,6 +7,7 @@ import '../../../core/notifications/notification_service.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../shared/widgets/app_states.dart';
+import '../../../shared/utils/format.dart';
 import '../../photo_import/presentation/providers/photo_suggestion_provider.dart';
 import 'providers/feed_provider.dart';
 
@@ -25,9 +26,11 @@ class FeedScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.search),
+            tooltip: 'Search people',
             onPressed: () => context.push('/search'),
           ),
           IconButton(
+            tooltip: 'Activity',
             icon: Badge(
               isLabelVisible: unread > 0,
               label: Text('$unread'),
@@ -52,10 +55,15 @@ class FeedScreen extends ConsumerWidget {
         ),
         data: (stamps) {
           if (stamps.isEmpty) {
-            return const EmptyView(
+            return EmptyView(
               icon: Icons.explore_outlined,
               message: 'No stamps yet',
               subtitle: 'Follow people or create your first stamp!',
+              action: FilledButton.icon(
+                onPressed: () => context.push('/checkin?mode=stamp'),
+                icon: const Icon(Icons.add),
+                label: const Text('Create a stamp'),
+              ),
             );
           }
           return RefreshIndicator(
@@ -260,7 +268,7 @@ class _ActionBtn extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: color),
             const SizedBox(width: 4),
-            Text('$count', style: const TextStyle(fontSize: 13)),
+            Text(compactCount(count), style: const TextStyle(fontSize: 13)),
           ],
         ),
       ),

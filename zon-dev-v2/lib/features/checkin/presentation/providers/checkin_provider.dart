@@ -10,6 +10,8 @@ import '../../../../core/location/gps_service.dart';
 import '../../../../core/photos/photo_service.dart';
 import '../../../../core/places/place_models.dart';
 import '../../../../core/places/place_service_provider.dart';
+import '../../../feed/presentation/providers/feed_provider.dart';
+import '../../../timeline/presentation/providers/timeline_provider.dart';
 
 part 'checkin_provider.freezed.dart';
 part 'checkin_provider.g.dart';
@@ -189,8 +191,11 @@ class CheckinNotifier extends _$CheckinNotifier {
           .read(checkInRepositoryProvider)
           .createCheckIn(current.draft, photoUrls: urls);
       res.fold(
-        (err) => state = CheckinState.error(err.toString()),
-        (ci) => state = CheckinState.completeCheckIn(ci),
+        (err) => state = CheckinState.error(err.message),
+        (ci) {
+          ref.invalidate(timelineNotifierProvider);
+          state = CheckinState.completeCheckIn(ci);
+        },
       );
       return;
     }
@@ -213,7 +218,7 @@ class CheckinNotifier extends _$CheckinNotifier {
         photoUrls: urls,
       );
       await ciRes.fold(
-        (err) async => state = CheckinState.error(err.toString()),
+        (err) async => state = CheckinState.error(err.message),
         (ci) async {
           final promo = await ciRepo.promoteToStamp(
             ci.id,
@@ -223,8 +228,12 @@ class CheckinNotifier extends _$CheckinNotifier {
             taggedUserIds: d.taggedUserIds,
           );
           promo.fold(
-            (err) => state = CheckinState.error(err.toString()),
-            (stampId) => state = CheckinState.completeStamp(stampId),
+            (err) => state = CheckinState.error(err.message),
+            (stampId) {
+              ref.invalidate(feedNotifierProvider);
+              ref.invalidate(timelineNotifierProvider);
+              state = CheckinState.completeStamp(stampId);
+            },
           );
         },
       );

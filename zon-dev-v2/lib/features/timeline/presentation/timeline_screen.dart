@@ -100,10 +100,21 @@ class _DayView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (bundle.isEmpty) {
-      return const EmptyView(
+      final now = DateTime.now();
+      final isToday = bundle.date.year == now.year &&
+          bundle.date.month == now.month &&
+          bundle.date.day == now.day;
+      return EmptyView(
         icon: Icons.map_outlined,
         message: 'Nothing logged this day',
         subtitle: 'Check in or add a stamp to see it here.',
+        action: isToday
+            ? FilledButton.icon(
+                onPressed: () => context.push('/checkin?mode=checkin'),
+                icon: const Icon(Icons.add_location_alt_outlined),
+                label: const Text('Check in'),
+              )
+            : null,
       );
     }
 

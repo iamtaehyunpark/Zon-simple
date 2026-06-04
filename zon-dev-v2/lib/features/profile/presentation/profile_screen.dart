@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../data/models/stamp.dart';
 import '../../../shared/widgets/app_states.dart';
+import '../../../shared/utils/format.dart';
 import 'providers/profile_provider.dart';
 import '../../../core/auth/auth_provider.dart';
 
@@ -165,6 +166,14 @@ class ProfileScreen extends ConsumerWidget {
                         message: isOwnProfile
                             ? 'No stamps yet'
                             : 'No public stamps yet',
+                        action: isOwnProfile
+                            ? FilledButton.icon(
+                                onPressed: () =>
+                                    context.push('/checkin?mode=stamp'),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Create a stamp'),
+                              )
+                            : null,
                       ),
                     );
                   }
@@ -172,7 +181,16 @@ class ProfileScreen extends ConsumerWidget {
                     padding: const EdgeInsets.all(2),
                     sliver: SliverGrid(
                       delegate: SliverChildBuilderDelegate(
-                        (ctx, i) => _StampGridItem(stamp: stamps[i]),
+                        (ctx, i) {
+                          if (i == stamps.length - 3) {
+                            ref
+                                .read(profileStampsNotifierProvider(targetId,
+                                        publicOnly: !isOwnProfile)
+                                    .notifier)
+                                .loadMore(targetId, publicOnly: !isOwnProfile);
+                          }
+                          return _StampGridItem(stamp: stamps[i]);
+                        },
                         childCount: stamps.length,
                       ),
                       gridDelegate:
@@ -209,7 +227,7 @@ class _StatItem extends StatelessWidget {
         child: Column(
           children: [
             Text(
-              '$value',
+              compactCount(value),
               style:
                   const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
             ),

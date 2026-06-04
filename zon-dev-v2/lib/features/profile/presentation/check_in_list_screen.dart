@@ -50,10 +50,15 @@ class _CheckInListScreenState extends ConsumerState<CheckInListScreen> {
       body: _loading
           ? const LoadingView()
           : _checkIns.isEmpty
-              ? const EmptyView(
+              ? EmptyView(
                   icon: Icons.pin_drop_outlined,
                   message: 'No check-ins yet',
                   subtitle: 'Check in somewhere to start your trace.',
+                  action: FilledButton.icon(
+                    onPressed: () => context.push('/checkin?mode=checkin'),
+                    icon: const Icon(Icons.add_location_alt_outlined),
+                    label: const Text('Check in'),
+                  ),
                 )
               : ListView.separated(
                   itemCount: _checkIns.length,
@@ -113,7 +118,7 @@ class _PromoteSheetState extends ConsumerState<_PromoteSheet> {
       (err) {
         setState(() => _saving = false);
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(err.toString())));
+            .showSnackBar(SnackBar(content: Text(err.message)));
       },
       (stampId) => Navigator.pop(context, stampId),
     );

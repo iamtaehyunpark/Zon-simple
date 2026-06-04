@@ -195,7 +195,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         .promoteToStamp(checkIn.id, visibility: StampVisibility.public);
     res.fold(
       (err) => ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(err.toString()))),
+          .showSnackBar(SnackBar(content: Text(err.message))),
       (stampId) {
         if (mounted) context.push('/stamp/$stampId');
       },
@@ -292,6 +292,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ),
       floatingActionButton: FloatingActionButton.small(
         heroTag: 'locate-me',
+        tooltip: 'My location',
         onPressed: () {
           final p = ref.read(gpsNotifierProvider).valueOrNull;
           if (p != null) {

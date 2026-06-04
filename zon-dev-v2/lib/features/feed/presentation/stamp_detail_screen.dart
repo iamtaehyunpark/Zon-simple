@@ -13,6 +13,7 @@ import '../../../data/models/stamp.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/models/enums.dart';
 import '../../../shared/widgets/app_states.dart';
+import '../../../shared/utils/format.dart';
 import '../../checkin/presentation/user_tag_field.dart' show showUserPicker;
 
 part 'stamp_detail_screen.g.dart';
@@ -244,12 +245,12 @@ class _StampDetailBody extends ConsumerWidget {
                     Icon(Icons.comment_outlined,
                         size: 20, color: Colors.grey[600]),
                     const SizedBox(width: 4),
-                    Text('${stamp.commentCount}'),
+                    Text(compactCount(stamp.commentCount)),
                     const SizedBox(width: 16),
                     Icon(Icons.photo_library_outlined,
                         size: 20, color: Colors.grey[600]),
                     const SizedBox(width: 4),
-                    Text('${stamp.photoCount} photos'),
+                    Text('${compactCount(stamp.photoCount)} photos'),
                   ],
                 ),
               ],
@@ -626,7 +627,7 @@ class _LikeButton extends ConsumerWidget {
               size: 20,
             ),
             const SizedBox(width: 4),
-            Text('${stamp.likeCount}'),
+            Text(compactCount(stamp.likeCount)),
           ],
         ),
       ),

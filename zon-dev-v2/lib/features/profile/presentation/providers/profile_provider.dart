@@ -31,6 +31,11 @@ class ProfileNotifier extends _$ProfileNotifier {
 
 @riverpod
 class ProfileStampsNotifier extends _$ProfileStampsNotifier {
+  static const _pageSize = 30;
+  int _offset = 0;
+  bool _hasMore = true;
+  bool _loadingMore = false;
+
   @override
   AsyncValue<List<Stamp>> build(String userId, {bool publicOnly = true}) {
     Future.microtask(() => _fetch(userId, publicOnly));
@@ -38,13 +43,35 @@ class ProfileStampsNotifier extends _$ProfileStampsNotifier {
   }
 
   Future<void> _fetch(String userId, bool publicOnly) async {
+    _offset = 0;
+    _hasMore = true;
     final result = await ref
         .read(stampRepositoryProvider)
-        .getUserStamps(userId, publicOnly: publicOnly);
+        .getUserStamps(userId, publicOnly: publicOnly, offset: 0);
     state = result.fold(
       (err) => AsyncError(err, StackTrace.current),
-      AsyncValue.data,
+      (stamps) {
+        _offset = stamps.length;
+        _hasMore = stamps.length == _pageSize;
+        return AsyncValue.data(stamps);
+      },
     );
+  }
+
+  Future<void> loadMore(String userId, {bool publicOnly = true}) async {
+    if (!_hasMore || _loadingMore) return;
+    _loadingMore = true;
+    final current = state.valueOrNull ?? [];
+    final result = await ref.read(stampRepositoryProvider).getUserStamps(
+        userId,
+        publicOnly: publicOnly,
+        offset: _offset);
+    result.fold((_) {}, (stamps) {
+      _offset += stamps.length;
+      _hasMore = stamps.length == _pageSize;
+      state = AsyncValue.data([...current, ...stamps]);
+    });
+    _loadingMore = false;
   }
 }
 
