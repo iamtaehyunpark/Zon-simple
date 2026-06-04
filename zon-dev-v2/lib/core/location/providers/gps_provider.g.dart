@@ -22,12 +22,16 @@ final gpsServiceProvider = AutoDisposeProvider<GpsService>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef GpsServiceRef = AutoDisposeProviderRef<GpsService>;
-String _$gpsNotifierHash() => r'3b50d819a397a6a0904cf514894fd46ae6b0fc0b';
+String _$gpsNotifierHash() => r'2a87e3e5994accadb6804121c5f89769f722ca28';
 
-/// See also [GpsNotifier].
+/// App-wide foreground location tracker. Kept alive so a single subscription
+/// records the route the whole time the app is open (started/stopped from the
+/// app lifecycle), not just while the map is on screen.
+///
+/// Copied from [GpsNotifier].
 @ProviderFor(GpsNotifier)
 final gpsNotifierProvider =
-    AutoDisposeNotifierProvider<GpsNotifier, AsyncValue<Position?>>.internal(
+    NotifierProvider<GpsNotifier, AsyncValue<Position?>>.internal(
   GpsNotifier.new,
   name: r'gpsNotifierProvider',
   debugGetCreateSourceHash:
@@ -36,6 +40,6 @@ final gpsNotifierProvider =
   allTransitiveDependencies: null,
 );
 
-typedef _$GpsNotifier = AutoDisposeNotifier<AsyncValue<Position?>>;
+typedef _$GpsNotifier = Notifier<AsyncValue<Position?>>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

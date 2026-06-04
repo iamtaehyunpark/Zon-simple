@@ -6,11 +6,11 @@ part of 'location_batcher.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$locationBatcherHash() => r'f68616dcf3cb3952950534ff545594e827777432';
+String _$locationBatcherHash() => r'4aff929c4dae925a86a10dbd2199beeef5305022';
 
 /// See also [locationBatcher].
 @ProviderFor(locationBatcher)
-final locationBatcherProvider = AutoDisposeProvider<LocationBatcher>.internal(
+final locationBatcherProvider = Provider<LocationBatcher>.internal(
   locationBatcher,
   name: r'locationBatcherProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
@@ -22,6 +22,6 @@ final locationBatcherProvider = AutoDisposeProvider<LocationBatcher>.internal(
 
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
-typedef LocationBatcherRef = AutoDisposeProviderRef<LocationBatcher>;
+typedef LocationBatcherRef = ProviderRef<LocationBatcher>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

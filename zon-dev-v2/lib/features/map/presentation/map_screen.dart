@@ -32,6 +32,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   List<RawLocationEvent> _route = [];
   List<Stamp> _followedStamps = [];
   List<CheckIn> _sharedCheckIns = [];
+  final List<List<double>> _livePath = [];
   bool _loading = false;
 
   DateTime get _today {
@@ -124,6 +125,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
+  /// Live route line for the current foreground session.
+  Future<void> _drawLive() async {
+    final map = _map;
+    if (map == null || _livePath.length < 2) return;
+    await drawLine(map, _livePath, kBrandGreen.toARGB32(),
+        idPrefix: 'live-route');
+  }
+
   Future<void> _onMapTap(MapContentGestureContext context) async {
     final map = _map;
     if (map == null) return;
@@ -206,7 +215,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Widget build(BuildContext context) {
     ref.listen(gpsNotifierProvider, (previous, next) {
       final pos = next.valueOrNull;
-      if (pos != null && (previous == null || previous.valueOrNull == null)) {
+      if (pos == null) return;
+      // Center the camera on the first fix.
+      if (previous?.valueOrNull == null) {
         _map?.flyTo(
           CameraOptions(
             center: Point(coordinates: Position(pos.longitude, pos.latitude)),
@@ -215,6 +226,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           MapAnimationOptions(duration: 800),
         );
       }
+      // Grow the live route as the user moves.
+      _livePath.add([pos.longitude, pos.latitude]);
+      _drawLive();
     });
 
     final pos = ref.watch(gpsNotifierProvider).valueOrNull;

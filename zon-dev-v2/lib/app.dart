@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/auth/auth_provider.dart';
 import 'core/notifications/notification_service.dart';
+import 'core/location/providers/gps_provider.dart';
 import 'shared/theme/app_theme.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/feed/presentation/feed_screen.dart';
@@ -181,19 +182,54 @@ class ZonApp extends ConsumerStatefulWidget {
   ConsumerState<ZonApp> createState() => _ZonAppState();
 }
 
-class _ZonAppState extends ConsumerState<ZonApp> {
+class _ZonAppState extends ConsumerState<ZonApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // Route the app when a notification is tapped
     notificationRouteStream.stream.listen((route) {
       final router = ref.read(_routerProvider);
       router.go(route);
     });
+    // Begin route tracking after first frame (if already signed in).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncTracking());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _syncTracking();
+      case AppLifecycleState.paused:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.detached:
+        ref.read(gpsNotifierProvider.notifier).stopTracking();
+      case AppLifecycleState.inactive:
+        break; // transient (e.g. Control Center) — keep tracking
+    }
+  }
+
+  /// Track the route whenever the app is foregrounded and a user is signed in.
+  void _syncTracking() {
+    if (ref.read(currentUserProvider) != null) {
+      ref.read(gpsNotifierProvider.notifier).startTracking();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    // Start/stop tracking on login/logout.
+    ref.listen(currentUserProvider, (prev, next) {
+      final gps = ref.read(gpsNotifierProvider.notifier);
+      next != null ? gps.startTracking() : gps.stopTracking();
+    });
     final router = ref.watch(_routerProvider);
     return MaterialApp.router(
       title: 'ZON',
