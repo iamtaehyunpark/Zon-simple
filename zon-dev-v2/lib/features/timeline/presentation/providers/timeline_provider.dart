@@ -37,7 +37,8 @@ class TimelineNotifier extends _$TimelineNotifier {
   }
 
   Future<void> loadDay(DateTime day) async {
-    state = const AsyncValue.loading();
+    // Keep any current data visible while the new day loads so the map stays
+    // mounted (no flicker / re-init) when navigating days.
     final user = ref.read(currentUserProvider);
     if (user == null) {
       state = AsyncValue.data(DayBundle(date: day));

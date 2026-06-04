@@ -59,6 +59,31 @@ Future<void> drawRouteLine(
   ));
 }
 
+/// Draw a polyline from raw [lng,lat] coordinate pairs (uses [idPrefix] so
+/// multiple lines can coexist on one map).
+Future<void> drawLine(
+  MapboxMap map,
+  List<List<double>> coords,
+  int color, {
+  String idPrefix = 'route',
+}) async {
+  await _remove(map, '$idPrefix-source', '$idPrefix-layer');
+  if (coords.length < 2) return;
+  final s = coords.map((c) => '[${c[0]},${c[1]}]').join(',');
+  await map.style.addSource(GeoJsonSource(
+    id: '$idPrefix-source',
+    data:
+        '{"type":"Feature","geometry":{"type":"LineString","coordinates":[$s]}}',
+  ));
+  await map.style.addLayer(LineLayer(
+    id: '$idPrefix-layer',
+    sourceId: '$idPrefix-source',
+    lineColor: color,
+    lineWidth: 4.0,
+    lineOpacity: 0.75,
+  ));
+}
+
 Future<void> drawPins(
   MapboxMap map, {
   required String sourceId,
