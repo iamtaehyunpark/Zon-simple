@@ -1,18 +1,23 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../data/models/stamp.dart';
+import '../../../../data/models/check_in.dart';
 import '../../../../data/repositories/stamp_repository.dart';
+import '../../../../data/repositories/check_in_repository.dart';
 import '../../../../core/location/gps_service.dart';
+import '../../../../core/photos/photo_service.dart';
 import '../../../../core/places/place_models.dart';
 import '../../../../core/places/place_service_provider.dart';
 
 part 'checkin_provider.freezed.dart';
 part 'checkin_provider.g.dart';
 
+/// Which artifact the entry flow produces.
+enum CheckinMode { checkIn, stamp }
+
 // ExternalPlace wraps a PlaceResult for the UI layer.
-// Keeps PlaceResult (provider-agnostic) internal and
-// exposes only what the UI/stamp model needs.
 @freezed
 class ExternalPlace with _$ExternalPlace {
   const factory ExternalPlace({
@@ -47,21 +52,29 @@ class CheckinState with _$CheckinState {
     ExternalPlace? suggestedPlace,
     @Default([]) List<ExternalPlace> placeSuggestions,
   }) = _PlaceSelected;
-  const factory CheckinState.editing({
-    required StampDraft draft,
-    required List<Stamp> nearbyStamps,
-  }) = _Editing;
+  const factory CheckinState.editingCheckIn({required CheckInDraft draft}) =
+      _EditingCheckIn;
+  const factory CheckinState.editingStamp({required StampDraft draft}) =
+      _EditingStamp;
   const factory CheckinState.saving() = _Saving;
-  const factory CheckinState.complete(Stamp stamp) = _Complete;
+  const factory CheckinState.completeCheckIn(CheckIn checkIn) = _CompleteCheckIn;
+  const factory CheckinState.completeStamp(String stampId) = _CompleteStamp;
   const factory CheckinState.error(String message) = _Error;
 }
 
 @riverpod
 class CheckinNotifier extends _$CheckinNotifier {
+  CheckinMode _mode = CheckinMode.checkIn;
+
   @override
   CheckinState build() => const CheckinState.idle();
 
-  Future<void> startCheckin({double? lat, double? lng}) async {
+  Future<void> startCheckin({
+    double? lat,
+    double? lng,
+    CheckinMode mode = CheckinMode.checkIn,
+  }) async {
+    _mode = mode;
     state = const CheckinState.locating();
     try {
       double resolvedLat = lat ?? 0;
@@ -107,11 +120,9 @@ class CheckinNotifier extends _$CheckinNotifier {
   }) async {
     try {
       final service = ref.read(placeServiceForProvider(lat, lng));
-      debugPrint('[PlaceService] using ${service.runtimeType} at ($lat,$lng) query="${query ?? 'nearby'}"');
       final results = query != null && query.trim().isNotEmpty
           ? await service.search(query.trim(), lat, lng)
           : await service.nearby(lat, lng);
-      debugPrint('[PlaceService] got ${results.length} results');
       return results.map(ExternalPlace.fromResult).toList();
     } catch (e, st) {
       debugPrint('[PlaceService] error: $e\n$st');
@@ -129,39 +140,104 @@ class CheckinNotifier extends _$CheckinNotifier {
   void beginEditing(ExternalPlace? place) {
     final current = state;
     if (current is! _PlaceSelected) return;
-    final draft = StampDraft(
-      placeName: place?.name ?? 'My Location',
-      lat: place?.lat ?? current.lat,
-      lng: place?.lng ?? current.lng,
-      externalPlaceId: place?.externalPlaceId,
-      externalSource: place?.externalSource,
-    );
-    state = CheckinState.editing(
-      draft: draft,
-      nearbyStamps: current.nearbyStamps,
-    );
-  }
-
-  void updateDraft(StampDraft draft) {
-    final current = state;
-    if (current is! _Editing) return;
-    state = CheckinState.editing(draft: draft, nearbyStamps: current.nearbyStamps);
-  }
-
-  Future<void> saveStamp() async {
-    final current = state;
-    if (current is! _Editing) return;
-    state = const CheckinState.saving();
-    try {
-      final result =
-          await ref.read(stampRepositoryProvider).createStamp(current.draft);
-      result.fold(
-        (err) => state = CheckinState.error(err.toString()),
-        (stamp) => state = CheckinState.complete(stamp),
+    final name = place?.name ?? 'My Location';
+    final lat = place?.lat ?? current.lat;
+    final lng = place?.lng ?? current.lng;
+    if (_mode == CheckinMode.stamp) {
+      state = CheckinState.editingStamp(
+        draft: StampDraft(
+          placeName: name,
+          lat: lat,
+          lng: lng,
+          externalPlaceId: place?.externalPlaceId,
+          externalSource: place?.externalSource,
+        ),
       );
-    } catch (e) {
-      state = CheckinState.error(e.toString());
+    } else {
+      state = CheckinState.editingCheckIn(
+        draft: CheckInDraft(
+          placeName: name,
+          lat: lat,
+          lng: lng,
+          externalPlaceId: place?.externalPlaceId,
+          externalSource: place?.externalSource,
+        ),
+      );
     }
+  }
+
+  void updateCheckInDraft(CheckInDraft draft) {
+    if (state is _EditingCheckIn) {
+      state = CheckinState.editingCheckIn(draft: draft);
+    }
+  }
+
+  void updateStampDraft(StampDraft draft) {
+    if (state is _EditingStamp) {
+      state = CheckinState.editingStamp(draft: draft);
+    }
+  }
+
+  Future<void> save() async {
+    final current = state;
+    final photoService = PhotoService();
+
+    if (current is _EditingCheckIn) {
+      state = const CheckinState.saving();
+      final urls = await _uploadAll(photoService, current.draft.photoPaths);
+      final res = await ref
+          .read(checkInRepositoryProvider)
+          .createCheckIn(current.draft, photoUrls: urls);
+      res.fold(
+        (err) => state = CheckinState.error(err.toString()),
+        (ci) => state = CheckinState.completeCheckIn(ci),
+      );
+      return;
+    }
+
+    if (current is _EditingStamp) {
+      state = const CheckinState.saving();
+      final d = current.draft;
+      final urls = await _uploadAll(photoService, d.selectedPhotoPaths);
+      final ciRepo = ref.read(checkInRepositoryProvider);
+      // stamp ⊂ check-in: create the underlying check-in first, then promote.
+      final ciRes = await ciRepo.createCheckIn(
+        CheckInDraft(
+          placeName: d.placeName,
+          lat: d.lat,
+          lng: d.lng,
+          externalPlaceId: d.externalPlaceId,
+          externalSource: d.externalSource,
+          taggedUserIds: d.taggedUserIds,
+        ),
+        photoUrls: urls,
+      );
+      await ciRes.fold(
+        (err) async => state = CheckinState.error(err.toString()),
+        (ci) async {
+          final promo = await ciRepo.promoteToStamp(
+            ci.id,
+            visibility: d.visibility,
+            caption: d.caption,
+            sensoryTags: d.sensoryTags,
+            taggedUserIds: d.taggedUserIds,
+          );
+          promo.fold(
+            (err) => state = CheckinState.error(err.toString()),
+            (stampId) => state = CheckinState.completeStamp(stampId),
+          );
+        },
+      );
+    }
+  }
+
+  Future<List<String>> _uploadAll(PhotoService service, List<String> paths) async {
+    final urls = <String>[];
+    for (final p in paths) {
+      final url = await service.uploadFile(File(p));
+      if (url != null) urls.add(url);
+    }
+    return urls;
   }
 
   void reset() => state = const CheckinState.idle();

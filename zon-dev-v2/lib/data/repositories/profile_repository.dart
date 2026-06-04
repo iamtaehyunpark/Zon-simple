@@ -47,14 +47,6 @@ class ProfileRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (isDevMode) {
-        return right(UserProfile(
-          id: kDevMockUserId,
-          username: (updates['username'] as String?) ?? 'dev_user',
-          bio: updates['bio'] as String?,
-          avatarUrl: updates['avatar_url'] as String?,
-        ));
-      }
       final data = await client
           .from('profiles')
           .update({...updates, 'updated_at': DateTime.now().toIso8601String()})
@@ -71,7 +63,6 @@ class ProfileRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (isDevMode) return right(true);
       final existing = await client
           .from('follows')
           .select()
@@ -113,10 +104,60 @@ class ProfileRepository with BaseRepository {
     }
   }
 
+  Future<List<UserProfile>> searchUsers(String query) async {
+    final q = query.trim();
+    if (q.isEmpty) return [];
+    try {
+      final data = await client
+          .from('profiles')
+          .select()
+          .or('username.ilike.%$q%,display_name.ilike.%$q%')
+          .limit(30);
+      return data.map(_fromRow).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Profiles that follow [userId].
+  Future<List<UserProfile>> getFollowers(String userId) async {
+    try {
+      final data = await client
+          .from('follows')
+          .select('profiles!follows_follower_id_fkey(*)')
+          .eq('following_id', userId);
+      return [
+        for (final r in data)
+          if (r['profiles'] != null)
+            _fromRow(r['profiles'] as Map<String, dynamic>)
+      ];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Profiles that [userId] follows.
+  Future<List<UserProfile>> getFollowing(String userId) async {
+    try {
+      final data = await client
+          .from('follows')
+          .select('profiles!follows_following_id_fkey(*)')
+          .eq('follower_id', userId);
+      return [
+        for (final r in data)
+          if (r['profiles'] != null)
+            _fromRow(r['profiles'] as Map<String, dynamic>)
+      ];
+    } catch (_) {
+      return [];
+    }
+  }
+
   UserProfile _fromRow(Map<String, dynamic> row) {
     return UserProfile(
       id: row['id'] as String,
       username: row['username'] as String,
+      displayName: row['display_name'] as String?,
       avatarUrl: row['avatar_url'] as String?,
       bio: row['bio'] as String?,
       stampCount: row['stamp_count'] as int? ?? 0,

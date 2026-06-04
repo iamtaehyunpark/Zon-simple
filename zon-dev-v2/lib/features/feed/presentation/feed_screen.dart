@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/notifications/notification_service.dart';
 import '../../../data/models/stamp.dart';
+import '../../photo_import/presentation/providers/photo_suggestion_provider.dart';
 import 'providers/feed_provider.dart';
 
 class FeedScreen extends ConsumerWidget {
@@ -18,12 +20,20 @@ class FeedScreen extends ConsumerWidget {
         title: const Text('ZON', style: TextStyle(fontWeight: FontWeight.w900)),
         actions: [
           IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () => context.push('/search'),
+          ),
+          IconButton(
             icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
+            onPressed: () => context.push('/activity'),
           ),
         ],
       ),
-      body: feedState.when(
+      body: Column(
+        children: [
+          const _PhotoSuggestionBanner(),
+          Expanded(
+            child: feedState.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(
           child: Column(
@@ -72,6 +82,9 @@ class FeedScreen extends ConsumerWidget {
             ),
           );
         },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -239,6 +252,70 @@ class _ActionBtn extends StatelessWidget {
             Icon(icon, size: 20, color: color),
             const SizedBox(width: 4),
             Text('$count', style: const TextStyle(fontSize: 13)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dismissible banner that surfaces today's geotagged photos as check-in
+/// suggestions, and fires a one-shot local notification when they appear.
+class _PhotoSuggestionBanner extends ConsumerStatefulWidget {
+  const _PhotoSuggestionBanner();
+
+  @override
+  ConsumerState<_PhotoSuggestionBanner> createState() =>
+      _PhotoSuggestionBannerState();
+}
+
+class _PhotoSuggestionBannerState
+    extends ConsumerState<_PhotoSuggestionBanner> {
+  bool _dismissed = false;
+  bool _notified = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final photos =
+        ref.watch(todayPhotoSuggestionsProvider).valueOrNull ?? const [];
+
+    if (photos.isNotEmpty && !_notified) {
+      _notified = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        NotificationService().sendLocalNotification(
+          title: 'New places today',
+          body: '${photos.length} photo${photos.length == 1 ? '' : 's'} '
+              'from today — add as check-ins?',
+          payload: '/photo-suggestions',
+        );
+      });
+    }
+
+    if (_dismissed || photos.isEmpty) return const SizedBox.shrink();
+
+    return Material(
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+        child: Row(
+          children: [
+            const Icon(Icons.photo_camera_outlined, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '${photos.length} new place${photos.length == 1 ? '' : 's'} '
+                "from today's photos",
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            TextButton(
+              onPressed: () => context.push('/photo-suggestions'),
+              child: const Text('Review'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => setState(() => _dismissed = true),
+            ),
           ],
         ),
       ),

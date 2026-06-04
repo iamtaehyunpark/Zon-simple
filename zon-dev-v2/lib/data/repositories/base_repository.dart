@@ -1,12 +1,9 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../core/auth/auth_provider.dart';
 
 mixin BaseRepository {
   SupabaseClient get client;
   String? get currentUserId;
 
-  bool get isDevMode => currentUserId == kDevMockUserId;
-  // Fall back to the live auth user: currentUserProvider isn't reactive to
-  // OAuth login, so currentUserId can be stale/null right after sign-in.
+  // Fall back to the live auth user in case the injected id is momentarily stale.
   String? get userId => currentUserId ?? client.auth.currentUser?.id;
 }

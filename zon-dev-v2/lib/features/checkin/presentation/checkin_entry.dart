@@ -4,12 +4,19 @@ import 'package:go_router/go_router.dart';
 import '../../../data/models/stamp.dart';
 import 'providers/checkin_provider.dart';
 import 'stamp_editor.dart';
+import 'check_in_editor.dart';
 
 class CheckinEntry extends ConsumerStatefulWidget {
   final double? lat;
   final double? lng;
+  final CheckinMode mode;
 
-  const CheckinEntry({super.key, this.lat, this.lng});
+  const CheckinEntry({
+    super.key,
+    this.lat,
+    this.lng,
+    this.mode = CheckinMode.checkIn,
+  });
 
   @override
   ConsumerState<CheckinEntry> createState() => _CheckinEntryState();
@@ -26,7 +33,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref
           .read(checkinNotifierProvider.notifier)
-          .startCheckin(lat: widget.lat, lng: widget.lng);
+          .startCheckin(lat: widget.lat, lng: widget.lng, mode: widget.mode);
     });
   }
 
@@ -61,10 +68,11 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
   @override
   Widget build(BuildContext context) {
     final checkinState = ref.watch(checkinNotifierProvider);
+    final isStamp = widget.mode == CheckinMode.stamp;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add a Stamp'),
+        title: Text(isStamp ? 'Create Stamp' : 'Check In'),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () {
@@ -85,8 +93,9 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
             ],
           ),
         ),
-        placeSelected: (lat, lng, nearbyStamps, suggestedPlace, placeSuggestions) =>
-            _PlaceSelectionBody(
+        placeSelected:
+            (lat, lng, nearbyStamps, suggestedPlace, placeSuggestions) =>
+                _PlaceSelectionBody(
           lat: lat,
           lng: lng,
           suggestedPlace: suggestedPlace,
@@ -103,22 +112,35 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
             ref.read(checkinNotifierProvider.notifier).beginEditing(null);
           },
         ),
-        editing: (draft, nearbyStamps) => StampEditorBody(
+        editingCheckIn: (draft) => CheckInEditorBody(
           draft: draft,
-          nearbyStamps: nearbyStamps,
           onUpdate: (d) =>
-              ref.read(checkinNotifierProvider.notifier).updateDraft(d),
-          onSave: () =>
-              ref.read(checkinNotifierProvider.notifier).saveStamp(),
+              ref.read(checkinNotifierProvider.notifier).updateCheckInDraft(d),
+          onSave: () => ref.read(checkinNotifierProvider.notifier).save(),
+        ),
+        editingStamp: (draft) => StampEditorBody(
+          draft: draft,
+          nearbyStamps: const [],
+          onUpdate: (d) =>
+              ref.read(checkinNotifierProvider.notifier).updateStampDraft(d),
+          onSave: () => ref.read(checkinNotifierProvider.notifier).save(),
         ),
         saving: () => const Center(child: CircularProgressIndicator()),
-        complete: (stamp) {
+        completeCheckIn: (checkIn) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Stamp saved at ${stamp.placeName}!')),
+              SnackBar(content: Text('Checked in at ${checkIn.placeName}')),
             );
             ref.read(checkinNotifierProvider.notifier).reset();
             context.pop();
+          });
+          return const Center(child: CircularProgressIndicator());
+        },
+        completeStamp: (stampId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ref.read(checkinNotifierProvider.notifier).reset();
+            context.pop();
+            context.push('/stamp/$stampId');
           });
           return const Center(child: CircularProgressIndicator());
         },
@@ -133,7 +155,8 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
               ElevatedButton(
                 onPressed: () => ref
                     .read(checkinNotifierProvider.notifier)
-                    .startCheckin(lat: widget.lat, lng: widget.lng),
+                    .startCheckin(
+                        lat: widget.lat, lng: widget.lng, mode: widget.mode),
                 child: const Text('Retry'),
               ),
             ],

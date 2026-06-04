@@ -27,7 +27,6 @@ class StampRepository with BaseRepository {
     int limit = 30,
     int offset = 0,
   }) async {
-    if (isDevMode) return right([]);
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
@@ -43,20 +42,43 @@ class StampRepository with BaseRepository {
     }
   }
 
-  Future<Either<AppException, List<Stamp>>> getMyStampsForMonth(DateTime month) async {
-    if (isDevMode) return right([]);
+  Future<Either<AppException, List<Stamp>>> getMyStampsForDay(
+      DateTime day) async {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      final startOfMonth = DateTime(month.year, month.month, 1);
-      final startOfNextMonth = DateTime(month.year, month.month + 1, 1);
+      final start = DateTime(day.year, day.month, day.day);
+      final end = start.add(const Duration(days: 1));
       final data = await client
           .from('stamps')
           .select()
           .eq('user_id', userId)
-          .gte('visited_at', startOfMonth.toIso8601String())
-          .lt('visited_at', startOfNextMonth.toIso8601String())
-          .order('visited_at', ascending: false);
+          .gte('visited_at', start.toIso8601String())
+          .lt('visited_at', end.toIso8601String())
+          .order('visited_at', ascending: true);
+      return right(data.map(_fromRow).toList());
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+  /// Public stamps from people the user follows, for a given day (map/social).
+  Future<Either<AppException, List<Stamp>>> getFollowingStampsForDay(
+      DateTime day) async {
+    try {
+      final userId = this.userId;
+      if (userId == null) return left(const AuthError('Unauthorized'));
+      final followingIds = await _getFollowingIds(userId);
+      if (followingIds.isEmpty) return right([]);
+      final start = DateTime(day.year, day.month, day.day);
+      final end = start.add(const Duration(days: 1));
+      final data = await client
+          .from('v_feed_stamps')
+          .select()
+          .inFilter('user_id', followingIds)
+          .gte('visited_at', start.toIso8601String())
+          .lt('visited_at', end.toIso8601String())
+          .order('visited_at', ascending: true);
       return right(data.map(_fromRow).toList());
     } catch (e) {
       return left(NetworkError(e.toString()));
@@ -67,7 +89,6 @@ class StampRepository with BaseRepository {
     int limit = 30,
     int offset = 0,
   }) async {
-    if (isDevMode) return right([]);
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
@@ -138,22 +159,6 @@ class StampRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (isDevMode) {
-        return right(Stamp(
-          id: 'dev-${DateTime.now().millisecondsSinceEpoch}',
-          userId: userId,
-          placeName: draft.placeName,
-          lat: draft.lat,
-          lng: draft.lng,
-          externalPlaceId: draft.externalPlaceId,
-          externalSource: draft.externalSource,
-          visibility: draft.visibility,
-          caption: draft.caption,
-          sensoryTags: draft.sensoryTags,
-          taggedUserIds: draft.taggedUserIds,
-          visitedAt: DateTime.now(),
-        ));
-      }
       final data = await client
           .from('stamps')
           .insert({
@@ -169,6 +174,7 @@ class StampRepository with BaseRepository {
             'sensory_tags': draft.sensoryTags,
             'tagged_user_ids': draft.taggedUserIds,
             'visited_at': DateTime.now().toIso8601String(),
+            if (draft.checkInId != null) 'check_in_id': draft.checkInId,
           })
           .select()
           .single();
@@ -196,13 +202,42 @@ class StampRepository with BaseRepository {
   }
 
   Future<Either<AppException, Unit>> deleteStamp(String id) async {
-    if (isDevMode) return right(unit);
     try {
       await client.from('stamps').delete().eq('id', id);
       return right(unit);
     } catch (e) {
       return left(NetworkError(e.toString()));
     }
+  }
+
+  /// Photos attached to a stamp, oldest first (id + url for edit/remove).
+  Future<List<({String id, String url})>> getStampPhotos(String stampId) async {
+    try {
+      final data = await client
+          .from('photos')
+          .select('id, storage_url')
+          .eq('stamp_id', stampId)
+          .order('created_at', ascending: true);
+      return [
+        for (final r in data)
+          (id: r['id'] as String, url: r['storage_url'] as String)
+      ];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> addStampPhotos(String stampId, List<String> urls) async {
+    final userId = this.userId;
+    if (userId == null || urls.isEmpty) return;
+    await client.from('photos').insert([
+      for (final u in urls)
+        {'user_id': userId, 'stamp_id': stampId, 'storage_url': u},
+    ]);
+  }
+
+  Future<void> deletePhoto(String photoId) async {
+    await client.from('photos').delete().eq('id', photoId);
   }
 
   Future<Either<AppException, Unit>> toggleLike(String stampId) =>
@@ -218,7 +253,6 @@ class StampRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (isDevMode) return right(unit);
       final deleted = await client
           .from(table)
           .delete()
@@ -236,6 +270,35 @@ class StampRepository with BaseRepository {
     }
   }
 
+  /// Stamps the current user has saved (bookmarks).
+  Future<Either<AppException, List<Stamp>>> getSavedStamps({
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    try {
+      final userId = this.userId;
+      if (userId == null) return left(const AuthError('Unauthorized'));
+      final saves = await client
+          .from('stamp_saves')
+          .select('stamp_id, created_at')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false)
+          .range(offset, offset + limit - 1);
+      final ids = saves.map((r) => r['stamp_id'] as String).toList();
+      if (ids.isEmpty) return right([]);
+      final data = await client.from('stamps').select().inFilter('id', ids);
+      // Preserve save order, mark as saved.
+      final byId = {for (final r in data) r['id'] as String: _fromRow(r)};
+      final ordered = [
+        for (final id in ids)
+          if (byId[id] != null) byId[id]!.copyWith(isSaved: true)
+      ];
+      return right(ordered);
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
   Future<Either<AppException, List<Stamp>>> nearbyStamps(
     double lat,
     double lng, {
@@ -244,7 +307,6 @@ class StampRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (isDevMode) return right([]);
       final data = await client.rpc('stamps_within_radius', params: {
         'p_user_id': userId,
         'user_lat': lat,
@@ -295,6 +357,7 @@ class StampRepository with BaseRepository {
       lng: (row['lng'] as num).toDouble(),
       externalPlaceId: row['external_place_id'] as String?,
       externalSource: row['external_source'] as String?,
+      checkInId: row['check_in_id'] as String?,
       visibility: (row['visibility'] as String) == 'public'
           ? StampVisibility.public
           : StampVisibility.private,

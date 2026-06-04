@@ -28,6 +28,7 @@ mixin _$Stamp {
   double get lng => throw _privateConstructorUsedError;
   String? get externalPlaceId => throw _privateConstructorUsedError;
   String? get externalSource => throw _privateConstructorUsedError;
+  String? get checkInId => throw _privateConstructorUsedError;
   StampVisibility get visibility => throw _privateConstructorUsedError;
   String? get coverPhotoUrl => throw _privateConstructorUsedError;
   String? get caption => throw _privateConstructorUsedError;
@@ -69,6 +70,7 @@ abstract class $StampCopyWith<$Res> {
       double lng,
       String? externalPlaceId,
       String? externalSource,
+      String? checkInId,
       StampVisibility visibility,
       String? coverPhotoUrl,
       String? caption,
@@ -110,6 +112,7 @@ class _$StampCopyWithImpl<$Res, $Val extends Stamp>
     Object? lng = null,
     Object? externalPlaceId = freezed,
     Object? externalSource = freezed,
+    Object? checkInId = freezed,
     Object? visibility = null,
     Object? coverPhotoUrl = freezed,
     Object? caption = freezed,
@@ -159,6 +162,10 @@ class _$StampCopyWithImpl<$Res, $Val extends Stamp>
       externalSource: freezed == externalSource
           ? _value.externalSource
           : externalSource // ignore: cast_nullable_to_non_nullable
+              as String?,
+      checkInId: freezed == checkInId
+          ? _value.checkInId
+          : checkInId // ignore: cast_nullable_to_non_nullable
               as String?,
       visibility: null == visibility
           ? _value.visibility
@@ -244,6 +251,7 @@ abstract class _$$StampImplCopyWith<$Res> implements $StampCopyWith<$Res> {
       double lng,
       String? externalPlaceId,
       String? externalSource,
+      String? checkInId,
       StampVisibility visibility,
       String? coverPhotoUrl,
       String? caption,
@@ -283,6 +291,7 @@ class __$$StampImplCopyWithImpl<$Res>
     Object? lng = null,
     Object? externalPlaceId = freezed,
     Object? externalSource = freezed,
+    Object? checkInId = freezed,
     Object? visibility = null,
     Object? coverPhotoUrl = freezed,
     Object? caption = freezed,
@@ -332,6 +341,10 @@ class __$$StampImplCopyWithImpl<$Res>
       externalSource: freezed == externalSource
           ? _value.externalSource
           : externalSource // ignore: cast_nullable_to_non_nullable
+              as String?,
+      checkInId: freezed == checkInId
+          ? _value.checkInId
+          : checkInId // ignore: cast_nullable_to_non_nullable
               as String?,
       visibility: null == visibility
           ? _value.visibility
@@ -413,6 +426,7 @@ class _$StampImpl implements _Stamp {
       required this.lng,
       this.externalPlaceId,
       this.externalSource,
+      this.checkInId,
       required this.visibility,
       this.coverPhotoUrl,
       this.caption,
@@ -452,6 +466,8 @@ class _$StampImpl implements _Stamp {
   final String? externalPlaceId;
   @override
   final String? externalSource;
+  @override
+  final String? checkInId;
   @override
   final StampVisibility visibility;
   @override
@@ -514,7 +530,7 @@ class _$StampImpl implements _Stamp {
 
   @override
   String toString() {
-    return 'Stamp(id: $id, userId: $userId, placeName: $placeName, normalizedPlaceName: $normalizedPlaceName, lat: $lat, lng: $lng, externalPlaceId: $externalPlaceId, externalSource: $externalSource, visibility: $visibility, coverPhotoUrl: $coverPhotoUrl, caption: $caption, sensoryTags: $sensoryTags, taggedUserIds: $taggedUserIds, photoUrls: $photoUrls, visitedAt: $visitedAt, likeCount: $likeCount, commentCount: $commentCount, photoCount: $photoCount, isLiked: $isLiked, isSaved: $isSaved, username: $username, avatarUrl: $avatarUrl, createdAt: $createdAt, updatedAt: $updatedAt)';
+    return 'Stamp(id: $id, userId: $userId, placeName: $placeName, normalizedPlaceName: $normalizedPlaceName, lat: $lat, lng: $lng, externalPlaceId: $externalPlaceId, externalSource: $externalSource, checkInId: $checkInId, visibility: $visibility, coverPhotoUrl: $coverPhotoUrl, caption: $caption, sensoryTags: $sensoryTags, taggedUserIds: $taggedUserIds, photoUrls: $photoUrls, visitedAt: $visitedAt, likeCount: $likeCount, commentCount: $commentCount, photoCount: $photoCount, isLiked: $isLiked, isSaved: $isSaved, username: $username, avatarUrl: $avatarUrl, createdAt: $createdAt, updatedAt: $updatedAt)';
   }
 
   @override
@@ -534,6 +550,8 @@ class _$StampImpl implements _Stamp {
                 other.externalPlaceId == externalPlaceId) &&
             (identical(other.externalSource, externalSource) ||
                 other.externalSource == externalSource) &&
+            (identical(other.checkInId, checkInId) ||
+                other.checkInId == checkInId) &&
             (identical(other.visibility, visibility) ||
                 other.visibility == visibility) &&
             (identical(other.coverPhotoUrl, coverPhotoUrl) ||
@@ -577,6 +595,7 @@ class _$StampImpl implements _Stamp {
         lng,
         externalPlaceId,
         externalSource,
+        checkInId,
         visibility,
         coverPhotoUrl,
         caption,
@@ -621,6 +640,7 @@ abstract class _Stamp implements Stamp {
       required final double lng,
       final String? externalPlaceId,
       final String? externalSource,
+      final String? checkInId,
       required final StampVisibility visibility,
       final String? coverPhotoUrl,
       final String? caption,
@@ -656,6 +676,8 @@ abstract class _Stamp implements Stamp {
   String? get externalPlaceId;
   @override
   String? get externalSource;
+  @override
+  String? get checkInId;
   @override
   StampVisibility get visibility;
   @override
@@ -704,6 +726,7 @@ StampDraft _$StampDraftFromJson(Map<String, dynamic> json) {
 /// @nodoc
 mixin _$StampDraft {
   String? get existingStampId => throw _privateConstructorUsedError;
+  String? get checkInId => throw _privateConstructorUsedError;
   String get placeName => throw _privateConstructorUsedError;
   double get lat => throw _privateConstructorUsedError;
   double get lng => throw _privateConstructorUsedError;
@@ -734,6 +757,7 @@ abstract class $StampDraftCopyWith<$Res> {
   @useResult
   $Res call(
       {String? existingStampId,
+      String? checkInId,
       String placeName,
       double lat,
       double lng,
@@ -763,6 +787,7 @@ class _$StampDraftCopyWithImpl<$Res, $Val extends StampDraft>
   @override
   $Res call({
     Object? existingStampId = freezed,
+    Object? checkInId = freezed,
     Object? placeName = null,
     Object? lat = null,
     Object? lng = null,
@@ -779,6 +804,10 @@ class _$StampDraftCopyWithImpl<$Res, $Val extends StampDraft>
       existingStampId: freezed == existingStampId
           ? _value.existingStampId
           : existingStampId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      checkInId: freezed == checkInId
+          ? _value.checkInId
+          : checkInId // ignore: cast_nullable_to_non_nullable
               as String?,
       placeName: null == placeName
           ? _value.placeName
@@ -838,6 +867,7 @@ abstract class _$$StampDraftImplCopyWith<$Res>
   @useResult
   $Res call(
       {String? existingStampId,
+      String? checkInId,
       String placeName,
       double lat,
       double lng,
@@ -865,6 +895,7 @@ class __$$StampDraftImplCopyWithImpl<$Res>
   @override
   $Res call({
     Object? existingStampId = freezed,
+    Object? checkInId = freezed,
     Object? placeName = null,
     Object? lat = null,
     Object? lng = null,
@@ -881,6 +912,10 @@ class __$$StampDraftImplCopyWithImpl<$Res>
       existingStampId: freezed == existingStampId
           ? _value.existingStampId
           : existingStampId // ignore: cast_nullable_to_non_nullable
+              as String?,
+      checkInId: freezed == checkInId
+          ? _value.checkInId
+          : checkInId // ignore: cast_nullable_to_non_nullable
               as String?,
       placeName: null == placeName
           ? _value.placeName
@@ -935,6 +970,7 @@ class __$$StampDraftImplCopyWithImpl<$Res>
 class _$StampDraftImpl implements _StampDraft {
   const _$StampDraftImpl(
       {this.existingStampId,
+      this.checkInId,
       required this.placeName,
       required this.lat,
       required this.lng,
@@ -955,6 +991,8 @@ class _$StampDraftImpl implements _StampDraft {
 
   @override
   final String? existingStampId;
+  @override
+  final String? checkInId;
   @override
   final String placeName;
   @override
@@ -1003,7 +1041,7 @@ class _$StampDraftImpl implements _StampDraft {
 
   @override
   String toString() {
-    return 'StampDraft(existingStampId: $existingStampId, placeName: $placeName, lat: $lat, lng: $lng, externalPlaceId: $externalPlaceId, externalSource: $externalSource, visibility: $visibility, caption: $caption, sensoryTags: $sensoryTags, taggedUserIds: $taggedUserIds, selectedPhotoPaths: $selectedPhotoPaths, coverPhotoPath: $coverPhotoPath)';
+    return 'StampDraft(existingStampId: $existingStampId, checkInId: $checkInId, placeName: $placeName, lat: $lat, lng: $lng, externalPlaceId: $externalPlaceId, externalSource: $externalSource, visibility: $visibility, caption: $caption, sensoryTags: $sensoryTags, taggedUserIds: $taggedUserIds, selectedPhotoPaths: $selectedPhotoPaths, coverPhotoPath: $coverPhotoPath)';
   }
 
   @override
@@ -1013,6 +1051,8 @@ class _$StampDraftImpl implements _StampDraft {
             other is _$StampDraftImpl &&
             (identical(other.existingStampId, existingStampId) ||
                 other.existingStampId == existingStampId) &&
+            (identical(other.checkInId, checkInId) ||
+                other.checkInId == checkInId) &&
             (identical(other.placeName, placeName) ||
                 other.placeName == placeName) &&
             (identical(other.lat, lat) || other.lat == lat) &&
@@ -1039,6 +1079,7 @@ class _$StampDraftImpl implements _StampDraft {
   int get hashCode => Object.hash(
       runtimeType,
       existingStampId,
+      checkInId,
       placeName,
       lat,
       lng,
@@ -1070,6 +1111,7 @@ class _$StampDraftImpl implements _StampDraft {
 abstract class _StampDraft implements StampDraft {
   const factory _StampDraft(
       {final String? existingStampId,
+      final String? checkInId,
       required final String placeName,
       required final double lat,
       required final double lng,
@@ -1087,6 +1129,8 @@ abstract class _StampDraft implements StampDraft {
 
   @override
   String? get existingStampId;
+  @override
+  String? get checkInId;
   @override
   String get placeName;
   @override

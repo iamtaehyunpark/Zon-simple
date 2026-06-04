@@ -5,12 +5,18 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../app.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/models/check_in.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/models/raw_location_event.dart';
 import '../../../data/repositories/stamp_repository.dart';
+import '../../../data/repositories/check_in_repository.dart';
 import '../../../data/repositories/location_repository.dart';
 import '../../../core/location/providers/gps_provider.dart';
 import '../../../core/auth/auth_provider.dart';
+import 'map_drawing.dart';
+
+const _kCheckinBlue = 0xFF2196F3;
+const _kFollowedOrange = 0xFFFF9800;
 
 class MapScreen extends ConsumerStatefulWidget {
   const MapScreen({super.key});
@@ -20,162 +26,190 @@ class MapScreen extends ConsumerStatefulWidget {
 }
 
 class _MapScreenState extends ConsumerState<MapScreen> {
-  MapboxMap? _mapController;
-  DateTime _selectedDate = DateTime.now();
-  List<Stamp> _stamps = [];
-  List<RawLocationEvent> _routeEvents = [];
+  MapboxMap? _map;
+  List<Stamp> _myStamps = [];
+  List<CheckIn> _myCheckIns = [];
+  List<RawLocationEvent> _route = [];
+  List<Stamp> _followedStamps = [];
+  List<CheckIn> _sharedCheckIns = [];
   bool _loading = false;
 
-  bool _isToday(DateTime date) {
-    final now = DateTime.now();
-    return date.year == now.year &&
-        date.month == now.month &&
-        date.day == now.day;
+  DateTime get _today {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
   }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadData();
+      _load();
       ref.read(gpsNotifierProvider.notifier).startTracking();
     });
   }
 
-  Future<void> _loadData() async {
+  Future<void> _load() async {
+    if (ref.read(currentUserProvider) == null) return;
     setState(() => _loading = true);
-    final user = ref.read(currentUserProvider);
-    if (user == null) {
-      setState(() => _loading = false);
-      return;
-    }
-
+    final day = _today;
     final stampRepo = ref.read(stampRepositoryProvider);
+    final checkInRepo = ref.read(checkInRepositoryProvider);
     final locationRepo = ref.read(locationRepositoryProvider);
 
-    final (stampsResult, routeResult) = await (
-      stampRepo.getMyStamps(limit: 100),
-      locationRepo.getRouteForDay(_selectedDate),
+    final (myStamps, myCheckIns, route, followedStamps, sharedCheckIns) = await (
+      stampRepo.getMyStampsForDay(day),
+      checkInRepo.getForDay(day),
+      locationRepo.getRouteForDay(day),
+      stampRepo.getFollowingStampsForDay(day),
+      checkInRepo.getSharedCheckInsForDay(day),
     ).wait;
 
-    if (mounted) {
-      setState(() {
-        _stamps = stampsResult.getOrElse((_) => []);
-        _routeEvents = routeResult.getOrElse((_) => []);
-        _loading = false;
-      });
-      _updateMapLayers();
-    }
+    if (!mounted) return;
+    setState(() {
+      _myStamps = myStamps.getOrElse((_) => []);
+      _myCheckIns = myCheckIns.getOrElse((_) => []);
+      _route = route.getOrElse((_) => []);
+      _followedStamps = followedStamps.getOrElse((_) => []);
+      _sharedCheckIns = sharedCheckIns.getOrElse((_) => []);
+      _loading = false;
+    });
+    _updateLayers();
   }
 
-  Future<void> _updateMapLayers() async {
-    final map = _mapController;
+  Future<void> _updateLayers() async {
+    final map = _map;
     if (map == null) return;
-
-    // Enable location puck/blue dot
     try {
-      await map.location.updateSettings(
-        LocationComponentSettings(
-          enabled: true,
-          pulsingEnabled: true,
-          showAccuracyRing: true,
+      await map.location.updateSettings(LocationComponentSettings(
+        enabled: true,
+        pulsingEnabled: true,
+        showAccuracyRing: true,
+      ));
+    } catch (e) {
+      debugPrint('puck: $e');
+    }
+
+    await drawRouteLine(map, _route, kBrandGreen.toARGB32());
+    await drawPins(
+      map,
+      sourceId: 'my-stamps-source',
+      layerId: 'my-stamps-layer',
+      pins: [
+        for (final s in _myStamps)
+          MapPin(id: s.id, kind: 'stamp', name: s.placeName, lat: s.lat, lng: s.lng),
+      ],
+      color: kBrandGreen.toARGB32(),
+    );
+    await drawPins(
+      map,
+      sourceId: 'my-checkins-source',
+      layerId: 'my-checkins-layer',
+      pins: [
+        for (final c in _myCheckIns)
+          MapPin(id: c.id, kind: 'checkin', name: c.placeName, lat: c.lat, lng: c.lng),
+      ],
+      color: _kCheckinBlue,
+    );
+    await drawPins(
+      map,
+      sourceId: 'followed-source',
+      layerId: 'followed-layer',
+      pins: [
+        for (final s in _followedStamps)
+          MapPin(id: s.id, kind: 'stamp', name: s.placeName, lat: s.lat, lng: s.lng),
+        for (final c in _sharedCheckIns)
+          MapPin(id: c.id, kind: 'checkin', name: c.placeName, lat: c.lat, lng: c.lng),
+      ],
+      color: _kFollowedOrange,
+    );
+  }
+
+  Future<void> _onMapTap(MapContentGestureContext context) async {
+    final map = _map;
+    if (map == null) return;
+    try {
+      final features = await map.queryRenderedFeatures(
+        RenderedQueryGeometry.fromScreenCoordinate(context.touchPosition),
+        RenderedQueryOptions(
+          layerIds: const [
+            'my-stamps-layer',
+            'my-checkins-layer',
+            'followed-layer',
+          ],
+          filter: null,
         ),
       );
-    } catch (e) {
-      debugPrint('Error enabling Mapbox location puck: $e');
-    }
-
-    // Draw route polyline
-    if (_routeEvents.length >= 2) {
-      await _drawRoute(map);
-    }
-
-    // Add stamp pins
-    await _drawStampPins(map);
-  }
-
-  Future<void> _drawRoute(MapboxMap map) async {
-    try {
-      final coordinates = _routeEvents
-          .map((e) => [e.lng, e.lat])
-          .toList();
-
-      final sourceExists = await map.style.styleSourceExists('route-source');
-      if (sourceExists) {
-        await map.style.removeStyleSource('route-source');
-      }
-      final layerExists = await map.style.styleLayerExists('route-layer');
-      if (layerExists) {
-        await map.style.removeStyleLayer('route-layer');
-      }
-
-      await map.style.addSource(GeoJsonSource(
-        id: 'route-source',
-        data: '''{
-          "type": "Feature",
-          "geometry": {
-            "type": "LineString",
-            "coordinates": ${coordinates.map((c) => '[${c[0]},${c[1]}]').join(',')}
+      for (final f in features) {
+        final feature = f?.queriedFeature.feature;
+        final props = feature?['properties'];
+        if (props is Map) {
+          final id = props['id'] as String?;
+          final kind = props['kind'] as String?;
+          if (id != null && kind != null) {
+            _showSheet(kind, id);
+            return;
           }
-        }''',
-      ));
-
-      await map.style.addLayer(LineLayer(
-        id: 'route-layer',
-        sourceId: 'route-source',
-        lineColor: kBrandGreen.toARGB32(),
-        lineWidth: 3.0,
-        lineOpacity: 0.8,
-      ));
+        }
+      }
     } catch (e) {
-      debugPrint('Route draw error: $e');
+      debugPrint('queryRenderedFeatures: $e');
     }
   }
 
-  Future<void> _drawStampPins(MapboxMap map) async {
-    try {
-      final sourceExists = await map.style.styleSourceExists('stamps-source');
-      if (sourceExists) await map.style.removeStyleSource('stamps-source');
-      final layerExists = await map.style.styleLayerExists('stamps-layer');
-      if (layerExists) await map.style.removeStyleLayer('stamps-layer');
-
-      if (_stamps.isEmpty) return;
-
-      final features = _stamps.map((s) => '''{
-        "type": "Feature",
-        "properties": {"id": "${s.id}", "name": "${s.placeName.replaceAll('"', '\\"')}", "public": ${s.visibility == StampVisibility.public}},
-        "geometry": {"type": "Point", "coordinates": [${s.lng}, ${s.lat}]}
-      }''').join(',');
-
-      await map.style.addSource(GeoJsonSource(
-        id: 'stamps-source',
-        data: '{"type":"FeatureCollection","features":[$features]}',
-      ));
-
-      await map.style.addLayer(CircleLayer(
-        id: 'stamps-layer',
-        sourceId: 'stamps-source',
-        circleRadius: 8.0,
-        circleColor: kBrandGreen.toARGB32(),
-        circleStrokeWidth: 2.0,
-        circleStrokeColor: Colors.white.toARGB32(),
-      ));
-    } catch (e) {
-      debugPrint('Stamp pins error: $e');
+  static T? _find<T>(List<T> list, bool Function(T) test) {
+    for (final e in list) {
+      if (test(e)) return e;
     }
+    return null;
+  }
+
+  void _showSheet(String kind, String id) {
+    if (kind == 'stamp') {
+      final stamp = _find(_myStamps, (s) => s.id == id) ??
+          _find(_followedStamps, (s) => s.id == id);
+      if (stamp == null) return;
+      showModalBottomSheet<void>(
+        context: context,
+        builder: (ctx) => _StampSheet(stamp: stamp),
+      );
+      return;
+    }
+    final checkIn = _find(_myCheckIns, (c) => c.id == id) ??
+        _find(_sharedCheckIns, (c) => c.id == id);
+    if (checkIn == null) return;
+    final isMine = _find(_myCheckIns, (c) => c.id == id) != null;
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => _CheckInSheet(
+        checkIn: checkIn,
+        isMine: isMine,
+        onPromote: isMine ? () => _promote(ctx, checkIn) : null,
+      ),
+    );
+  }
+
+  Future<void> _promote(BuildContext sheetCtx, CheckIn checkIn) async {
+    Navigator.pop(sheetCtx);
+    final res = await ref
+        .read(checkInRepositoryProvider)
+        .promoteToStamp(checkIn.id, visibility: StampVisibility.public);
+    res.fold(
+      (err) => ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(err.toString()))),
+      (stampId) {
+        if (mounted) context.push('/stamp/$stampId');
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    // Listen to GPS position updates to auto-center the camera on first load
     ref.listen(gpsNotifierProvider, (previous, next) {
       final pos = next.valueOrNull;
       if (pos != null && (previous == null || previous.valueOrNull == null)) {
-        _mapController?.flyTo(
+        _map?.flyTo(
           CameraOptions(
-            center: Point(
-              coordinates: Position(pos.longitude, pos.latitude),
-            ),
+            center: Point(coordinates: Position(pos.longitude, pos.latitude)),
             zoom: 14.0,
           ),
           MapAnimationOptions(duration: 800),
@@ -183,8 +217,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       }
     });
 
-    final gpsState = ref.watch(gpsNotifierProvider);
-    final currentPosition = gpsState.valueOrNull;
+    final pos = ref.watch(gpsNotifierProvider).valueOrNull;
+    final count = _myStamps.length + _myCheckIns.length;
 
     return Scaffold(
       body: Stack(
@@ -194,160 +228,55 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             viewport: CameraViewportState(
               center: Point(
                 coordinates: Position(
-                  currentPosition?.longitude ?? 126.9780,
-                  currentPosition?.latitude ?? 37.5665,
+                  pos?.longitude ?? 126.9780,
+                  pos?.latitude ?? 37.5665,
                 ),
               ),
               zoom: 13.0,
             ),
             onMapCreated: (controller) {
-              _mapController = controller;
-              _updateMapLayers();
+              _map = controller;
+              controller.addInteraction(TapInteraction.onMap(_onMapTap));
+              _updateLayers();
             },
           ),
-
-          // Top overlay: date picker
           Positioned(
             top: MediaQuery.of(context).padding.top + 8,
             left: 16,
             right: 16,
             child: Card(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 child: Row(
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.chevron_left),
-                      onPressed: () {
-                        setState(() {
-                          _selectedDate = _selectedDate
-                              .subtract(const Duration(days: 1));
-                        });
-                        _loadData();
-                      },
+                    const Icon(Icons.today, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Today · $count place${count == 1 ? '' : 's'}',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
-                    Expanded(
-                      child: Text(
-                        DateFormat('MMM d, yyyy').format(_selectedDate),
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.chevron_right),
-                      onPressed: _isToday(_selectedDate)
-                          ? null
-                          : () {
-                              setState(() {
-                                _selectedDate =
-                                    _selectedDate.add(const Duration(days: 1));
-                              });
-                              _loadData();
-                            },
-                    ),
+                    const Spacer(),
+                    if (_loading)
+                      const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2)),
                   ],
                 ),
               ),
             ),
           ),
-
-          // Loading indicator
-          if (_loading)
-            const Positioned(
-              top: 120,
-              left: 0,
-              right: 0,
-              child: Center(
-                child: Card(
-                  child: Padding(
-                    padding: EdgeInsets.all(8),
-                    child: CircularProgressIndicator(),
-                  ),
-                ),
-              ),
-            ),
-
-          // Bottom overlay: stamp list
-          if (_stamps.isNotEmpty)
-            Positioned(
-              bottom: MediaQuery.of(context).padding.bottom + 80,
-              left: 0,
-              right: 0,
-              child: SizedBox(
-                height: 80,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: _stamps.length,
-                  itemBuilder: (ctx, i) {
-                    final stamp = _stamps[i];
-                    return GestureDetector(
-                      onTap: () {
-                        context.push('/stamp/${stamp.id}');
-                        _mapController?.flyTo(
-                          CameraOptions(
-                            center: Point(
-                              coordinates: Position(stamp.lng, stamp.lat),
-                            ),
-                            zoom: 15.0,
-                          ),
-                          MapAnimationOptions(duration: 500),
-                        );
-                      },
-                      child: Container(
-                        width: 140,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: Theme.of(ctx).cardColor,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.1),
-                              blurRadius: 8,
-                            )
-                          ],
-                        ),
-                        padding: const EdgeInsets.all(10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              stamp.placeName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Text(
-                              DateFormat('MMM d').format(stamp.visitedAt),
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
         ],
       ),
       floatingActionButton: FloatingActionButton.small(
         heroTag: 'locate-me',
-        onPressed: () async {
-          final pos = ref.read(gpsNotifierProvider).valueOrNull;
-          if (pos != null) {
-            _mapController?.flyTo(
+        onPressed: () {
+          final p = ref.read(gpsNotifierProvider).valueOrNull;
+          if (p != null) {
+            _map?.flyTo(
               CameraOptions(
-                center: Point(
-                  coordinates: Position(pos.longitude, pos.latitude),
-                ),
+                center: Point(coordinates: Position(p.longitude, p.latitude)),
                 zoom: 15.0,
               ),
               MapAnimationOptions(duration: 500),
@@ -357,6 +286,99 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         child: const Icon(Icons.my_location),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+}
+
+class _StampSheet extends StatelessWidget {
+  final Stamp stamp;
+  const _StampSheet({required this.stamp});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(stamp.placeName,
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 4),
+            Text(DateFormat('EEE, MMM d').format(stamp.visitedAt),
+                style: const TextStyle(color: Colors.grey)),
+            if (stamp.caption != null && stamp.caption!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(stamp.caption!, maxLines: 3, overflow: TextOverflow.ellipsis),
+            ],
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.push('/stamp/${stamp.id}');
+                },
+                child: const Text('View stamp'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CheckInSheet extends StatelessWidget {
+  final CheckIn checkIn;
+  final bool isMine;
+  final VoidCallback? onPromote;
+  const _CheckInSheet({
+    required this.checkIn,
+    required this.isMine,
+    this.onPromote,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.pin_drop, color: Color(_kCheckinBlue)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(checkIn.placeName,
+                      style: Theme.of(context).textTheme.titleLarge),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(DateFormat('EEE, MMM d · h:mm a').format(checkIn.visitedAt),
+                style: const TextStyle(color: Colors.grey)),
+            if (checkIn.note != null && checkIn.note!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(checkIn.note!),
+            ],
+            if (onPromote != null) ...[
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: onPromote,
+                  child: const Text('Make a stamp'),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

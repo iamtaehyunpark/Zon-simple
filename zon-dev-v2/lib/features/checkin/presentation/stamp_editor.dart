@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/enums.dart';
+import 'photo_strip.dart';
+import 'user_tag_field.dart';
 
 class StampEditorBody extends ConsumerStatefulWidget {
   final StampDraft draft;
@@ -83,6 +85,16 @@ class _StampEditorBodyState extends ConsumerState<StampEditorBody> {
                   onChanged: (v) => _update(_draft.copyWith(caption: v)),
                 ),
                 const SizedBox(height: 16),
+                Text('Photos', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                PhotoStrip(
+                  paths: _draft.selectedPhotoPaths,
+                  onChanged: (p) => _update(_draft.copyWith(
+                    selectedPhotoPaths: p,
+                    coverPhotoPath: p.isNotEmpty ? p.first : null,
+                  )),
+                ),
+                const SizedBox(height: 16),
                 Text('Vibe', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 8),
                 Wrap(
@@ -130,6 +142,15 @@ class _StampEditorBodyState extends ConsumerState<StampEditorBody> {
                       .textTheme
                       .bodySmall
                       ?.copyWith(color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                Text('Tag people',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                UserTagField(
+                  taggedUserIds: _draft.taggedUserIds,
+                  onChanged: (ids) =>
+                      _update(_draft.copyWith(taggedUserIds: ids)),
                 ),
               ],
             ),

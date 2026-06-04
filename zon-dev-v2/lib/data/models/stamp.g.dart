@@ -15,6 +15,7 @@ _$StampImpl _$$StampImplFromJson(Map<String, dynamic> json) => _$StampImpl(
       lng: (json['lng'] as num).toDouble(),
       externalPlaceId: json['externalPlaceId'] as String?,
       externalSource: json['externalSource'] as String?,
+      checkInId: json['checkInId'] as String?,
       visibility: $enumDecode(_$StampVisibilityEnumMap, json['visibility']),
       coverPhotoUrl: json['coverPhotoUrl'] as String?,
       caption: json['caption'] as String?,
@@ -56,6 +57,7 @@ Map<String, dynamic> _$$StampImplToJson(_$StampImpl instance) =>
       'lng': instance.lng,
       'externalPlaceId': instance.externalPlaceId,
       'externalSource': instance.externalSource,
+      'checkInId': instance.checkInId,
       'visibility': _$StampVisibilityEnumMap[instance.visibility]!,
       'coverPhotoUrl': instance.coverPhotoUrl,
       'caption': instance.caption,
@@ -82,6 +84,7 @@ const _$StampVisibilityEnumMap = {
 _$StampDraftImpl _$$StampDraftImplFromJson(Map<String, dynamic> json) =>
     _$StampDraftImpl(
       existingStampId: json['existingStampId'] as String?,
+      checkInId: json['checkInId'] as String?,
       placeName: json['placeName'] as String,
       lat: (json['lat'] as num).toDouble(),
       lng: (json['lng'] as num).toDouble(),
@@ -109,6 +112,7 @@ _$StampDraftImpl _$$StampDraftImplFromJson(Map<String, dynamic> json) =>
 Map<String, dynamic> _$$StampDraftImplToJson(_$StampDraftImpl instance) =>
     <String, dynamic>{
       'existingStampId': instance.existingStampId,
+      'checkInId': instance.checkInId,
       'placeName': instance.placeName,
       'lat': instance.lat,
       'lng': instance.lng,

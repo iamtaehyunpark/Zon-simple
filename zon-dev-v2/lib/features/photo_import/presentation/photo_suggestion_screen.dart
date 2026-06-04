@@ -5,6 +5,9 @@ import 'package:photo_manager/photo_manager.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app.dart';
 import '../../../core/photos/photo_service.dart';
+import '../../../core/places/place_service_provider.dart';
+import '../../../data/models/check_in.dart';
+import '../../../data/repositories/check_in_repository.dart';
 
 // ignore_for_file: use_build_context_synchronously
 
@@ -52,18 +55,50 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
     if (_selected.isEmpty) return;
     setState(() { _uploading = true; _uploadedCount = 0; });
     final toUpload = _photos.where((p) => _selected.contains(p.id)).toList();
+    final checkInRepo = ref.read(checkInRepositoryProvider);
     for (final asset in toUpload) {
-      await _photoService.processAsset(asset);
+      await _convertToCheckIn(asset, checkInRepo);
       if (mounted) setState(() => _uploadedCount++);
     }
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${_selected.length} photos added to your map!'),
+          content: Text('${_selected.length} check-in${_selected.length == 1 ? '' : 's'} added'),
         ),
       );
       context.pop();
     }
+  }
+
+  /// Turn a geotagged photo into a private check-in (source = photo).
+  Future<void> _convertToCheckIn(
+      AssetEntity asset, CheckInRepository repo) async {
+    final latLng = await asset.latlngAsync();
+    if (latLng == null ||
+        (latLng.latitude == 0.0 && latLng.longitude == 0.0)) {
+      return;
+    }
+    final file = await asset.originFile;
+    final url = file == null ? null : await _photoService.uploadFile(file);
+
+    var placeName = 'Photo location';
+    try {
+      final service =
+          ref.read(placeServiceForProvider(latLng.latitude, latLng.longitude));
+      final results =
+          await service.nearby(latLng.latitude, latLng.longitude);
+      if (results.isNotEmpty) placeName = results.first.name;
+    } catch (_) {/* keep fallback name */}
+
+    await repo.createCheckIn(
+      CheckInDraft(
+        placeName: placeName,
+        lat: latLng.latitude,
+        lng: latLng.longitude,
+        source: CheckInSource.photo,
+      ),
+      photoUrls: url != null ? [url] : const [],
+    );
   }
 
   @override

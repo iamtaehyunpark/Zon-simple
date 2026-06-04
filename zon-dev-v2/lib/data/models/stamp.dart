@@ -15,6 +15,7 @@ class Stamp with _$Stamp {
     required double lng,
     String? externalPlaceId,
     String? externalSource,
+    String? checkInId,
     required StampVisibility visibility,
     String? coverPhotoUrl,
     String? caption,
@@ -41,6 +42,7 @@ class Stamp with _$Stamp {
 class StampDraft with _$StampDraft {
   const factory StampDraft({
     String? existingStampId,
+    String? checkInId,
     required String placeName,
     required double lat,
     required double lng,

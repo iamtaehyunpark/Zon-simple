@@ -8,6 +8,7 @@ class UserProfile with _$UserProfile {
   const factory UserProfile({
     required String id,
     required String username,
+    String? displayName,
     String? avatarUrl,
     String? bio,
     @Default(0) int stampCount,

@@ -1,48 +1,64 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../data/models/stamp.dart';
+import '../../../../data/models/check_in.dart';
+import '../../../../data/models/raw_location_event.dart';
 import '../../../../data/repositories/stamp_repository.dart';
+import '../../../../data/repositories/check_in_repository.dart';
+import '../../../../data/repositories/location_repository.dart';
 import '../../../../core/auth/auth_provider.dart';
 
 part 'timeline_provider.g.dart';
 
-class DayData {
+/// Everything that happened on one day: the route line, the check-in pins,
+/// and the stamps.
+class DayBundle {
   final DateTime date;
+  final List<RawLocationEvent> route;
+  final List<CheckIn> checkIns;
   final List<Stamp> stamps;
+  const DayBundle({
+    required this.date,
+    this.route = const [],
+    this.checkIns = const [],
+    this.stamps = const [],
+  });
 
-  const DayData({required this.date, required this.stamps});
+  bool get isEmpty => route.isEmpty && checkIns.isEmpty && stamps.isEmpty;
 }
 
 @riverpod
 class TimelineNotifier extends _$TimelineNotifier {
   @override
-  AsyncValue<List<DayData>> build() {
-    Future.microtask(() => loadMonth(DateTime.now()));
+  AsyncValue<DayBundle> build() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    Future.microtask(() => loadDay(today));
     return const AsyncValue.loading();
   }
 
-  Future<void> loadMonth(DateTime month) async {
+  Future<void> loadDay(DateTime day) async {
     state = const AsyncValue.loading();
     final user = ref.read(currentUserProvider);
     if (user == null) {
-      state = const AsyncValue.data([]);
+      state = AsyncValue.data(DayBundle(date: day));
       return;
     }
 
     final stampRepo = ref.read(stampRepositoryProvider);
-    final stampsResult = await stampRepo.getMyStampsForMonth(month);
-    final monthStamps = stampsResult.getOrElse((_) => []);
+    final checkInRepo = ref.read(checkInRepositoryProvider);
+    final locationRepo = ref.read(locationRepositoryProvider);
 
-    final grouped = <DateTime, List<Stamp>>{};
-    for (final s in monthStamps) {
-      final day = DateTime(s.visitedAt.year, s.visitedAt.month, s.visitedAt.day);
-      grouped.putIfAbsent(day, () => []).add(s);
-    }
+    final (stampsRes, checkInsRes, routeRes) = await (
+      stampRepo.getMyStampsForDay(day),
+      checkInRepo.getForDay(day),
+      locationRepo.getRouteForDay(day),
+    ).wait;
 
-    final days = grouped.entries
-        .map((e) => DayData(date: e.key, stamps: e.value))
-        .toList()
-      ..sort((a, b) => b.date.compareTo(a.date));
-
-    state = AsyncValue.data(days);
+    state = AsyncValue.data(DayBundle(
+      date: day,
+      stamps: stampsRes.getOrElse((_) => []),
+      checkIns: checkInsRes.getOrElse((_) => []),
+      route: routeRes.getOrElse((_) => []),
+    ));
   }
 }

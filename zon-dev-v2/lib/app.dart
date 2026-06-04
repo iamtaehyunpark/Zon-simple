@@ -7,10 +7,18 @@ import 'core/notifications/notification_service.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/feed/presentation/feed_screen.dart';
 import 'features/feed/presentation/stamp_detail_screen.dart';
+import 'features/feed/presentation/edit_stamp_screen.dart';
 import 'features/map/presentation/map_screen.dart';
 import 'features/checkin/presentation/checkin_entry.dart';
+import 'features/checkin/presentation/providers/checkin_provider.dart';
 import 'features/timeline/presentation/timeline_screen.dart';
 import 'features/profile/presentation/profile_screen.dart';
+import 'features/profile/presentation/settings_screen.dart';
+import 'features/profile/presentation/check_in_list_screen.dart';
+import 'features/profile/presentation/user_search_screen.dart';
+import 'features/profile/presentation/user_list_screen.dart';
+import 'features/profile/presentation/activity_screen.dart';
+import 'features/feed/presentation/saved_stamps_screen.dart';
 import 'features/photo_import/presentation/photo_suggestion_screen.dart';
 
 const kBrandGreen = Color(0xFF1D9E75);
@@ -22,12 +30,7 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 final _routerProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterRefreshNotifier();
 
-  // Listen to auth changes and notify GoRouter to trigger redirect evaluation
-  ref.listen(devLoggedInProvider, (_, __) {
-    debugPrint('GoRouter: devLoggedInProvider state changed, notifying listeners.');
-    notifier.notify();
-  });
-
+  // Re-evaluate redirects whenever Supabase auth state changes (login/logout).
   ref.listen(authStateStreamProvider, (_, __) {
     debugPrint('GoRouter: authStateStreamProvider state changed, notifying listeners.');
     notifier.notify();
@@ -38,21 +41,10 @@ final _routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: notifier,
     redirect: (ctx, state) {
       bool isLoggedIn = false;
-
-      // 1. Check real Supabase Auth
       try {
         isLoggedIn = Supabase.instance.client.auth.currentUser != null;
       } catch (e) {
         debugPrint('GoRouter Auth Redirect Error: $e');
-      }
-
-      // 2. Check Dev Bypass Auth
-      if (!isLoggedIn) {
-        try {
-          isLoggedIn = ref.read(devLoggedInProvider);
-        } catch (e) {
-          debugPrint('GoRouter Dev Auth Check Error: $e');
-        }
       }
 
       final loc = state.matchedLocation;
@@ -108,6 +100,9 @@ final _routerProvider = Provider<GoRouter>((ref) {
           child: CheckinEntry(
             lat: double.tryParse(state.uri.queryParameters['lat'] ?? ''),
             lng: double.tryParse(state.uri.queryParameters['lng'] ?? ''),
+            mode: state.uri.queryParameters['mode'] == 'stamp'
+                ? CheckinMode.stamp
+                : CheckinMode.checkIn,
           ),
         ),
       ),
@@ -116,6 +111,12 @@ final _routerProvider = Provider<GoRouter>((ref) {
         name: 'stamp-detail',
         builder: (ctx, state) =>
             StampDetailScreen(stampId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/stamp/:id/edit',
+        name: 'stamp-edit',
+        builder: (ctx, state) =>
+            EditStampScreen(stampId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/photo-suggestions',
@@ -130,6 +131,43 @@ final _routerProvider = Provider<GoRouter>((ref) {
         name: 'user-profile',
         builder: (ctx, state) =>
             ProfileScreen(userId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '/settings',
+        name: 'settings',
+        builder: (_, __) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/check-ins',
+        name: 'check-ins',
+        builder: (_, __) => const CheckInListScreen(),
+      ),
+      GoRoute(
+        path: '/saved',
+        name: 'saved',
+        builder: (_, __) => const SavedStampsScreen(),
+      ),
+      GoRoute(
+        path: '/search',
+        name: 'search',
+        builder: (_, __) => const UserSearchScreen(),
+      ),
+      GoRoute(
+        path: '/activity',
+        name: 'activity',
+        builder: (_, __) => const ActivityScreen(),
+      ),
+      GoRoute(
+        path: '/profile/:id/followers',
+        name: 'followers',
+        builder: (ctx, state) =>
+            UserListScreen(userId: state.pathParameters['id']!, followers: true),
+      ),
+      GoRoute(
+        path: '/profile/:id/following',
+        name: 'following',
+        builder: (ctx, state) => UserListScreen(
+            userId: state.pathParameters['id']!, followers: false),
       ),
     ],
   );
@@ -179,6 +217,39 @@ class MainShell extends StatelessWidget {
     return 0;
   }
 
+  // FAB offers the two distinct entry points: a lightweight check-in (trace
+  // log) vs. a full stamp (a check-in promoted to a post).
+  void _showCreateMenu(BuildContext context) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.location_on, color: kBrandGreen),
+              title: const Text('Check in here'),
+              subtitle: const Text('Log a visit — quick, private'),
+              onTap: () {
+                Navigator.pop(ctx);
+                context.push('/checkin?mode=checkin');
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.auto_awesome, color: kBrandGreen),
+              title: const Text('Create stamp'),
+              subtitle: const Text('A post with photos, caption & vibe'),
+              onTap: () {
+                Navigator.pop(ctx);
+                context.push('/checkin?mode=stamp');
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final idx = _locationIndex(context);
@@ -209,7 +280,7 @@ class MainShell extends StatelessWidget {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.pushNamed('checkin'),
+        onPressed: () => _showCreateMenu(context),
         backgroundColor: kBrandGreen,
         child: const Icon(Icons.add, color: Colors.white),
       ),

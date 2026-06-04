@@ -157,7 +157,7 @@ class _IsFollowingProviderElement extends AutoDisposeFutureProviderElement<bool>
   String get targetUserId => (origin as IsFollowingProvider).targetUserId;
 }
 
-String _$profileNotifierHash() => r'5bd3535bc927a9123a3092c49cc82c7f7326a399';
+String _$profileNotifierHash() => r'886c5ab75e4627b42eec52e6ce357dd4c3afffc7';
 
 abstract class _$ProfileNotifier
     extends BuildlessAutoDisposeNotifier<AsyncValue<UserProfile?>> {
@@ -305,15 +305,17 @@ class _ProfileNotifierProviderElement
 }
 
 String _$profileStampsNotifierHash() =>
-    r'507520663eeff836de5cecc0411b07f71952fc71';
+    r'fcb87e9eb2877ae7c7b173c0e72f33278fe240f2';
 
 abstract class _$ProfileStampsNotifier
     extends BuildlessAutoDisposeNotifier<AsyncValue<List<Stamp>>> {
   late final String userId;
+  late final bool publicOnly;
 
   AsyncValue<List<Stamp>> build(
-    String userId,
-  );
+    String userId, {
+    bool publicOnly = true,
+  });
 }
 
 /// See also [ProfileStampsNotifier].
@@ -327,10 +329,12 @@ class ProfileStampsNotifierFamily extends Family<AsyncValue<List<Stamp>>> {
 
   /// See also [ProfileStampsNotifier].
   ProfileStampsNotifierProvider call(
-    String userId,
-  ) {
+    String userId, {
+    bool publicOnly = true,
+  }) {
     return ProfileStampsNotifierProvider(
       userId,
+      publicOnly: publicOnly,
     );
   }
 
@@ -340,6 +344,7 @@ class ProfileStampsNotifierFamily extends Family<AsyncValue<List<Stamp>>> {
   ) {
     return call(
       provider.userId,
+      publicOnly: provider.publicOnly,
     );
   }
 
@@ -363,9 +368,12 @@ class ProfileStampsNotifierProvider extends AutoDisposeNotifierProviderImpl<
     ProfileStampsNotifier, AsyncValue<List<Stamp>>> {
   /// See also [ProfileStampsNotifier].
   ProfileStampsNotifierProvider(
-    String userId,
-  ) : this._internal(
-          () => ProfileStampsNotifier()..userId = userId,
+    String userId, {
+    bool publicOnly = true,
+  }) : this._internal(
+          () => ProfileStampsNotifier()
+            ..userId = userId
+            ..publicOnly = publicOnly,
           from: profileStampsNotifierProvider,
           name: r'profileStampsNotifierProvider',
           debugGetCreateSourceHash:
@@ -376,6 +384,7 @@ class ProfileStampsNotifierProvider extends AutoDisposeNotifierProviderImpl<
           allTransitiveDependencies:
               ProfileStampsNotifierFamily._allTransitiveDependencies,
           userId: userId,
+          publicOnly: publicOnly,
         );
 
   ProfileStampsNotifierProvider._internal(
@@ -386,9 +395,11 @@ class ProfileStampsNotifierProvider extends AutoDisposeNotifierProviderImpl<
     required super.debugGetCreateSourceHash,
     required super.from,
     required this.userId,
+    required this.publicOnly,
   }) : super.internal();
 
   final String userId;
+  final bool publicOnly;
 
   @override
   AsyncValue<List<Stamp>> runNotifierBuild(
@@ -396,6 +407,7 @@ class ProfileStampsNotifierProvider extends AutoDisposeNotifierProviderImpl<
   ) {
     return notifier.build(
       userId,
+      publicOnly: publicOnly,
     );
   }
 
@@ -404,13 +416,16 @@ class ProfileStampsNotifierProvider extends AutoDisposeNotifierProviderImpl<
     return ProviderOverride(
       origin: this,
       override: ProfileStampsNotifierProvider._internal(
-        () => create()..userId = userId,
+        () => create()
+          ..userId = userId
+          ..publicOnly = publicOnly,
         from: from,
         name: null,
         dependencies: null,
         allTransitiveDependencies: null,
         debugGetCreateSourceHash: null,
         userId: userId,
+        publicOnly: publicOnly,
       ),
     );
   }
@@ -423,13 +438,16 @@ class ProfileStampsNotifierProvider extends AutoDisposeNotifierProviderImpl<
 
   @override
   bool operator ==(Object other) {
-    return other is ProfileStampsNotifierProvider && other.userId == userId;
+    return other is ProfileStampsNotifierProvider &&
+        other.userId == userId &&
+        other.publicOnly == publicOnly;
   }
 
   @override
   int get hashCode {
     var hash = _SystemHash.combine(0, runtimeType.hashCode);
     hash = _SystemHash.combine(hash, userId.hashCode);
+    hash = _SystemHash.combine(hash, publicOnly.hashCode);
 
     return _SystemHash.finish(hash);
   }
@@ -441,6 +459,9 @@ mixin ProfileStampsNotifierRef
     on AutoDisposeNotifierProviderRef<AsyncValue<List<Stamp>>> {
   /// The parameter `userId` of this provider.
   String get userId;
+
+  /// The parameter `publicOnly` of this provider.
+  bool get publicOnly;
 }
 
 class _ProfileStampsNotifierProviderElement
@@ -450,6 +471,8 @@ class _ProfileStampsNotifierProviderElement
 
   @override
   String get userId => (origin as ProfileStampsNotifierProvider).userId;
+  @override
+  bool get publicOnly => (origin as ProfileStampsNotifierProvider).publicOnly;
 }
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

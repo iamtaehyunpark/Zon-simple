@@ -10,6 +10,7 @@ _$UserProfileImpl _$$UserProfileImplFromJson(Map<String, dynamic> json) =>
     _$UserProfileImpl(
       id: json['id'] as String,
       username: json['username'] as String,
+      displayName: json['displayName'] as String?,
       avatarUrl: json['avatarUrl'] as String?,
       bio: json['bio'] as String?,
       stampCount: (json['stampCount'] as num?)?.toInt() ?? 0,
@@ -25,6 +26,7 @@ Map<String, dynamic> _$$UserProfileImplToJson(_$UserProfileImpl instance) =>
     <String, dynamic>{
       'id': instance.id,
       'username': instance.username,
+      'displayName': instance.displayName,
       'avatarUrl': instance.avatarUrl,
       'bio': instance.bio,
       'stampCount': instance.stampCount,

@@ -65,17 +65,6 @@ class CommentRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (isDevMode) {
-        return right(StampComment(
-          id: 'dev-${DateTime.now().millisecondsSinceEpoch}',
-          stampId: stampId,
-          userId: userId,
-          parentId: parentId,
-          body: body,
-          createdAt: DateTime.now(),
-          username: 'dev_user',
-        ));
-      }
       final data = await client
           .from('stamp_comments')
           .insert({
@@ -93,13 +82,27 @@ class CommentRepository with BaseRepository {
   }
 
   Future<Either<AppException, Unit>> deleteComment(String id) async {
-    if (isDevMode) return right(unit);
     try {
       await client.from('stamp_comments').delete().eq('id', id);
       return right(unit);
     } catch (e) {
       return left(NetworkError(e.toString()));
     }
+  }
+
+  /// Create a 'mention' activity notification for a tagged user.
+  Future<void> notifyMention({
+    required String targetUserId,
+    required String stampId,
+    required String commentId,
+  }) async {
+    try {
+      await client.rpc('create_mention_notification', params: {
+        'p_target': targetUserId,
+        'p_stamp': stampId,
+        'p_comment': commentId,
+      });
+    } catch (_) {/* best-effort */}
   }
 
   StampComment _fromRow(Map<String, dynamic> row) {

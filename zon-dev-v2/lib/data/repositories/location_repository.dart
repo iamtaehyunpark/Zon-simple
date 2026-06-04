@@ -29,7 +29,6 @@ class LocationRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      if (isDevMode) return right(events.length);
 
       final session = client.auth.currentSession;
       if (session == null) return left(const AuthError('Unauthorized'));

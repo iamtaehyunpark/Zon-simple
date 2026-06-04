@@ -2,7 +2,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../data/models/stamp.dart';
 import 'providers/profile_provider.dart';
 import '../../../core/auth/auth_provider.dart';
@@ -22,9 +21,10 @@ class ProfileScreen extends ConsumerWidget {
       );
     }
 
-    final profileState = ref.watch(profileNotifierProvider(targetId));
-    final stampsState = ref.watch(profileStampsNotifierProvider(targetId));
     final isOwnProfile = targetId == currentUser?.id;
+    final profileState = ref.watch(profileNotifierProvider(targetId));
+    final stampsState = ref.watch(
+        profileStampsNotifierProvider(targetId, publicOnly: !isOwnProfile));
 
     return Scaffold(
       body: profileState.when(
@@ -82,19 +82,18 @@ class ProfileScreen extends ConsumerWidget {
                 actions: isOwnProfile
                     ? [
                         IconButton(
-                          icon: const Icon(Icons.settings),
-                          onPressed: () {},
+                          icon: const Icon(Icons.bookmark_border),
+                          tooltip: 'Saved',
+                          onPressed: () => context.push('/saved'),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.logout),
-                          onPressed: () async {
-                            try {
-                              await Supabase.instance.client.auth.signOut();
-                            } catch (e) {
-                              debugPrint('Supabase signout failed: $e');
-                            }
-                            ref.read(devLoggedInProvider.notifier).logout();
-                          },
+                          icon: const Icon(Icons.pin_drop_outlined),
+                          tooltip: 'My check-ins',
+                          onPressed: () => context.push('/check-ins'),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.settings),
+                          onPressed: () => context.push('/settings'),
                         ),
                       ]
                     : null,
@@ -108,9 +107,15 @@ class ProfileScreen extends ConsumerWidget {
                       _StatItem(
                           label: 'Stamps', value: profile.stampCount),
                       _StatItem(
-                          label: 'Followers', value: profile.followerCount),
+                          label: 'Followers',
+                          value: profile.followerCount,
+                          onTap: () =>
+                              context.push('/profile/$targetId/followers')),
                       _StatItem(
-                          label: 'Following', value: profile.followingCount),
+                          label: 'Following',
+                          value: profile.followingCount,
+                          onTap: () =>
+                              context.push('/profile/$targetId/following')),
                     ],
                   ),
                 ),
@@ -179,18 +184,28 @@ class ProfileScreen extends ConsumerWidget {
 class _StatItem extends StatelessWidget {
   final String label;
   final int value;
-  const _StatItem({required this.label, required this.value});
+  final VoidCallback? onTap;
+  const _StatItem({required this.label, required this.value, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          '$value',
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Column(
+          children: [
+            Text(
+              '$value',
+              style:
+                  const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
+            Text(label,
+                style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          ],
         ),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-      ],
+      ),
     );
   }
 }

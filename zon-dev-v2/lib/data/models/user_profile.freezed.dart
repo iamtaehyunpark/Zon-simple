@@ -22,6 +22,7 @@ UserProfile _$UserProfileFromJson(Map<String, dynamic> json) {
 mixin _$UserProfile {
   String get id => throw _privateConstructorUsedError;
   String get username => throw _privateConstructorUsedError;
+  String? get displayName => throw _privateConstructorUsedError;
   String? get avatarUrl => throw _privateConstructorUsedError;
   String? get bio => throw _privateConstructorUsedError;
   int get stampCount => throw _privateConstructorUsedError;
@@ -49,6 +50,7 @@ abstract class $UserProfileCopyWith<$Res> {
   $Res call(
       {String id,
       String username,
+      String? displayName,
       String? avatarUrl,
       String? bio,
       int stampCount,
@@ -75,6 +77,7 @@ class _$UserProfileCopyWithImpl<$Res, $Val extends UserProfile>
   $Res call({
     Object? id = null,
     Object? username = null,
+    Object? displayName = freezed,
     Object? avatarUrl = freezed,
     Object? bio = freezed,
     Object? stampCount = null,
@@ -92,6 +95,10 @@ class _$UserProfileCopyWithImpl<$Res, $Val extends UserProfile>
           ? _value.username
           : username // ignore: cast_nullable_to_non_nullable
               as String,
+      displayName: freezed == displayName
+          ? _value.displayName
+          : displayName // ignore: cast_nullable_to_non_nullable
+              as String?,
       avatarUrl: freezed == avatarUrl
           ? _value.avatarUrl
           : avatarUrl // ignore: cast_nullable_to_non_nullable
@@ -135,6 +142,7 @@ abstract class _$$UserProfileImplCopyWith<$Res>
   $Res call(
       {String id,
       String username,
+      String? displayName,
       String? avatarUrl,
       String? bio,
       int stampCount,
@@ -159,6 +167,7 @@ class __$$UserProfileImplCopyWithImpl<$Res>
   $Res call({
     Object? id = null,
     Object? username = null,
+    Object? displayName = freezed,
     Object? avatarUrl = freezed,
     Object? bio = freezed,
     Object? stampCount = null,
@@ -176,6 +185,10 @@ class __$$UserProfileImplCopyWithImpl<$Res>
           ? _value.username
           : username // ignore: cast_nullable_to_non_nullable
               as String,
+      displayName: freezed == displayName
+          ? _value.displayName
+          : displayName // ignore: cast_nullable_to_non_nullable
+              as String?,
       avatarUrl: freezed == avatarUrl
           ? _value.avatarUrl
           : avatarUrl // ignore: cast_nullable_to_non_nullable
@@ -214,6 +227,7 @@ class _$UserProfileImpl implements _UserProfile {
   const _$UserProfileImpl(
       {required this.id,
       required this.username,
+      this.displayName,
       this.avatarUrl,
       this.bio,
       this.stampCount = 0,
@@ -229,6 +243,8 @@ class _$UserProfileImpl implements _UserProfile {
   final String id;
   @override
   final String username;
+  @override
+  final String? displayName;
   @override
   final String? avatarUrl;
   @override
@@ -250,7 +266,7 @@ class _$UserProfileImpl implements _UserProfile {
 
   @override
   String toString() {
-    return 'UserProfile(id: $id, username: $username, avatarUrl: $avatarUrl, bio: $bio, stampCount: $stampCount, followerCount: $followerCount, followingCount: $followingCount, isFollowing: $isFollowing, createdAt: $createdAt)';
+    return 'UserProfile(id: $id, username: $username, displayName: $displayName, avatarUrl: $avatarUrl, bio: $bio, stampCount: $stampCount, followerCount: $followerCount, followingCount: $followingCount, isFollowing: $isFollowing, createdAt: $createdAt)';
   }
 
   @override
@@ -261,6 +277,8 @@ class _$UserProfileImpl implements _UserProfile {
             (identical(other.id, id) || other.id == id) &&
             (identical(other.username, username) ||
                 other.username == username) &&
+            (identical(other.displayName, displayName) ||
+                other.displayName == displayName) &&
             (identical(other.avatarUrl, avatarUrl) ||
                 other.avatarUrl == avatarUrl) &&
             (identical(other.bio, bio) || other.bio == bio) &&
@@ -278,8 +296,18 @@ class _$UserProfileImpl implements _UserProfile {
 
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
-  int get hashCode => Object.hash(runtimeType, id, username, avatarUrl, bio,
-      stampCount, followerCount, followingCount, isFollowing, createdAt);
+  int get hashCode => Object.hash(
+      runtimeType,
+      id,
+      username,
+      displayName,
+      avatarUrl,
+      bio,
+      stampCount,
+      followerCount,
+      followingCount,
+      isFollowing,
+      createdAt);
 
   /// Create a copy of UserProfile
   /// with the given fields replaced by the non-null parameter values.
@@ -301,6 +329,7 @@ abstract class _UserProfile implements UserProfile {
   const factory _UserProfile(
       {required final String id,
       required final String username,
+      final String? displayName,
       final String? avatarUrl,
       final String? bio,
       final int stampCount,
@@ -316,6 +345,8 @@ abstract class _UserProfile implements UserProfile {
   String get id;
   @override
   String get username;
+  @override
+  String? get displayName;
   @override
   String? get avatarUrl;
   @override

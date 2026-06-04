@@ -1,5 +1,4 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-import '../../../../core/auth/auth_provider.dart';
 import '../../../../data/models/user_profile.dart';
 import '../../../../data/models/stamp.dart';
 import '../../../../data/repositories/stamp_repository.dart';
@@ -15,16 +14,7 @@ class ProfileNotifier extends _$ProfileNotifier {
     return const AsyncValue.loading();
   }
 
-  // Keep previous data visible while re-fetching (no loading flash).
   Future<void> _fetch(String userId) async {
-    if (userId == kDevMockUserId) {
-      state = const AsyncValue.data(UserProfile(
-        id: kDevMockUserId,
-        username: 'dev_user',
-        bio: 'Mock dev account',
-      ));
-      return;
-    }
     final result = await ref.read(profileRepositoryProvider).getProfile(userId);
     state = result.fold(
       (err) => AsyncError(err, StackTrace.current),
@@ -42,19 +32,15 @@ class ProfileNotifier extends _$ProfileNotifier {
 @riverpod
 class ProfileStampsNotifier extends _$ProfileStampsNotifier {
   @override
-  AsyncValue<List<Stamp>> build(String userId) {
-    Future.microtask(() => _fetch(userId));
+  AsyncValue<List<Stamp>> build(String userId, {bool publicOnly = true}) {
+    Future.microtask(() => _fetch(userId, publicOnly));
     return const AsyncValue.loading();
   }
 
-  Future<void> _fetch(String userId) async {
-    if (userId == kDevMockUserId) {
-      state = const AsyncValue.data([]);
-      return;
-    }
+  Future<void> _fetch(String userId, bool publicOnly) async {
     final result = await ref
         .read(stampRepositoryProvider)
-        .getUserStamps(userId, publicOnly: true);
+        .getUserStamps(userId, publicOnly: publicOnly);
     state = result.fold(
       (err) => AsyncError(err, StackTrace.current),
       AsyncValue.data,

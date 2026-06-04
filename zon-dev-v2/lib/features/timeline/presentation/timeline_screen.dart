@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../../../data/models/enums.dart';
+import '../../../data/models/enums.dart';
+import '../../map/presentation/map_drawing.dart';
+import 'day_route_map.dart';
 import 'providers/timeline_provider.dart';
 
 class TimelineScreen extends ConsumerStatefulWidget {
@@ -12,228 +14,178 @@ class TimelineScreen extends ConsumerStatefulWidget {
   ConsumerState<TimelineScreen> createState() => _TimelineScreenState();
 }
 
-class _TimelineScreenState extends ConsumerState<TimelineScreen>
-    with SingleTickerProviderStateMixin {
-  late TabController _tabCtrl;
-  DateTime _selectedMonth = DateTime.now();
+class _TimelineScreenState extends ConsumerState<TimelineScreen> {
+  late DateTime _day;
 
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 2, vsync: this);
+    final n = DateTime.now();
+    _day = DateTime(n.year, n.month, n.day);
   }
 
-  @override
-  void dispose() {
-    _tabCtrl.dispose();
-    super.dispose();
+  bool get _isToday {
+    final n = DateTime.now();
+    return _day.year == n.year && _day.month == n.month && _day.day == n.day;
   }
 
-  void _prevMonth() {
-    setState(() {
-      _selectedMonth =
-          DateTime(_selectedMonth.year, _selectedMonth.month - 1);
-    });
-    ref.read(timelineNotifierProvider.notifier).loadMonth(_selectedMonth);
+  void _load(DateTime d) {
+    setState(() => _day = d);
+    ref.read(timelineNotifierProvider.notifier).loadDay(d);
   }
 
-  void _nextMonth() {
-    final now = DateTime.now();
-    if (_selectedMonth.year == now.year && _selectedMonth.month == now.month) {
-      return;
+  void _shift(int days) {
+    final next = _day.add(Duration(days: days));
+    final n = DateTime.now();
+    if (next.isAfter(DateTime(n.year, n.month, n.day))) return; // no future
+    _load(next);
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _day,
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null) {
+      _load(DateTime(picked.year, picked.month, picked.day));
     }
-    setState(() {
-      _selectedMonth =
-          DateTime(_selectedMonth.year, _selectedMonth.month + 1);
-    });
-    ref.read(timelineNotifierProvider.notifier).loadMonth(_selectedMonth);
   }
 
   @override
   Widget build(BuildContext context) {
-    final timelineState = ref.watch(timelineNotifierProvider);
-
+    final state = ref.watch(timelineNotifierProvider);
     return Scaffold(
       appBar: AppBar(
+        centerTitle: true,
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             IconButton(
-              icon: const Icon(Icons.chevron_left),
-              onPressed: _prevMonth,
-            ),
-            Text(
-              DateFormat('MMMM yyyy').format(_selectedMonth),
-              style: const TextStyle(fontWeight: FontWeight.w600),
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () => _shift(-1)),
+            TextButton(
+              onPressed: _pickDate,
+              child: Text(
+                _isToday ? 'Today' : DateFormat('EEE, MMM d').format(_day),
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
             ),
             IconButton(
               icon: const Icon(Icons.chevron_right),
-              onPressed: _nextMonth,
+              onPressed: _isToday ? null : () => _shift(1),
             ),
           ],
         ),
-        centerTitle: true,
-        bottom: TabBar(
-          controller: _tabCtrl,
-          tabs: const [
-            Tab(icon: Icon(Icons.list), text: 'List'),
-            Tab(icon: Icon(Icons.calendar_month), text: 'Calendar'),
-          ],
-        ),
-      ),
-      body: TabBarView(
-        controller: _tabCtrl,
-        children: [
-          _TimelineListView(timelineState: timelineState),
-          _CalendarView(timelineState: timelineState, month: _selectedMonth),
+        actions: [
+          IconButton(
+              icon: const Icon(Icons.calendar_month), onPressed: _pickDate),
         ],
       ),
+      body: state.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (e, _) => Center(child: Text(e.toString())),
+        data: (bundle) => _DayView(bundle: bundle),
+      ),
     );
   }
 }
 
-class _TimelineListView extends StatelessWidget {
-  final AsyncValue<List<DayData>> timelineState;
-  const _TimelineListView({required this.timelineState});
+class _DayView extends StatelessWidget {
+  final DayBundle bundle;
+  const _DayView({required this.bundle});
 
   @override
   Widget build(BuildContext context) {
-    return timelineState.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(e.toString())),
-      data: (days) {
-        if (days.isEmpty) {
-          return const Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.calendar_today_outlined, size: 48, color: Colors.grey),
-                SizedBox(height: 16),
-                Text('No stamps this month'),
-              ],
-            ),
-          );
-        }
-        return ListView.builder(
-          itemCount: days.length,
-          itemBuilder: (ctx, i) {
-            final day = days[i];
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: Text(
-                    DateFormat('EEEE, MMM d').format(day.date),
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 15),
-                  ),
-                ),
-                ...day.stamps.map((s) => ListTile(
-                      leading: s.coverPhotoUrl != null
-                          ? CircleAvatar(
-                              backgroundImage: NetworkImage(s.coverPhotoUrl!))
-                          : CircleAvatar(
-                              backgroundColor:
-                                  Theme.of(ctx).colorScheme.primaryContainer,
-                              child: const Icon(Icons.place)),
-                      title: Text(s.placeName),
-                      subtitle: s.caption != null
-                          ? Text(s.caption!,
-                              maxLines: 1, overflow: TextOverflow.ellipsis)
-                          : null,
-                      trailing: Icon(
-                        s.visibility == StampVisibility.public
-                            ? Icons.public
-                            : Icons.lock,
-                        size: 16,
-                        color: Colors.grey,
-                      ),
-                      onTap: () => context.push('/stamp/${s.id}'),
-                    )),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-}
+    if (bundle.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.map_outlined, size: 48, color: Colors.grey),
+            SizedBox(height: 12),
+            Text('Nothing logged this day'),
+          ],
+        ),
+      );
+    }
 
-class _CalendarView extends StatelessWidget {
-  final AsyncValue<List<DayData>> timelineState;
-  final DateTime month;
+    final pins = <MapPin>[
+      for (final c in bundle.checkIns)
+        MapPin(
+            id: c.id,
+            kind: 'checkin',
+            name: c.placeName,
+            lat: c.lat,
+            lng: c.lng),
+      for (final s in bundle.stamps)
+        MapPin(
+            id: s.id,
+            kind: 'stamp',
+            name: s.placeName,
+            lat: s.lat,
+            lng: s.lng),
+    ];
 
-  const _CalendarView({required this.timelineState, required this.month});
-
-  @override
-  Widget build(BuildContext context) {
-    return timelineState.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (e, _) => Center(child: Text(e.toString())),
-      data: (days) {
-        final stampsByDay = {
-          for (final d in days) d.date.day: d.stamps.length,
-        };
-        final daysInMonth = DateTime(month.year, month.month + 1, 0).day;
-        final firstWeekday = DateTime(month.year, month.month, 1).weekday % 7;
-
-        return GridView.builder(
-          padding: const EdgeInsets.all(8),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 7,
-            childAspectRatio: 1,
+    return ListView(
+      children: [
+        if (bundle.route.length >= 2 || pins.isNotEmpty)
+          SizedBox(
+            height: 240,
+            child: DayRouteMap(route: bundle.route, pins: pins),
           ),
-          itemCount: firstWeekday + daysInMonth,
-          itemBuilder: (ctx, i) {
-            if (i < firstWeekday) return const SizedBox.shrink();
-            final day = i - firstWeekday + 1;
-            final count = stampsByDay[day] ?? 0;
-            final isToday = month.year == DateTime.now().year &&
-                month.month == DateTime.now().month &&
-                day == DateTime.now().day;
-            return GestureDetector(
-              onTap: count > 0 ? () {} : null,
-              child: Container(
-                margin: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  color: isToday
-                      ? Theme.of(ctx).colorScheme.primary
-                      : count > 0
-                          ? Theme.of(ctx).colorScheme.primaryContainer
-                          : null,
-                  borderRadius: BorderRadius.circular(8),
+        if (bundle.checkIns.isNotEmpty) ...[
+          const _SectionHeader('Check-ins'),
+          ...bundle.checkIns.map((c) => ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.pin_drop)),
+                title: Text(c.placeName),
+                subtitle: Text([
+                  DateFormat('h:mm a').format(c.visitedAt),
+                  if (c.note != null && c.note!.isNotEmpty) c.note!,
+                ].join(' · ')),
+                trailing: c.photoCount > 0
+                    ? Text('${c.photoCount} 📷',
+                        style: const TextStyle(fontSize: 12))
+                    : null,
+              )),
+        ],
+        if (bundle.stamps.isNotEmpty) ...[
+          const _SectionHeader('Stamps'),
+          ...bundle.stamps.map((s) => ListTile(
+                leading: CircleAvatar(
+                  backgroundColor:
+                      Theme.of(context).colorScheme.primaryContainer,
+                  child: const Icon(Icons.auto_awesome),
                 ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      '$day',
-                      style: TextStyle(
-                        fontWeight:
-                            isToday ? FontWeight.w700 : FontWeight.normal,
-                        color: isToday
-                            ? Theme.of(ctx).colorScheme.onPrimary
-                            : null,
-                      ),
-                    ),
-                    if (count > 0)
-                      Text(
-                        '$count',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: isToday
-                              ? Theme.of(ctx).colorScheme.onPrimary
-                              : Theme.of(ctx).colorScheme.primary,
-                        ),
-                      ),
-                  ],
+                title: Text(s.placeName),
+                subtitle: Text(DateFormat('h:mm a').format(s.visitedAt)),
+                trailing: Icon(
+                  s.visibility == StampVisibility.public
+                      ? Icons.public
+                      : Icons.lock,
+                  size: 16,
+                  color: Colors.grey,
                 ),
-              ),
-            );
-          },
-        );
-      },
+                onTap: () => context.push('/stamp/${s.id}'),
+              )),
+        ],
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String text;
+  const _SectionHeader(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(text,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
     );
   }
 }

@@ -1,26 +1,28 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'checkin_provider.dart';
+part of 'check_in_repository.dart';
 
 // **************************************************************************
 // RiverpodGenerator
 // **************************************************************************
 
-String _$checkinNotifierHash() => r'e478f73cce295aa0ef3e940f204a934c328c7083';
+String _$checkInRepositoryHash() => r'01e0a7cca9096f8e52fa52e71586969b3458dec2';
 
-/// See also [CheckinNotifier].
-@ProviderFor(CheckinNotifier)
-final checkinNotifierProvider =
-    AutoDisposeNotifierProvider<CheckinNotifier, CheckinState>.internal(
-  CheckinNotifier.new,
-  name: r'checkinNotifierProvider',
+/// See also [checkInRepository].
+@ProviderFor(checkInRepository)
+final checkInRepositoryProvider =
+    AutoDisposeProvider<CheckInRepository>.internal(
+  checkInRepository,
+  name: r'checkInRepositoryProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
       ? null
-      : _$checkinNotifierHash,
+      : _$checkInRepositoryHash,
   dependencies: null,
   allTransitiveDependencies: null,
 );
 
-typedef _$CheckinNotifier = AutoDisposeNotifier<CheckinState>;
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef CheckInRepositoryRef = AutoDisposeProviderRef<CheckInRepository>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

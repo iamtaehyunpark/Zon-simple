@@ -6,7 +6,7 @@ part of 'auth_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$authStateStreamHash() => r'c96fcdae3376723f595b52aa04a98221bac00eb8';
+String _$authStateStreamHash() => r'047a330f27059e7b402ce5620e220a6b807afadf';
 
 /// See also [authStateStream].
 @ProviderFor(authStateStream)
@@ -23,7 +23,7 @@ final authStateStreamProvider = AutoDisposeStreamProvider<AuthState>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef AuthStateStreamRef = AutoDisposeStreamProviderRef<AuthState>;
-String _$currentUserHash() => r'2e299deb015abe928509ed38a2b2a89eaeae7e83';
+String _$currentUserHash() => r'43ba8276e4defa26a5db0a664782af3210830fc8';
 
 /// See also [currentUser].
 @ProviderFor(currentUser)
@@ -39,20 +39,5 @@ final currentUserProvider = AutoDisposeProvider<User?>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef CurrentUserRef = AutoDisposeProviderRef<User?>;
-String _$devLoggedInHash() => r'76a31354b0b3df4d5b80cc4c0695c4bb8931405d';
-
-/// See also [DevLoggedIn].
-@ProviderFor(DevLoggedIn)
-final devLoggedInProvider =
-    AutoDisposeNotifierProvider<DevLoggedIn, bool>.internal(
-  DevLoggedIn.new,
-  name: r'devLoggedInProvider',
-  debugGetCreateSourceHash:
-      const bool.fromEnvironment('dart.vm.product') ? null : _$devLoggedInHash,
-  dependencies: null,
-  allTransitiveDependencies: null,
-);
-
-typedef _$DevLoggedIn = AutoDisposeNotifier<bool>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package
