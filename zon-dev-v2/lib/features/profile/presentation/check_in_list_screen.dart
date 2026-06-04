@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/repositories/check_in_repository.dart';
+import '../../../shared/widgets/app_states.dart';
 
 class CheckInListScreen extends ConsumerStatefulWidget {
   const CheckInListScreen({super.key});
@@ -47,18 +48,12 @@ class _CheckInListScreenState extends ConsumerState<CheckInListScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('My check-ins')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingView()
           : _checkIns.isEmpty
-              ? const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.pin_drop_outlined,
-                          size: 48, color: Colors.grey),
-                      SizedBox(height: 12),
-                      Text('No check-ins yet'),
-                    ],
-                  ),
+              ? const EmptyView(
+                  icon: Icons.pin_drop_outlined,
+                  message: 'No check-ins yet',
+                  subtitle: 'Check in somewhere to start your trace.',
                 )
               : ListView.separated(
                   itemCount: _checkIns.length,

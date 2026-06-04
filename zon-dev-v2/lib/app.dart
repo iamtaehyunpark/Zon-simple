@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/auth/auth_provider.dart';
 import 'core/notifications/notification_service.dart';
+import 'shared/theme/app_theme.dart';
 import 'features/auth/presentation/login_screen.dart';
 import 'features/feed/presentation/feed_screen.dart';
 import 'features/feed/presentation/stamp_detail_screen.dart';
@@ -197,10 +198,7 @@ class _ZonAppState extends ConsumerState<ZonApp> {
     return MaterialApp.router(
       title: 'ZON',
       routerConfig: router,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: kBrandGreen),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.theme(kBrandGreen),
     );
   }
 }

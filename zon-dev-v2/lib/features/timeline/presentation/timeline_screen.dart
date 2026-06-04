@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../data/models/enums.dart';
+import '../../../shared/widgets/app_states.dart';
 import '../../map/presentation/map_drawing.dart';
 import 'day_route_map.dart';
 import 'providers/timeline_provider.dart';
@@ -84,8 +85,8 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
         ],
       ),
       body: state.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(e.toString())),
+        loading: () => const LoadingView(),
+        error: (e, _) => ErrorView(message: errorMessage(e)),
         data: (bundle) => _DayView(bundle: bundle),
       ),
     );
@@ -99,15 +100,10 @@ class _DayView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (bundle.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.map_outlined, size: 48, color: Colors.grey),
-            SizedBox(height: 12),
-            Text('Nothing logged this day'),
-          ],
-        ),
+      return const EmptyView(
+        icon: Icons.map_outlined,
+        message: 'Nothing logged this day',
+        subtitle: 'Check in or add a stamp to see it here.',
       );
     }
 

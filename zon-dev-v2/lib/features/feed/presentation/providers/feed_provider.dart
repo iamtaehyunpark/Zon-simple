@@ -9,6 +9,7 @@ class FeedNotifier extends _$FeedNotifier {
   static const _pageSize = 30;
   int _offset = 0;
   bool _hasMore = true;
+  bool _loadingMore = false;
 
   @override
   AsyncValue<List<Stamp>> build() {
@@ -32,7 +33,8 @@ class FeedNotifier extends _$FeedNotifier {
   }
 
   Future<void> loadMore() async {
-    if (!_hasMore) return;
+    if (!_hasMore || _loadingMore) return;
+    _loadingMore = true;
     final current = state.valueOrNull ?? [];
     final repo = ref.read(stampRepositoryProvider);
     final result =
@@ -45,6 +47,7 @@ class FeedNotifier extends _$FeedNotifier {
         state = AsyncValue.data([...current, ...stamps]);
       },
     );
+    _loadingMore = false;
   }
 
   Future<void> refresh() => _load();
@@ -52,7 +55,6 @@ class FeedNotifier extends _$FeedNotifier {
   Future<void> toggleLike(String stampId) async {
     final repo = ref.read(stampRepositoryProvider);
     await repo.toggleLike(stampId);
-    // Optimistic update
     state = state.whenData((stamps) => stamps.map((s) {
           if (s.id != stampId) return s;
           final liked = !s.isLiked;
@@ -61,5 +63,13 @@ class FeedNotifier extends _$FeedNotifier {
             likeCount: liked ? s.likeCount + 1 : s.likeCount - 1,
           );
         }).toList());
+  }
+
+  Future<void> toggleSave(String stampId) async {
+    final repo = ref.read(stampRepositoryProvider);
+    await repo.toggleSave(stampId);
+    state = state.whenData((stamps) => stamps
+        .map((s) => s.id == stampId ? s.copyWith(isSaved: !s.isSaved) : s)
+        .toList());
   }
 }

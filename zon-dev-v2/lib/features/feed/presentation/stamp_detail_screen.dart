@@ -8,8 +8,11 @@ import '../../../app.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../data/repositories/stamp_repository.dart';
 import '../../../data/repositories/comment_repository.dart';
+import '../../../data/repositories/profile_repository.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/models/user_profile.dart';
 import '../../../data/models/enums.dart';
+import '../../../shared/widgets/app_states.dart';
 import '../../checkin/presentation/user_tag_field.dart' show showUserPicker;
 
 part 'stamp_detail_screen.g.dart';
@@ -42,6 +45,16 @@ Future<List<String>> stampPhotos(StampPhotosRef ref, String stampId) async {
   return [for (final p in photos) p.url];
 }
 
+@riverpod
+Future<List<UserProfile>> stampTaggedUsers(
+    StampTaggedUsersRef ref, String stampId) async {
+  final stamp = await ref.watch(stampDetailProvider(stampId).future);
+  if (stamp == null || stamp.taggedUserIds.isEmpty) return [];
+  return ref
+      .watch(profileRepositoryProvider)
+      .getProfilesByIds(stamp.taggedUserIds);
+}
+
 // ── Screen ───────────────────────────────────────────────────
 
 class StampDetailScreen extends ConsumerWidget {
@@ -54,16 +67,14 @@ class StampDetailScreen extends ConsumerWidget {
 
     return Scaffold(
       body: stampAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Icon(Icons.error_outline),
-            Text(e.toString()),
-          ]),
-        ),
+        loading: () => const LoadingView(),
+        error: (e, _) => ErrorView(message: errorMessage(e)),
         data: (stamp) {
           if (stamp == null) {
-            return const Center(child: Text('Stamp not found'));
+            return const EmptyView(
+              icon: Icons.location_off_outlined,
+              message: 'Stamp not found',
+            );
           }
           return _StampDetailBody(stamp: stamp, stampId: stampId);
         },
@@ -83,6 +94,8 @@ class _StampDetailBody extends ConsumerWidget {
     final commentsAsync = ref.watch(stampCommentsProvider(stampId));
     final photoUrls =
         ref.watch(stampPhotosProvider(stampId)).valueOrNull ?? const <String>[];
+    final tagged = ref.watch(stampTaggedUsersProvider(stampId)).valueOrNull ??
+        const <UserProfile>[];
     final isOwner = stamp.userId == ref.watch(currentUserProvider)?.id;
 
     return CustomScrollView(
@@ -179,6 +192,30 @@ class _StampDetailBody extends ConsumerWidget {
                     _VisibilityBadge(stamp.visibility),
                   ],
                 ),
+
+                if (tagged.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      for (final u in tagged)
+                        ActionChip(
+                          visualDensity: VisualDensity.compact,
+                          avatar: CircleAvatar(
+                            backgroundImage: u.avatarUrl != null
+                                ? NetworkImage(u.avatarUrl!)
+                                : null,
+                            child: u.avatarUrl == null
+                                ? const Icon(Icons.person, size: 14)
+                                : null,
+                          ),
+                          label: Text('@${u.username}'),
+                          onPressed: () => context.push('/profile/${u.id}'),
+                        ),
+                    ],
+                  ),
+                ],
 
                 if (stamp.caption != null && stamp.caption!.isNotEmpty) ...[
                   const SizedBox(height: 16),

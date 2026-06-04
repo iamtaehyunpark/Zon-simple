@@ -267,6 +267,27 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               ),
             ),
           ),
+          Positioned(
+            bottom: MediaQuery.of(context).padding.bottom + 16,
+            left: 16,
+            child: const Card(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _LegendRow(color: kBrandGreen, label: 'My stamps'),
+                    SizedBox(height: 4),
+                    _LegendRow(color: Color(_kCheckinBlue), label: 'Check-ins'),
+                    SizedBox(height: 4),
+                    _LegendRow(
+                        color: Color(_kFollowedOrange), label: 'Following'),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton.small(
@@ -326,6 +347,28 @@ class _StampSheet extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _LegendRow extends StatelessWidget {
+  final Color color;
+  final String label;
+  const _LegendRow({required this.color, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 6),
+        Text(label, style: const TextStyle(fontSize: 11)),
+      ],
     );
   }
 }

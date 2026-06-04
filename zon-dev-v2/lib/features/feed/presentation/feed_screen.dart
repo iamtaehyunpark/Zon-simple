@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../core/notifications/notification_service.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/repositories/notification_repository.dart';
+import '../../../shared/widgets/app_states.dart';
 import '../../photo_import/presentation/providers/photo_suggestion_provider.dart';
 import 'providers/feed_provider.dart';
 
@@ -14,6 +16,8 @@ class FeedScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feedState = ref.watch(feedNotifierProvider);
+    final unread =
+        ref.watch(unreadNotificationCountProvider).valueOrNull ?? 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -24,8 +28,15 @@ class FeedScreen extends ConsumerWidget {
             onPressed: () => context.push('/search'),
           ),
           IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () => context.push('/activity'),
+            icon: Badge(
+              isLabelVisible: unread > 0,
+              label: Text('$unread'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            onPressed: () async {
+              await context.push('/activity');
+              ref.invalidate(unreadNotificationCountProvider);
+            },
           ),
         ],
       ),
@@ -34,38 +45,17 @@ class FeedScreen extends ConsumerWidget {
           const _PhotoSuggestionBanner(),
           Expanded(
             child: feedState.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, size: 48),
-              const SizedBox(height: 8),
-              Text(e.toString()),
-              TextButton(
-                onPressed: () =>
-                    ref.read(feedNotifierProvider.notifier).refresh(),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
+        loading: () => const LoadingView(),
+        error: (e, _) => ErrorView(
+          message: errorMessage(e),
+          onRetry: () => ref.read(feedNotifierProvider.notifier).refresh(),
         ),
         data: (stamps) {
           if (stamps.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.explore_outlined, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No stamps yet', style: TextStyle(fontSize: 18)),
-                  SizedBox(height: 8),
-                  Text(
-                    'Follow people or create your first stamp!',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
+            return const EmptyView(
+              icon: Icons.explore_outlined,
+              message: 'No stamps yet',
+              subtitle: 'Follow people or create your first stamp!',
             );
           }
           return RefreshIndicator(
@@ -214,6 +204,25 @@ class StampCard extends ConsumerWidget {
                         icon: Icons.comment_outlined,
                         count: stamp.commentCount,
                         onTap: () => context.push('/stamp/${stamp.id}'),
+                      ),
+                      const Spacer(),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => ref
+                            .read(feedNotifierProvider.notifier)
+                            .toggleSave(stamp.id),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            stamp.isSaved
+                                ? Icons.bookmark
+                                : Icons.bookmark_border,
+                            size: 20,
+                            color: stamp.isSaved
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.grey[600],
+                          ),
+                        ),
                       ),
                     ],
                   ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../data/models/stamp.dart';
+import '../../../shared/widgets/app_states.dart';
 import 'providers/profile_provider.dart';
 import '../../../core/auth/auth_provider.dart';
 
@@ -16,9 +17,7 @@ class ProfileScreen extends ConsumerWidget {
     final targetId = userId ?? currentUser?.id;
 
     if (targetId == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: LoadingView());
     }
 
     final isOwnProfile = targetId == currentUser?.id;
@@ -28,11 +27,14 @@ class ProfileScreen extends ConsumerWidget {
 
     return Scaffold(
       body: profileState.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(e.toString())),
+        loading: () => const LoadingView(),
+        error: (e, _) => ErrorView(message: errorMessage(e)),
         data: (profile) {
           if (profile == null) {
-            return const Center(child: Text('Profile not found'));
+            return const EmptyView(
+              icon: Icons.person_off_outlined,
+              message: 'Profile not found',
+            );
           }
           return CustomScrollView(
             slivers: [
@@ -57,11 +59,18 @@ class ProfileScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          profile.username,
+                          profile.displayName?.isNotEmpty == true
+                              ? profile.displayName!
+                              : profile.username,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                           ),
+                        ),
+                        Text(
+                          '@${profile.username}',
+                          style: const TextStyle(
+                              color: Colors.black54, fontSize: 13),
                         ),
                         if (profile.bio != null && profile.bio!.isNotEmpty)
                           Padding(
@@ -140,19 +149,22 @@ class ProfileScreen extends ConsumerWidget {
                 ),
               stampsState.when(
                 loading: () => const SliverToBoxAdapter(
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: LoadingView(),
+                  ),
                 ),
                 error: (e, _) => SliverToBoxAdapter(
-                  child: Center(child: Text(e.toString())),
+                  child: ErrorView(message: errorMessage(e)),
                 ),
                 data: (stamps) {
                   if (stamps.isEmpty) {
-                    return const SliverToBoxAdapter(
-                      child: Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Text('No public stamps yet'),
-                        ),
+                    return SliverToBoxAdapter(
+                      child: EmptyView(
+                        icon: Icons.auto_awesome_outlined,
+                        message: isOwnProfile
+                            ? 'No stamps yet'
+                            : 'No public stamps yet',
                       ),
                     );
                   }

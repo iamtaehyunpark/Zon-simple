@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/repositories/profile_repository.dart';
+import '../../../shared/widgets/app_states.dart';
 
 /// Followers or following list for a user.
 class UserListScreen extends ConsumerStatefulWidget {
@@ -44,12 +45,14 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
       appBar: AppBar(
           title: Text(widget.followers ? 'Followers' : 'Following')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingView()
           : _users.isEmpty
-              ? Center(
-                  child: Text(widget.followers
+              ? EmptyView(
+                  icon: Icons.people_outline,
+                  message: widget.followers
                       ? 'No followers yet'
-                      : 'Not following anyone yet'))
+                      : 'Not following anyone yet',
+                )
               : ListView.builder(
                   itemCount: _users.length,
                   itemBuilder: (ctx, i) {

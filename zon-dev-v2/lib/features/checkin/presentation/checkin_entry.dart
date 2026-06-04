@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../data/models/stamp.dart';
+import '../../../shared/widgets/app_states.dart';
 import 'providers/checkin_provider.dart';
 import 'stamp_editor.dart';
 import 'check_in_editor.dart';
@@ -144,23 +145,10 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
           });
           return const Center(child: CircularProgressIndicator());
         },
-        error: (msg) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
-              Text(msg, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref
-                    .read(checkinNotifierProvider.notifier)
-                    .startCheckin(
-                        lat: widget.lat, lng: widget.lng, mode: widget.mode),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
+        error: (msg) => ErrorView(
+          message: msg,
+          onRetry: () => ref.read(checkinNotifierProvider.notifier).startCheckin(
+              lat: widget.lat, lng: widget.lng, mode: widget.mode),
         ),
       ),
     );

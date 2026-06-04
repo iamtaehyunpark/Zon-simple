@@ -153,6 +153,16 @@ class ProfileRepository with BaseRepository {
     }
   }
 
+  Future<List<UserProfile>> getProfilesByIds(List<String> ids) async {
+    if (ids.isEmpty) return [];
+    try {
+      final data = await client.from('profiles').select().inFilter('id', ids);
+      return data.map(_fromRow).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   UserProfile _fromRow(Map<String, dynamic> row) {
     return UserProfile(
       id: row['id'] as String,

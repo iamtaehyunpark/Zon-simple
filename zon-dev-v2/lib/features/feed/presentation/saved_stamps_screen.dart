@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/repositories/stamp_repository.dart';
+import '../../../shared/widgets/app_states.dart';
 import 'feed_screen.dart' show StampCard;
 
 class SavedStampsScreen extends ConsumerStatefulWidget {
@@ -36,17 +37,12 @@ class _SavedStampsScreenState extends ConsumerState<SavedStampsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Saved')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingView()
           : _stamps.isEmpty
-              ? const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.bookmark_border, size: 48, color: Colors.grey),
-                      SizedBox(height: 12),
-                      Text('No saved stamps yet'),
-                    ],
-                  ),
+              ? const EmptyView(
+                  icon: Icons.bookmark_border,
+                  message: 'No saved stamps yet',
+                  subtitle: 'Stamps you bookmark show up here.',
                 )
               : RefreshIndicator(
                   onRefresh: _load,

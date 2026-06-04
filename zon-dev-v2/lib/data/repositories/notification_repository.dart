@@ -35,6 +35,10 @@ NotificationRepository notificationRepository(NotificationRepositoryRef ref) =>
       currentUserId: ref.watch(currentUserProvider)?.id,
     );
 
+@riverpod
+Future<int> unreadNotificationCount(UnreadNotificationCountRef ref) =>
+    ref.watch(notificationRepositoryProvider).unreadCount();
+
 class NotificationRepository with BaseRepository {
   @override
   final SupabaseClient client;

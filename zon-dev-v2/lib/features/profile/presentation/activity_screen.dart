@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../data/repositories/notification_repository.dart';
+import '../../../shared/widgets/app_states.dart';
 
 class ActivityScreen extends ConsumerStatefulWidget {
   const ActivityScreen({super.key});
@@ -68,18 +69,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('Activity')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingView()
           : _items.isEmpty
-              ? const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.notifications_none,
-                          size: 48, color: Colors.grey),
-                      SizedBox(height: 12),
-                      Text('No activity yet'),
-                    ],
-                  ),
+              ? const EmptyView(
+                  icon: Icons.notifications_none,
+                  message: 'No activity yet',
+                  subtitle: 'Likes, comments, follows and mentions land here.',
                 )
               : ListView.builder(
                   itemCount: _items.length,
