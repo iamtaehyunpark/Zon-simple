@@ -84,6 +84,24 @@ Future<void> drawLine(
   ));
 }
 
+/// Draw (or clear, when [pin] is null) a ring highlighting the selected pin.
+Future<void> drawHighlight(MapboxMap map, MapPin? pin, int color) async {
+  await _remove(map, 'highlight-source', 'highlight-layer');
+  if (pin == null) return;
+  await map.style.addSource(GeoJsonSource(
+    id: 'highlight-source',
+    data: pinFeatureCollection([pin]),
+  ));
+  await map.style.addLayer(CircleLayer(
+    id: 'highlight-layer',
+    sourceId: 'highlight-source',
+    circleRadius: 16.0,
+    circleColor: 0x00000000,
+    circleStrokeWidth: 4.0,
+    circleStrokeColor: color,
+  ));
+}
+
 Future<void> drawPins(
   MapboxMap map, {
   required String sourceId,

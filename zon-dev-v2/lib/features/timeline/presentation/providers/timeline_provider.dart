@@ -5,6 +5,7 @@ import '../../../../data/models/raw_location_event.dart';
 import '../../../../data/repositories/stamp_repository.dart';
 import '../../../../data/repositories/check_in_repository.dart';
 import '../../../../data/repositories/location_repository.dart';
+import '../../../../data/repositories/diary_repository.dart';
 import '../../../../core/auth/auth_provider.dart';
 
 part 'timeline_provider.g.dart';
@@ -16,11 +17,13 @@ class DayBundle {
   final List<RawLocationEvent> route;
   final List<CheckIn> checkIns;
   final List<Stamp> stamps;
+  final String diary;
   const DayBundle({
     required this.date,
     this.route = const [],
     this.checkIns = const [],
     this.stamps = const [],
+    this.diary = '',
   });
 
   bool get isEmpty => route.isEmpty && checkIns.isEmpty && stamps.isEmpty;
@@ -49,10 +52,11 @@ class TimelineNotifier extends _$TimelineNotifier {
     final checkInRepo = ref.read(checkInRepositoryProvider);
     final locationRepo = ref.read(locationRepositoryProvider);
 
-    final (stampsRes, checkInsRes, routeRes) = await (
+    final (stampsRes, checkInsRes, routeRes, diary) = await (
       stampRepo.getMyStampsForDay(day),
       checkInRepo.getForDay(day),
       locationRepo.getRouteForDay(day),
+      ref.read(diaryRepositoryProvider).getDiary(day),
     ).wait;
 
     state = AsyncValue.data(DayBundle(
@@ -60,6 +64,7 @@ class TimelineNotifier extends _$TimelineNotifier {
       stamps: stampsRes.getOrElse((_) => []),
       checkIns: checkInsRes.getOrElse((_) => []),
       route: routeRes.getOrElse((_) => []),
+      diary: diary,
     ));
   }
 }

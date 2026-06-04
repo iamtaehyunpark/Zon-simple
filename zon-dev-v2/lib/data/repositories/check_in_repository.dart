@@ -136,6 +136,18 @@ class CheckInRepository with BaseRepository {
     }
   }
 
+  Future<Either<AppException, Unit>> updateCheckIn(
+      String id, Map<String, dynamic> updates) async {
+    try {
+      await client.from('check_ins').update(
+          {...updates, 'updated_at': DateTime.now().toIso8601String()}).eq(
+          'id', id);
+      return right(unit);
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
   Future<Either<AppException, Unit>> deleteCheckIn(String id) async {
     try {
       await client.from('check_ins').delete().eq('id', id);
