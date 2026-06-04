@@ -274,21 +274,30 @@ class CheckInRepository with BaseRepository {
     await client.from('photos').delete().eq('id', photoId);
   }
 
-  /// Day-of-month → check-in count for [month] (for the calendar badges).
-  Future<Map<int, int>> checkInCountsForMonth(DateTime month) async {
+  /// Day-of-month → visit count for [month] (for the calendar badges).
+  /// A stamp is an advanced check-in, so visits = check-ins + stamps; promoted
+  /// check-ins are already counted, so we only add stamps that have no check-in.
+  Future<Map<int, int>> monthlyVisitCounts(DateTime month) async {
     final uid = userId;
     if (uid == null) return {};
     try {
-      final start = DateTime(month.year, month.month, 1);
-      final end = DateTime(month.year, month.month + 1, 1);
-      final rows = await client
+      final start = DateTime(month.year, month.month, 1).toIso8601String();
+      final end = DateTime(month.year, month.month + 1, 1).toIso8601String();
+      final map = <int, int>{};
+      final checkIns = await client
           .from('check_ins')
           .select('visited_at')
           .eq('user_id', uid)
-          .gte('visited_at', start.toIso8601String())
-          .lt('visited_at', end.toIso8601String());
-      final map = <int, int>{};
-      for (final r in rows) {
+          .gte('visited_at', start)
+          .lt('visited_at', end);
+      final stamps = await client
+          .from('stamps')
+          .select('visited_at')
+          .eq('user_id', uid)
+          .isFilter('check_in_id', null)
+          .gte('visited_at', start)
+          .lt('visited_at', end);
+      for (final r in [...checkIns, ...stamps]) {
         final d = DateTime.parse(r['visited_at'] as String).toLocal();
         map[d.day] = (map[d.day] ?? 0) + 1;
       }

@@ -109,18 +109,24 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
   // ── Data → items + map ────────────────────────────────────────
   List<_TlItem> _buildItems(DayBundle b) {
+    // A promoted check-in is represented by its stamp — don't show it twice.
+    final promoted = {
+      for (final s in b.stamps)
+        if (s.checkInId != null) s.checkInId!
+    };
     final items = <_TlItem>[
       for (final c in b.checkIns)
-        _TlItem(
-          id: c.id,
-          kind: _NodeKind.checkIn,
-          name: c.placeName,
-          lat: c.lat,
-          lng: c.lng,
-          time: c.visitedAt,
-          text: c.note,
-          photoUrls: c.photoUrls,
-        ),
+        if (!promoted.contains(c.id))
+          _TlItem(
+            id: c.id,
+            kind: _NodeKind.checkIn,
+            name: c.placeName,
+            lat: c.lat,
+            lng: c.lng,
+            time: c.visitedAt,
+            text: c.note,
+            photoUrls: c.photoUrls,
+          ),
       for (final s in b.stamps)
         _TlItem(
           id: s.id,
@@ -420,6 +426,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       await repo.delete(item.id);
     } else {
       await repo.update(item.id, result.body.trim());
+      await repo.setTime(item.id, result.at);
     }
     _reload();
   }
@@ -1339,9 +1346,8 @@ class _CalendarSheetState extends ConsumerState<_CalendarSheet> {
   }
 
   Future<void> _loadCounts() async {
-    final c = await ref
-        .read(checkInRepositoryProvider)
-        .checkInCountsForMonth(_month);
+    final c =
+        await ref.read(checkInRepositoryProvider).monthlyVisitCounts(_month);
     if (mounted) setState(() => _counts = c);
   }
 
