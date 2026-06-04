@@ -74,6 +74,14 @@ class TimelineNoteRepository with BaseRepository {
     }).eq('id', id);
   }
 
+  /// Reposition a note within the day by changing its time.
+  Future<void> setTime(String id, DateTime notedAt) async {
+    await client.from('timeline_notes').update({
+      'noted_at': notedAt.toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
+    }).eq('id', id);
+  }
+
   Future<void> delete(String id) async {
     await client.from('timeline_notes').delete().eq('id', id);
   }

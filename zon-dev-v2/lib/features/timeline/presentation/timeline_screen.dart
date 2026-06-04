@@ -435,6 +435,36 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     _reload();
   }
 
+  // Long-press drag of a note → reposition it. Its time becomes the next
+  // node's time minus one minute (so it sorts just before that node).
+  void _onReorder(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _items.length) return;
+    final moved = _items[oldIndex];
+    if (moved.kind != _NodeKind.note) return; // only notes are movable
+    // onReorderItem already adjusts newIndex for the removed item.
+    final list = [..._items];
+    list.removeAt(oldIndex);
+    if (newIndex > list.length) newIndex = list.length;
+    list.insert(newIndex, moved);
+
+    final next = newIndex + 1 < list.length ? list[newIndex + 1] : null;
+    final prev = newIndex - 1 >= 0 ? list[newIndex - 1] : null;
+    final DateTime newTime;
+    if (next != null) {
+      newTime = next.time.subtract(const Duration(minutes: 1));
+    } else if (prev != null) {
+      newTime = prev.time.add(const Duration(minutes: 1));
+    } else {
+      newTime = moved.time;
+    }
+    _persistNoteTime(moved.id, newTime);
+  }
+
+  Future<void> _persistNoteTime(String id, DateTime t) async {
+    await ref.read(timelineNoteRepositoryProvider).setTime(id, t);
+    _reload();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(timelineNotifierProvider);
@@ -503,6 +533,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 onTapItem: _openDetail,
                 onAddNote: _addNote,
                 onEditDiary: _editDiary,
+                onReorder: _onReorder,
               ),
             ],
           );
@@ -535,6 +566,7 @@ class _ListPanel extends StatelessWidget {
   final void Function(_TlItem) onTapItem;
   final VoidCallback onAddNote;
   final VoidCallback onEditDiary;
+  final void Function(int oldIndex, int newIndex) onReorder;
 
   const _ListPanel({
     required this.items,
@@ -547,6 +579,7 @@ class _ListPanel extends StatelessWidget {
     required this.onTapItem,
     required this.onAddNote,
     required this.onEditDiary,
+    required this.onReorder,
   });
 
   @override
@@ -614,49 +647,74 @@ class _ListPanel extends StatelessWidget {
                 ),
               ),
               // ── Scrollable nodes + diary ───────────────────
+              // Notes are long-press draggable (ReorderableDelayedDragStartListener);
+              // check-ins/stamps are fixed in time and not draggable.
               Expanded(
-                child: ListView(
+                child: CustomScrollView(
                   controller: scrollController,
-                  padding: EdgeInsets.zero,
-                  children: [
-                    ListTile(
-                      leading: Icon(Icons.add, color: scheme.primary),
-                      title: const Text('Add a note'),
-                      onTap: onAddNote,
-                    ),
-                    const Divider(height: 1),
+                  slivers: [
                     if (items.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24),
-                        child: EmptyView(
-                          icon: Icons.map_outlined,
-                          message: 'Nothing logged this day',
-                          subtitle:
-                              isToday ? 'Check in to start your trace.' : null,
-                          action: isToday
-                              ? FilledButton.icon(
-                                  onPressed: () =>
-                                      context.push('/checkin?mode=checkin'),
-                                  icon: const Icon(
-                                      Icons.add_location_alt_outlined),
-                                  label: const Text('Check in'),
-                                )
-                              : null,
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: EmptyView(
+                            icon: Icons.map_outlined,
+                            message: 'Nothing logged this day',
+                            subtitle: isToday
+                                ? 'Check in to start your trace.'
+                                : null,
+                            action: isToday
+                                ? FilledButton.icon(
+                                    onPressed: () =>
+                                        context.push('/checkin?mode=checkin'),
+                                    icon: const Icon(
+                                        Icons.add_location_alt_outlined),
+                                    label: const Text('Check in'),
+                                  )
+                                : null,
+                          ),
                         ),
                       ),
-                    for (int i = 0; i < items.length; i++)
-                      KeyedSubtree(
-                        key: itemKeys[items[i].id],
-                        child: _TimelineNode(
-                          item: items[i],
-                          isFirst: i == 0,
-                          isLast: i == items.length - 1,
-                          selected: items[i].id == selectedId,
-                          onTap: () => onTapItem(items[i]),
-                        ),
+                    SliverReorderableList(
+                      itemCount: items.length,
+                      onReorderItem: onReorder,
+                      itemBuilder: (ctx, i) {
+                        final it = items[i];
+                        final node = KeyedSubtree(
+                          key: itemKeys[it.id]!,
+                          child: _TimelineNode(
+                            item: it,
+                            isFirst: i == 0,
+                            isLast: i == items.length - 1,
+                            selected: it.id == selectedId,
+                            onTap: () => onTapItem(it),
+                          ),
+                        );
+                        if (it.isNote) {
+                          return ReorderableDelayedDragStartListener(
+                            key: ValueKey(it.id),
+                            index: i,
+                            child: node,
+                          );
+                        }
+                        return KeyedSubtree(key: ValueKey(it.id), child: node);
+                      },
+                    ),
+                    SliverToBoxAdapter(
+                      child: Column(
+                        children: [
+                          const Divider(height: 1),
+                          ListTile(
+                            leading: Icon(Icons.add, color: scheme.primary),
+                            title: const Text('Add a note'),
+                            onTap: onAddNote,
+                          ),
+                        ],
                       ),
-                    _DiaryCard(diary: diary, onEdit: onEditDiary),
-                    const SizedBox(height: 32),
+                    ),
+                    SliverToBoxAdapter(
+                        child: _DiaryCard(diary: diary, onEdit: onEditDiary)),
+                    const SliverToBoxAdapter(child: SizedBox(height: 32)),
                   ],
                 ),
               ),
