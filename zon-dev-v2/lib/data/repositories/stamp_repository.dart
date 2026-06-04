@@ -247,6 +247,26 @@ class StampRepository with BaseRepository {
     }
   }
 
+  /// Photo URLs grouped by stamp id (for list rendering).
+  Future<Map<String, List<String>>> photoUrlsByStamp(List<String> ids) async {
+    if (ids.isEmpty) return {};
+    try {
+      final rows = await client
+          .from('photos')
+          .select('stamp_id, storage_url')
+          .inFilter('stamp_id', ids)
+          .order('created_at', ascending: true);
+      final map = <String, List<String>>{};
+      for (final r in rows) {
+        final sid = r['stamp_id'] as String?;
+        if (sid != null) (map[sid] ??= []).add(r['storage_url'] as String);
+      }
+      return map;
+    } catch (_) {
+      return {};
+    }
+  }
+
   Future<void> addStampPhotos(String stampId, List<String> urls) async {
     final userId = this.userId;
     if (userId == null || urls.isEmpty) return;

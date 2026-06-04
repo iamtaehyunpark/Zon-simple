@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,38 +6,48 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../../app.dart';
+import '../../../core/photos/photo_service.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/repositories/check_in_repository.dart';
 import '../../../data/repositories/diary_repository.dart';
+import '../../../data/repositories/timeline_note_repository.dart';
 import '../../../shared/widgets/app_states.dart';
+import '../../checkin/presentation/photo_strip.dart';
 import '../../map/presentation/map_drawing.dart';
 import 'providers/timeline_provider.dart';
 
 const _kCheckinBlue = 0xFF2196F3;
+const _kNoteAmber = 0xFFF59E0B;
 
-/// One node on the timeline — a check-in or a stamp, time-ordered.
+enum _NodeKind { checkIn, stamp, note }
+
+/// A generalized timeline node — a check-in, a stamp, or a free-text note.
 class _TlItem {
   final String id;
-  final bool isStamp;
-  final String name;
-  final double lat;
-  final double lng;
+  final _NodeKind kind;
+  final String name; // place name ('' for notes)
+  final double? lat;
+  final double? lng;
   final DateTime time;
-  final String? note;
-  final int photoCount;
+  final String? text; // note / caption body
+  final List<String> photoUrls;
   final bool isPublic;
   const _TlItem({
     required this.id,
-    required this.isStamp,
+    required this.kind,
     required this.name,
-    required this.lat,
-    required this.lng,
     required this.time,
-    required this.photoCount,
-    required this.isPublic,
-    this.note,
+    this.lat,
+    this.lng,
+    this.text,
+    this.photoUrls = const [],
+    this.isPublic = false,
   });
+
+  bool get isStamp => kind == _NodeKind.stamp;
+  bool get isNote => kind == _NodeKind.note;
+  bool get hasLocation => lat != null && lng != null;
 }
 
 class TimelineScreen extends ConsumerStatefulWidget {
@@ -89,11 +100,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final picked = await showModalBottomSheet<DateTime>(
       context: context,
-      initialDate: _day,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
+      builder: (_) => _CalendarSheet(initial: _day),
     );
     if (picked != null) _load(DateTime(picked.year, picked.month, picked.day));
   }
@@ -104,26 +113,33 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       for (final c in b.checkIns)
         _TlItem(
           id: c.id,
-          isStamp: false,
+          kind: _NodeKind.checkIn,
           name: c.placeName,
           lat: c.lat,
           lng: c.lng,
           time: c.visitedAt,
-          note: c.note,
-          photoCount: c.photoCount,
-          isPublic: false,
+          text: c.note,
+          photoUrls: c.photoUrls,
         ),
       for (final s in b.stamps)
         _TlItem(
           id: s.id,
-          isStamp: true,
+          kind: _NodeKind.stamp,
           name: s.placeName,
           lat: s.lat,
           lng: s.lng,
           time: s.visitedAt,
-          note: s.caption,
-          photoCount: s.photoCount,
+          text: s.caption,
+          photoUrls: s.photoUrls,
           isPublic: s.visibility == StampVisibility.public,
+        ),
+      for (final n in b.notes)
+        _TlItem(
+          id: n.id,
+          kind: _NodeKind.note,
+          name: '',
+          time: n.notedAt,
+          text: n.body,
         ),
     ]..sort((a, b) => a.time.compareTo(b.time));
     return items;
@@ -146,10 +162,11 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     final map = _map;
     if (map == null) return;
     final items = _buildItems(b);
+    final located = items.where((i) => i.hasLocation).toList();
 
     final coords = b.route.length >= 2
         ? [for (final e in b.route) [e.lng, e.lat]]
-        : [for (final i in items) [i.lng, i.lat]];
+        : [for (final i in located) [i.lng!, i.lat!]];
     await drawLine(map, coords, kBrandGreen.toARGB32(), idPrefix: 'tl-path');
 
     await drawPins(
@@ -157,8 +174,8 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       sourceId: 'tl-checkins-source',
       layerId: 'tl-checkins-layer',
       pins: [
-        for (final i in items.where((i) => !i.isStamp))
-          MapPin(id: i.id, kind: 'checkin', name: i.name, lat: i.lat, lng: i.lng),
+        for (final i in located.where((i) => !i.isStamp))
+          MapPin(id: i.id, kind: 'checkin', name: i.name, lat: i.lat!, lng: i.lng!),
       ],
       color: _kCheckinBlue,
     );
@@ -167,17 +184,18 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       sourceId: 'tl-stamps-source',
       layerId: 'tl-stamps-layer',
       pins: [
-        for (final i in items.where((i) => i.isStamp))
-          MapPin(id: i.id, kind: 'stamp', name: i.name, lat: i.lat, lng: i.lng),
+        for (final i in located.where((i) => i.isStamp))
+          MapPin(id: i.id, kind: 'stamp', name: i.name, lat: i.lat!, lng: i.lng!),
       ],
       color: kBrandGreen.toARGB32(),
     );
     await _drawSelection();
 
-    if (items.isNotEmpty) {
+    if (located.isNotEmpty) {
       await map.flyTo(
         CameraOptions(
-          center: Point(coordinates: Position(items.first.lng, items.first.lat)),
+          center:
+              Point(coordinates: Position(located.first.lng!, located.first.lat!)),
           zoom: 13.5,
         ),
         MapAnimationOptions(duration: 500),
@@ -191,21 +209,19 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     final sel = _selectedId == null ? null : _itemById(_selectedId!);
     await drawHighlight(
       map,
-      sel == null
+      (sel == null || !sel.hasLocation)
           ? null
           : MapPin(
               id: sel.id,
               kind: sel.isStamp ? 'stamp' : 'checkin',
               name: sel.name,
-              lat: sel.lat,
-              lng: sel.lng),
+              lat: sel.lat!,
+              lng: sel.lng!),
       kBrandGreen.toARGB32(),
     );
   }
 
   // ── Selection / detail ────────────────────────────────────────
-  // Tapping a pin highlights its node in the list (no detail). Tapping a
-  // node in the list opens the detail.
   Future<void> _onMapTap(MapContentGestureContext ctx) async {
     final map = _map;
     if (map == null) return;
@@ -236,10 +252,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     setState(() => _selectedId = id);
     _drawSelection();
     final item = _itemById(id);
-    if (item != null) {
+    if (item != null && item.hasLocation) {
       _map?.flyTo(
         CameraOptions(
-          center: Point(coordinates: Position(item.lng, item.lat)),
+          center: Point(coordinates: Position(item.lng!, item.lat!)),
           zoom: 15.0,
         ),
         MapAnimationOptions(duration: 400),
@@ -263,10 +279,13 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   void _openDetail(_TlItem item) {
     setState(() => _selectedId = item.id);
     _drawSelection();
-    if (item.isStamp) {
-      context.push('/stamp/${item.id}');
-    } else {
-      _showCheckInDetail(item.id);
+    switch (item.kind) {
+      case _NodeKind.stamp:
+        context.push('/stamp/${item.id}');
+      case _NodeKind.checkIn:
+        _showCheckInDetail(item.id);
+      case _NodeKind.note:
+        _editNote(item);
     }
   }
 
@@ -298,13 +317,27 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   }
 
   Future<void> _editCheckIn(CheckIn ci) async {
-    final result = await showModalBottomSheet<({String place, String note})>(
+    final existing =
+        await ref.read(checkInRepositoryProvider).getCheckInPhotos(ci.id);
+    if (!mounted) return;
+    final result = await showModalBottomSheet<_CheckInEdit>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _EditCheckInSheet(checkIn: ci),
+      builder: (_) => _EditCheckInSheet(checkIn: ci, existing: existing),
     );
     if (result == null) return;
-    await ref.read(checkInRepositoryProvider).updateCheckIn(ci.id, {
+    final repo = ref.read(checkInRepositoryProvider);
+    for (final pid in result.removedPhotoIds) {
+      await repo.deletePhoto(pid);
+    }
+    final urls = <String>[];
+    final photoService = PhotoService();
+    for (final p in result.newPaths) {
+      final u = await photoService.uploadFile(File(p));
+      if (u != null) urls.add(u);
+    }
+    await repo.addCheckInPhotos(ci.id, urls);
+    await repo.updateCheckIn(ci.id, {
       'place_name': result.place,
       'normalized_place_name': result.place.toLowerCase().trim(),
       'note': result.note,
@@ -350,6 +383,45 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
         _reload();
       },
     );
+  }
+
+  // ── Notes ─────────────────────────────────────────────────────
+  Future<void> _addNote() async {
+    final now = DateTime.now();
+    final defaultAt = _isToday
+        ? now
+        : DateTime(_day.year, _day.month, _day.day, 12);
+    final result = await showModalBottomSheet<({String body, DateTime at})>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _NoteSheet(day: _day, initialAt: defaultAt),
+    );
+    if (result == null || result.body.trim().isEmpty) return;
+    await ref
+        .read(timelineNoteRepositoryProvider)
+        .add(_day, result.body.trim(), result.at);
+    _reload();
+  }
+
+  Future<void> _editNote(_TlItem item) async {
+    final result = await showModalBottomSheet<({String body, DateTime at})>(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => _NoteSheet(
+        day: _day,
+        initialAt: item.time,
+        initialBody: item.text ?? '',
+        allowDelete: true,
+      ),
+    );
+    if (result == null) return;
+    final repo = ref.read(timelineNoteRepositoryProvider);
+    if (result.body == _kDeleteSentinel) {
+      await repo.delete(item.id);
+    } else {
+      await repo.update(item.id, result.body.trim());
+    }
+    _reload();
   }
 
   Future<void> _editDiary() async {
@@ -429,6 +501,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 isToday: _isToday,
                 controller: _sheetController,
                 onTapItem: _openDetail,
+                onAddNote: _addNote,
                 onEditDiary: _editDiary,
               ),
             ],
@@ -437,6 +510,17 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       ),
     );
   }
+}
+
+const _kDeleteSentinel = ' __delete__';
+
+class _CheckInEdit {
+  final String place;
+  final String note;
+  final Set<String> removedPhotoIds;
+  final List<String> newPaths;
+  const _CheckInEdit(
+      this.place, this.note, this.removedPhotoIds, this.newPaths);
 }
 
 // ── The hovering, draggable list panel ──────────────────────────
@@ -449,6 +533,7 @@ class _ListPanel extends StatelessWidget {
   final bool isToday;
   final DraggableScrollableController controller;
   final void Function(_TlItem) onTapItem;
+  final VoidCallback onAddNote;
   final VoidCallback onEditDiary;
 
   const _ListPanel({
@@ -460,6 +545,7 @@ class _ListPanel extends StatelessWidget {
     required this.isToday,
     required this.controller,
     required this.onTapItem,
+    required this.onAddNote,
     required this.onEditDiary,
   });
 
@@ -488,40 +574,60 @@ class _ListPanel extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // ── Fixed, non-interactive header ──────────────
-              const SizedBox(height: 8),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: scheme.outlineVariant,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                child: Row(
+              // ── Drag handle / header. Drags the sheet; not a tap target. ──
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragUpdate: (d) {
+                  if (!controller.isAttached) return;
+                  final h = MediaQuery.of(context).size.height;
+                  final next =
+                      (controller.size - d.primaryDelta! / h).clamp(0.12, 0.85);
+                  controller.jumpTo(next);
+                },
+                child: Column(
                   children: [
-                    Text(
-                      '${items.length} place${items.length == 1 ? '' : 's'}',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: scheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
                     ),
-                    const Spacer(),
-                    Text(DateFormat('MMM d').format(day),
-                        style: const TextStyle(color: Colors.grey)),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${items.length} place${items.length == 1 ? '' : 's'}',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const Spacer(),
+                          Text(DateFormat('MMM d').format(day),
+                              style: const TextStyle(color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
                   ],
                 ),
               ),
-              const Divider(height: 1),
               // ── Scrollable nodes + diary ───────────────────
               Expanded(
                 child: ListView(
                   controller: scrollController,
                   padding: EdgeInsets.zero,
                   children: [
+                    ListTile(
+                      leading: Icon(Icons.add, color: scheme.primary),
+                      title: const Text('Add a note'),
+                      onTap: onAddNote,
+                    ),
+                    const Divider(height: 1),
                     if (items.isEmpty)
                       Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 28),
+                        padding: const EdgeInsets.symmetric(vertical: 24),
                         child: EmptyView(
                           icon: Icons.map_outlined,
                           message: 'Nothing logged this day',
@@ -576,11 +682,29 @@ class _TimelineNode extends StatelessWidget {
     required this.onTap,
   });
 
+  Color _color(ColorScheme scheme) => switch (item.kind) {
+        _NodeKind.stamp => scheme.primary,
+        _NodeKind.checkIn => const Color(_kCheckinBlue),
+        _NodeKind.note => const Color(_kNoteAmber),
+      };
+
+  IconData get _icon => switch (item.kind) {
+        _NodeKind.stamp => Icons.auto_awesome,
+        _NodeKind.checkIn => Icons.pin_drop,
+        _NodeKind.note => Icons.sticky_note_2_outlined,
+      };
+
+  String get _label => switch (item.kind) {
+        _NodeKind.stamp => 'Stamp',
+        _NodeKind.checkIn => 'Check-in',
+        _NodeKind.note => 'Note',
+      };
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final color = item.isStamp ? scheme.primary : const Color(_kCheckinBlue);
-    final hasNote = item.note != null && item.note!.trim().isNotEmpty;
+    final color = _color(scheme);
+    final hasText = item.text != null && item.text!.trim().isNotEmpty;
 
     return Material(
       color: selected
@@ -594,7 +718,7 @@ class _TimelineNode extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Node rail: connecting line + dot.
+                // Node rail.
                 SizedBox(
                   width: 28,
                   child: Column(
@@ -636,21 +760,18 @@ class _TimelineNode extends StatelessWidget {
                       children: [
                         Row(
                           children: [
-                            Icon(
-                                item.isStamp
-                                    ? Icons.auto_awesome
-                                    : Icons.pin_drop,
-                                size: 16,
-                                color: color),
+                            Icon(_icon, size: 16, color: color),
                             const SizedBox(width: 6),
                             Expanded(
-                              child: Text(item.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.w600)),
+                              child: Text(
+                                item.isNote ? 'Note' : item.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600),
+                              ),
                             ),
-                            _KindChip(isStamp: item.isStamp, color: color),
+                            _KindChip(label: _label, color: color),
                           ],
                         ),
                         const SizedBox(height: 2),
@@ -664,25 +785,37 @@ class _TimelineNode extends StatelessWidget {
                               Icon(item.isPublic ? Icons.public : Icons.lock,
                                   size: 12, color: Colors.grey),
                             ],
-                            if (item.photoCount > 0) ...[
-                              const SizedBox(width: 6),
-                              const Icon(Icons.photo,
-                                  size: 12, color: Colors.grey),
-                              const SizedBox(width: 2),
-                              Text('${item.photoCount}',
-                                  style: const TextStyle(
-                                      color: Colors.grey, fontSize: 12)),
-                            ],
                           ],
                         ),
-                        if (hasNote) ...[
+                        if (hasText) ...[
                           const SizedBox(height: 4),
                           Text(
-                            item.note!,
-                            maxLines: 2,
+                            item.text!,
+                            maxLines: item.isNote ? 4 : 2,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                                 fontSize: 13, color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                        if (item.photoUrls.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            height: 64,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: item.photoUrls.length,
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(width: 6),
+                              itemBuilder: (_, i) => ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: CachedNetworkImage(
+                                  imageUrl: item.photoUrls[i],
+                                  width: 64,
+                                  height: 64,
+                                  fit: BoxFit.cover,
+                                ),
+                              ),
+                            ),
                           ),
                         ],
                       ],
@@ -699,9 +832,9 @@ class _TimelineNode extends StatelessWidget {
 }
 
 class _KindChip extends StatelessWidget {
-  final bool isStamp;
+  final String label;
   final Color color;
-  const _KindChip({required this.isStamp, required this.color});
+  const _KindChip({required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -711,7 +844,7 @@ class _KindChip extends StatelessWidget {
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(isStamp ? 'Stamp' : 'Check-in',
+      child: Text(label,
           style: TextStyle(
               fontSize: 10, fontWeight: FontWeight.w600, color: color)),
     );
@@ -767,26 +900,40 @@ class _DiaryCard extends StatelessWidget {
   }
 }
 
-// ── Modal: edit a check-in ──────────────────────────────────────
-class _EditCheckInSheet extends StatefulWidget {
-  final CheckIn checkIn;
-  const _EditCheckInSheet({required this.checkIn});
+// ── Modal: add/edit a timeline note ─────────────────────────────
+class _NoteSheet extends StatefulWidget {
+  final DateTime day;
+  final DateTime initialAt;
+  final String initialBody;
+  final bool allowDelete;
+  const _NoteSheet({
+    required this.day,
+    required this.initialAt,
+    this.initialBody = '',
+    this.allowDelete = false,
+  });
 
   @override
-  State<_EditCheckInSheet> createState() => _EditCheckInSheetState();
+  State<_NoteSheet> createState() => _NoteSheetState();
 }
 
-class _EditCheckInSheetState extends State<_EditCheckInSheet> {
-  late final TextEditingController _place =
-      TextEditingController(text: widget.checkIn.placeName);
-  late final TextEditingController _note =
-      TextEditingController(text: widget.checkIn.note ?? '');
+class _NoteSheetState extends State<_NoteSheet> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: widget.initialBody);
+  late TimeOfDay _time = TimeOfDay.fromDateTime(widget.initialAt);
 
   @override
   void dispose() {
-    _place.dispose();
-    _note.dispose();
+    _ctrl.dispose();
     super.dispose();
+  }
+
+  DateTime get _at => DateTime(
+      widget.day.year, widget.day.month, widget.day.day, _time.hour, _time.minute);
+
+  Future<void> _pickTime() async {
+    final t = await showTimePicker(context: context, initialTime: _time);
+    if (t != null) setState(() => _time = t);
   }
 
   @override
@@ -798,33 +945,170 @@ class _EditCheckInSheetState extends State<_EditCheckInSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Edit check-in',
+          Text(widget.allowDelete ? 'Edit note' : 'Add a note',
               style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _place,
-            decoration: const InputDecoration(
-                labelText: 'Place name', border: OutlineInputBorder()),
-          ),
           const SizedBox(height: 12),
           TextField(
-            controller: _note,
-            maxLines: 3,
+            controller: _ctrl,
+            autofocus: true,
+            maxLines: 4,
+            minLines: 2,
             decoration: const InputDecoration(
-                labelText: 'Note', border: OutlineInputBorder()),
+                hintText: 'Anything you want to remember…',
+                border: OutlineInputBorder()),
           ),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: _place.text.trim().isEmpty
-                  ? null
-                  : () => Navigator.pop(context,
-                      (place: _place.text.trim(), note: _note.text.trim())),
-              child: const Text('Save'),
-            ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.schedule, size: 18, color: Colors.grey),
+              const SizedBox(width: 8),
+              Text(_time.format(context)),
+              const Spacer(),
+              TextButton(onPressed: _pickTime, child: const Text('Change time')),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (widget.allowDelete)
+                TextButton.icon(
+                  onPressed: () => Navigator.pop(
+                      context, (body: _kDeleteSentinel, at: _at)),
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  label: const Text('Delete',
+                      style: TextStyle(color: Colors.red)),
+                ),
+              const Spacer(),
+              FilledButton(
+                onPressed: _ctrl.text.trim().isEmpty
+                    ? null
+                    : () =>
+                        Navigator.pop(context, (body: _ctrl.text, at: _at)),
+                child: const Text('Save'),
+              ),
+            ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Modal: edit a check-in (place, note, photos) ────────────────
+class _EditCheckInSheet extends StatefulWidget {
+  final CheckIn checkIn;
+  final List<({String id, String url})> existing;
+  const _EditCheckInSheet({required this.checkIn, required this.existing});
+
+  @override
+  State<_EditCheckInSheet> createState() => _EditCheckInSheetState();
+}
+
+class _EditCheckInSheetState extends State<_EditCheckInSheet> {
+  late final TextEditingController _place =
+      TextEditingController(text: widget.checkIn.placeName);
+  late final TextEditingController _note =
+      TextEditingController(text: widget.checkIn.note ?? '');
+  final Set<String> _removed = {};
+  final List<String> _newPaths = [];
+
+  @override
+  void dispose() {
+    _place.dispose();
+    _note.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final remaining =
+        widget.existing.where((e) => !_removed.contains(e.id)).toList();
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Edit check-in',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _place,
+              decoration: const InputDecoration(
+                  labelText: 'Place name', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _note,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                  labelText: 'Note', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 16),
+            Text('Photos', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 8),
+            if (remaining.isNotEmpty)
+              SizedBox(
+                height: 80,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: remaining.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                          imageUrl: remaining[i].url,
+                          width: 80,
+                          height: 80,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        right: 2,
+                        top: 2,
+                        child: GestureDetector(
+                          onTap: () =>
+                              setState(() => _removed.add(remaining[i].id)),
+                          child: const CircleAvatar(
+                            radius: 11,
+                            backgroundColor: Colors.black54,
+                            child: Icon(Icons.close,
+                                size: 14, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 8),
+            PhotoStrip(
+              paths: _newPaths,
+              onChanged: (p) => setState(() {
+                _newPaths
+                  ..clear()
+                  ..addAll(p);
+              }),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                onPressed: _place.text.trim().isEmpty
+                    ? null
+                    : () => Navigator.pop(
+                        context,
+                        _CheckInEdit(_place.text.trim(), _note.text.trim(),
+                            _removed, _newPaths)),
+                child: const Text('Save'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -968,6 +1252,164 @@ class _CheckInDetailSheet extends StatelessWidget {
                   : FilledButton(
                       onPressed: onPromote,
                       child: const Text('Make a stamp')),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Bottom sheet: month calendar with check-in counts ───────────
+class _CalendarSheet extends ConsumerStatefulWidget {
+  final DateTime initial;
+  const _CalendarSheet({required this.initial});
+
+  @override
+  ConsumerState<_CalendarSheet> createState() => _CalendarSheetState();
+}
+
+class _CalendarSheetState extends ConsumerState<_CalendarSheet> {
+  late DateTime _month;
+  Map<int, int> _counts = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _month = DateTime(widget.initial.year, widget.initial.month);
+    _loadCounts();
+  }
+
+  Future<void> _loadCounts() async {
+    final c = await ref
+        .read(checkInRepositoryProvider)
+        .checkInCountsForMonth(_month);
+    if (mounted) setState(() => _counts = c);
+  }
+
+  void _prevMonth() {
+    setState(() => _month = DateTime(_month.year, _month.month - 1));
+    _loadCounts();
+  }
+
+  void _nextMonth() {
+    final now = DateTime.now();
+    final next = DateTime(_month.year, _month.month + 1);
+    if (next.isAfter(DateTime(now.year, now.month))) return;
+    setState(() => _month = next);
+    _loadCounts();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final daysInMonth = DateTime(_month.year, _month.month + 1, 0).day;
+    final leadingBlanks = DateTime(_month.year, _month.month, 1).weekday % 7;
+    final atCurrentMonth =
+        _month.year == now.year && _month.month == now.month;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                IconButton(
+                    icon: const Icon(Icons.chevron_left),
+                    onPressed: _prevMonth),
+                Expanded(
+                  child: Text(
+                    DateFormat('MMMM yyyy').format(_month),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                IconButton(
+                    icon: const Icon(Icons.chevron_right),
+                    onPressed: atCurrentMonth ? null : _nextMonth),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                for (final d in const ['S', 'M', 'T', 'W', 'T', 'F', 'S'])
+                  Expanded(
+                    child: Center(
+                      child: Text(d,
+                          style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate:
+                  const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 7, childAspectRatio: 0.8),
+              itemCount: leadingBlanks + daysInMonth,
+              itemBuilder: (ctx, i) {
+                if (i < leadingBlanks) return const SizedBox.shrink();
+                final day = i - leadingBlanks + 1;
+                final date = DateTime(_month.year, _month.month, day);
+                final count = _counts[day] ?? 0;
+                final isFuture = date.isAfter(today);
+                final isSelected = date.year == widget.initial.year &&
+                    date.month == widget.initial.month &&
+                    date.day == widget.initial.day;
+                return InkWell(
+                  onTap: isFuture ? null : () => Navigator.pop(context, date),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    margin: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? scheme.primaryContainer
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('$day',
+                            style: TextStyle(
+                              color: isFuture ? Colors.grey.shade400 : null,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.normal,
+                            )),
+                        const SizedBox(height: 2),
+                        // Check-in count badge (0 omitted).
+                        if (count > 0)
+                          Container(
+                            width: 18,
+                            height: 18,
+                            alignment: Alignment.center,
+                            decoration: const BoxDecoration(
+                              color: Color(_kCheckinBlue),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text('$count',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700)),
+                          )
+                        else
+                          const SizedBox(height: 18),
+                      ],
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),

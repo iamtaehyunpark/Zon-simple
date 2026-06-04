@@ -222,6 +222,82 @@ class CheckInRepository with BaseRepository {
     }
   }
 
+  /// Photo URLs grouped by check-in id (for list rendering).
+  Future<Map<String, List<String>>> photoUrlsByCheckIn(
+      List<String> ids) async {
+    if (ids.isEmpty) return {};
+    try {
+      final rows = await client
+          .from('photos')
+          .select('check_in_id, storage_url')
+          .inFilter('check_in_id', ids)
+          .order('created_at', ascending: true);
+      final map = <String, List<String>>{};
+      for (final r in rows) {
+        final cid = r['check_in_id'] as String?;
+        if (cid != null) (map[cid] ??= []).add(r['storage_url'] as String);
+      }
+      return map;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// A check-in's photos with ids (for the editor's remove action).
+  Future<List<({String id, String url})>> getCheckInPhotos(
+      String checkInId) async {
+    try {
+      final rows = await client
+          .from('photos')
+          .select('id, storage_url')
+          .eq('check_in_id', checkInId)
+          .order('created_at', ascending: true);
+      return [
+        for (final r in rows)
+          (id: r['id'] as String, url: r['storage_url'] as String)
+      ];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> addCheckInPhotos(String checkInId, List<String> urls) async {
+    final uid = userId;
+    if (uid == null || urls.isEmpty) return;
+    await client.from('photos').insert([
+      for (final u in urls)
+        {'user_id': uid, 'check_in_id': checkInId, 'storage_url': u},
+    ]);
+  }
+
+  Future<void> deletePhoto(String photoId) async {
+    await client.from('photos').delete().eq('id', photoId);
+  }
+
+  /// Day-of-month → check-in count for [month] (for the calendar badges).
+  Future<Map<int, int>> checkInCountsForMonth(DateTime month) async {
+    final uid = userId;
+    if (uid == null) return {};
+    try {
+      final start = DateTime(month.year, month.month, 1);
+      final end = DateTime(month.year, month.month + 1, 1);
+      final rows = await client
+          .from('check_ins')
+          .select('visited_at')
+          .eq('user_id', uid)
+          .gte('visited_at', start.toIso8601String())
+          .lt('visited_at', end.toIso8601String());
+      final map = <int, int>{};
+      for (final r in rows) {
+        final d = DateTime.parse(r['visited_at'] as String).toLocal();
+        map[d.day] = (map[d.day] ?? 0) + 1;
+      }
+      return map;
+    } catch (_) {
+      return {};
+    }
+  }
+
   CheckIn _fromRow(Map<String, dynamic> row) {
     return CheckIn(
       id: row['id'] as String,

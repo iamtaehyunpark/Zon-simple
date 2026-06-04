@@ -6,27 +6,31 @@ import '../../../../data/repositories/stamp_repository.dart';
 import '../../../../data/repositories/check_in_repository.dart';
 import '../../../../data/repositories/location_repository.dart';
 import '../../../../data/repositories/diary_repository.dart';
+import '../../../../data/repositories/timeline_note_repository.dart';
 import '../../../../core/auth/auth_provider.dart';
 
 part 'timeline_provider.g.dart';
 
-/// Everything that happened on one day: the route line, the check-in pins,
-/// and the stamps.
+/// Everything that happened on one day: route line, check-in pins, stamps,
+/// free-text note nodes, and the day's diary.
 class DayBundle {
   final DateTime date;
   final List<RawLocationEvent> route;
   final List<CheckIn> checkIns;
   final List<Stamp> stamps;
+  final List<TimelineNote> notes;
   final String diary;
   const DayBundle({
     required this.date,
     this.route = const [],
     this.checkIns = const [],
     this.stamps = const [],
+    this.notes = const [],
     this.diary = '',
   });
 
-  bool get isEmpty => route.isEmpty && checkIns.isEmpty && stamps.isEmpty;
+  bool get isEmpty =>
+      route.isEmpty && checkIns.isEmpty && stamps.isEmpty && notes.isEmpty;
 }
 
 @riverpod
@@ -40,8 +44,7 @@ class TimelineNotifier extends _$TimelineNotifier {
   }
 
   Future<void> loadDay(DateTime day) async {
-    // Keep any current data visible while the new day loads so the map stays
-    // mounted (no flicker / re-init) when navigating days.
+    // Keep current data visible while loading so the map stays mounted.
     final user = ref.read(currentUserProvider);
     if (user == null) {
       state = AsyncValue.data(DayBundle(date: day));
@@ -52,18 +55,37 @@ class TimelineNotifier extends _$TimelineNotifier {
     final checkInRepo = ref.read(checkInRepositoryProvider);
     final locationRepo = ref.read(locationRepositoryProvider);
 
-    final (stampsRes, checkInsRes, routeRes, diary) = await (
+    final (stampsRes, checkInsRes, routeRes, diary, notes) = await (
       stampRepo.getMyStampsForDay(day),
       checkInRepo.getForDay(day),
       locationRepo.getRouteForDay(day),
       ref.read(diaryRepositoryProvider).getDiary(day),
+      ref.read(timelineNoteRepositoryProvider).getForDay(day),
     ).wait;
+
+    var checkIns = checkInsRes.getOrElse((_) => <CheckIn>[]);
+    var stamps = stampsRes.getOrElse((_) => <Stamp>[]);
+
+    // Attach photo URLs so list nodes can show thumbnails.
+    final (ciPhotos, stPhotos) = await (
+      checkInRepo.photoUrlsByCheckIn([for (final c in checkIns) c.id]),
+      stampRepo.photoUrlsByStamp([for (final s in stamps) s.id]),
+    ).wait;
+    checkIns = [
+      for (final c in checkIns)
+        c.copyWith(photoUrls: ciPhotos[c.id] ?? const [])
+    ];
+    stamps = [
+      for (final s in stamps)
+        s.copyWith(photoUrls: stPhotos[s.id] ?? const [])
+    ];
 
     state = AsyncValue.data(DayBundle(
       date: day,
-      stamps: stampsRes.getOrElse((_) => []),
-      checkIns: checkInsRes.getOrElse((_) => []),
+      stamps: stamps,
+      checkIns: checkIns,
       route: routeRes.getOrElse((_) => []),
+      notes: notes,
       diary: diary,
     ));
   }

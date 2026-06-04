@@ -276,17 +276,19 @@ class _PlaceSelectionBody extends StatelessWidget {
         ],
         Expanded(
           child: ListView.builder(
+            // Index 0 is always "Use current location" (the default).
             itemCount: displayPlaces.length + 1,
             itemBuilder: (ctx, i) {
-              if (i == displayPlaces.length) {
+              if (i == 0) {
                 return ListTile(
-                  leading: const Icon(Icons.location_on_outlined),
+                  leading: Icon(Icons.my_location,
+                      color: Theme.of(ctx).colorScheme.primary),
                   title: const Text('Use current location'),
-                  subtitle: const Text('No specific place'),
+                  subtitle: const Text('Check in right where you are'),
                   onTap: onSkipPlace,
                 );
               }
-              final place = displayPlaces[i];
+              final place = displayPlaces[i - 1];
               return ListTile(
                 leading: const Icon(Icons.place),
                 title: Text(place.name),
