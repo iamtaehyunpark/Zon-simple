@@ -46,6 +46,7 @@ class CheckInRepository with BaseRepository {
             'source': draft.source.name,
             'tagged_user_ids': draft.taggedUserIds,
             'visited_at': DateTime.now().toIso8601String(),
+            'tz_offset_min': DateTime.now().timeZoneOffset.inMinutes,
           })
           .select()
           .single();
@@ -69,11 +70,12 @@ class CheckInRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      final data = await client.rpc('check_ins_for_day', params: {
-        'p_user_id': userId,
+      final data = await client.rpc('check_ins_for_local_day', params: {
         'p_date': date.toIso8601String().substring(0, 10),
       });
-      return right((data as List).map((r) => _fromRow(r)).toList());
+      return right((data as List)
+          .map((r) => _fromRow(r as Map<String, dynamic>))
+          .toList());
     } catch (e) {
       return left(NetworkError(e.toString()));
     }
@@ -204,6 +206,7 @@ class CheckInRepository with BaseRepository {
             'tagged_user_ids': taggedUserIds,
             'cover_photo_url': coverUrl,
             'visited_at': ci['visited_at'],
+            'tz_offset_min': ci['tz_offset_min'],
           })
           .select('id')
           .single();
@@ -281,25 +284,13 @@ class CheckInRepository with BaseRepository {
     final uid = userId;
     if (uid == null) return {};
     try {
-      final start = DateTime(month.year, month.month, 1).toIso8601String();
-      final end = DateTime(month.year, month.month + 1, 1).toIso8601String();
+      final rows = await client.rpc('monthly_visit_counts', params: {
+        'p_year': month.year,
+        'p_month': month.month,
+      });
       final map = <int, int>{};
-      final checkIns = await client
-          .from('check_ins')
-          .select('visited_at')
-          .eq('user_id', uid)
-          .gte('visited_at', start)
-          .lt('visited_at', end);
-      final stamps = await client
-          .from('stamps')
-          .select('visited_at')
-          .eq('user_id', uid)
-          .isFilter('check_in_id', null)
-          .gte('visited_at', start)
-          .lt('visited_at', end);
-      for (final r in [...checkIns, ...stamps]) {
-        final d = DateTime.parse(r['visited_at'] as String).toLocal();
-        map[d.day] = (map[d.day] ?? 0) + 1;
+      for (final r in (rows as List)) {
+        map[r['day'] as int] = (r['cnt'] as num).toInt();
       }
       return map;
     } catch (_) {

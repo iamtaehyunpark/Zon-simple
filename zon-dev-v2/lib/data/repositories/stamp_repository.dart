@@ -47,16 +47,12 @@ class StampRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      final start = DateTime(day.year, day.month, day.day);
-      final end = start.add(const Duration(days: 1));
-      final data = await client
-          .from('stamps')
-          .select()
-          .eq('user_id', userId)
-          .gte('visited_at', start.toIso8601String())
-          .lt('visited_at', end.toIso8601String())
-          .order('visited_at', ascending: true);
-      return right(data.map(_fromRow).toList());
+      final data = await client.rpc('stamps_for_local_day', params: {
+        'p_date': day.toIso8601String().substring(0, 10),
+      });
+      return right((data as List)
+          .map((r) => _fromRow(r as Map<String, dynamic>))
+          .toList());
     } catch (e) {
       return left(NetworkError(e.toString()));
     }
@@ -194,6 +190,7 @@ class StampRepository with BaseRepository {
             'sensory_tags': draft.sensoryTags,
             'tagged_user_ids': draft.taggedUserIds,
             'visited_at': DateTime.now().toIso8601String(),
+            'tz_offset_min': DateTime.now().timeZoneOffset.inMinutes,
             if (draft.checkInId != null) 'check_in_id': draft.checkInId,
           })
           .select()
