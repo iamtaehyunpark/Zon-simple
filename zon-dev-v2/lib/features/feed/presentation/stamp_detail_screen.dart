@@ -13,6 +13,7 @@ import '../../../data/models/stamp.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/models/enums.dart';
 import '../../../shared/widgets/app_states.dart';
+import '../../../shared/widgets/photo_thumb_row.dart';
 import '../../../shared/utils/format.dart';
 import '../../checkin/presentation/user_tag_field.dart' show showUserPicker;
 
@@ -261,25 +262,9 @@ class _StampDetailBody extends ConsumerWidget {
         // ── Photo grid ───────────────────────────────────────
         if (photoUrls.isNotEmpty)
           SliverToBoxAdapter(
-            child: SizedBox(
-              height: 100,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: photoUrls.length,
-                itemBuilder: (ctx, i) => Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: photoUrls[i],
-                      width: 100,
-                      height: 100,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-              ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: PhotoThumbRow(urls: photoUrls, size: 100),
             ),
           ),
 

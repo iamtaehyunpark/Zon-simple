@@ -13,6 +13,7 @@ import '../../../data/repositories/check_in_repository.dart';
 import '../../../data/repositories/diary_repository.dart';
 import '../../../data/repositories/timeline_note_repository.dart';
 import '../../../shared/widgets/app_states.dart';
+import '../../../shared/widgets/photo_thumb_row.dart';
 import '../../checkin/presentation/photo_strip.dart';
 import '../../map/presentation/map_drawing.dart';
 import 'providers/timeline_provider.dart';
@@ -864,24 +865,7 @@ class _TimelineNode extends StatelessWidget {
                         ],
                         if (item.photoUrls.isNotEmpty) ...[
                           const SizedBox(height: 8),
-                          SizedBox(
-                            height: 64,
-                            child: ListView.separated(
-                              scrollDirection: Axis.horizontal,
-                              itemCount: item.photoUrls.length,
-                              separatorBuilder: (_, __) =>
-                                  const SizedBox(width: 6),
-                              itemBuilder: (_, i) => ClipRRect(
-                                borderRadius: BorderRadius.circular(8),
-                                child: CachedNetworkImage(
-                                  imageUrl: item.photoUrls[i],
-                                  width: 64,
-                                  height: 64,
-                                  fit: BoxFit.cover,
-                                ),
-                              ),
-                            ),
-                          ),
+                          PhotoThumbRow(urls: item.photoUrls, size: 64),
                         ],
                       ],
                     ),
@@ -1290,23 +1274,7 @@ class _CheckInDetailSheet extends StatelessWidget {
             ],
             if (checkIn.photoUrls.isNotEmpty) ...[
               const SizedBox(height: 12),
-              SizedBox(
-                height: 84,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: checkIn.photoUrls.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (_, i) => ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: CachedNetworkImage(
-                      imageUrl: checkIn.photoUrls[i],
-                      width: 84,
-                      height: 84,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                ),
-              ),
+              PhotoThumbRow(urls: checkIn.photoUrls, size: 84),
             ],
             const SizedBox(height: 16),
             SizedBox(
