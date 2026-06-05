@@ -460,20 +460,15 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   }
 
   // ── Notes ─────────────────────────────────────────────────────
-  Future<void> _addNote() async {
-    final now = DateTime.now();
-    final defaultAt = _isToday
-        ? now
+  // Written inline from the list footer — no modal. Time defaults to now on
+  // today, noon on past days; reposition later by long-press drag.
+  Future<void> _submitNote(String body) async {
+    final text = body.trim();
+    if (text.isEmpty) return;
+    final at = _isToday
+        ? DateTime.now()
         : DateTime(_day.year, _day.month, _day.day, 12);
-    final result = await showModalBottomSheet<({String body, DateTime at})>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _NoteSheet(day: _day, initialAt: defaultAt),
-    );
-    if (result == null || result.body.trim().isEmpty) return;
-    await ref
-        .read(timelineNoteRepositoryProvider)
-        .add(_day, result.body.trim(), result.at);
+    await ref.read(timelineNoteRepositoryProvider).add(_day, text, at);
     _reload();
   }
 
@@ -589,7 +584,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 onAddPhotos: _addPhotosInline,
                 onMore: _moreCheckIn,
                 onDelete: _deleteItem,
-                onAddNote: _addNote,
+                onAddNote: _submitNote,
                 onEditDiary: _editDiary,
                 onReorder: _onReorder,
               ),
@@ -626,7 +621,7 @@ class _ListPanel extends StatelessWidget {
   final void Function(_TlItem) onAddPhotos;
   final void Function(_TlItem) onMore;
   final Future<void> Function(_TlItem) onDelete;
-  final VoidCallback onAddNote;
+  final Future<void> Function(String) onAddNote;
   final VoidCallback onEditDiary;
   final void Function(int oldIndex, int newIndex) onReorder;
 
@@ -812,11 +807,7 @@ class _ListPanel extends StatelessWidget {
                       child: Column(
                         children: [
                           const Divider(height: 1),
-                          ListTile(
-                            leading: Icon(Icons.add, color: scheme.primary),
-                            title: const Text('Add a note'),
-                            onTap: onAddNote,
-                          ),
+                          _AddNoteTile(onSubmit: onAddNote),
                         ],
                       ),
                     ),
@@ -1164,18 +1155,20 @@ class _DiaryCard extends StatelessWidget {
 }
 
 // ── Modal: add/edit a timeline note ─────────────────────────────
-class _NoteSheet extends StatefulWidget {
-  final DateTime day;
-  final DateTime initialAt;
-  const _NoteSheet({required this.day, required this.initialAt});
+/// List-footer row for adding a note. Collapsed it's a simple "Add a note"
+/// tile; tapping expands it into an autofocused text field so you can type
+/// right away — no modal. Saving creates the note and collapses again.
+class _AddNoteTile extends StatefulWidget {
+  final Future<void> Function(String) onSubmit;
+  const _AddNoteTile({required this.onSubmit});
 
   @override
-  State<_NoteSheet> createState() => _NoteSheetState();
+  State<_AddNoteTile> createState() => _AddNoteTileState();
 }
 
-class _NoteSheetState extends State<_NoteSheet> {
+class _AddNoteTileState extends State<_AddNoteTile> {
   final TextEditingController _ctrl = TextEditingController();
-  late TimeOfDay _time = TimeOfDay.fromDateTime(widget.initialAt);
+  bool _open = false;
 
   @override
   void dispose() {
@@ -1183,55 +1176,57 @@ class _NoteSheetState extends State<_NoteSheet> {
     super.dispose();
   }
 
-  DateTime get _at => DateTime(
-      widget.day.year, widget.day.month, widget.day.day, _time.hour, _time.minute);
-
-  Future<void> _pickTime() async {
-    final t = await showTimePicker(context: context, initialTime: _time);
-    if (t != null) setState(() => _time = t);
+  Future<void> _save() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) {
+      setState(() => _open = false);
+      return;
+    }
+    await widget.onSubmit(text);
+    _ctrl.clear();
+    if (mounted) setState(() => _open = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (!_open) {
+      return ListTile(
+        leading: Icon(Icons.add, color: scheme.primary),
+        title: const Text('Add a note'),
+        onTap: () => setState(() => _open = true),
+      );
+    }
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-          16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Add a note', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 12),
           TextField(
             controller: _ctrl,
             autofocus: true,
+            minLines: 1,
             maxLines: 4,
-            minLines: 2,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _save(),
             decoration: const InputDecoration(
-                hintText: 'Anything you want to remember…',
-                border: OutlineInputBorder()),
+              isDense: true,
+              hintText: 'Anything you want to remember…',
+              border: OutlineInputBorder(),
+            ),
           ),
           const SizedBox(height: 8),
           Row(
             children: [
-              const Icon(Icons.schedule, size: 18, color: Colors.grey),
-              const SizedBox(width: 8),
-              Text(_time.format(context)),
-              const Spacer(),
-              TextButton(onPressed: _pickTime, child: const Text('Change time')),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              const Spacer(),
-              FilledButton(
-                onPressed: _ctrl.text.trim().isEmpty
-                    ? null
-                    : () =>
-                        Navigator.pop(context, (body: _ctrl.text, at: _at)),
-                child: const Text('Save'),
+              TextButton(
+                onPressed: () {
+                  _ctrl.clear();
+                  setState(() => _open = false);
+                },
+                child: const Text('Cancel'),
               ),
+              const Spacer(),
+              FilledButton(onPressed: _save, child: const Text('Save')),
             ],
           ),
         ],
