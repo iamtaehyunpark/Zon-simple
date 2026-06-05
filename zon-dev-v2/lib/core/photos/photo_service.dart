@@ -22,6 +22,9 @@ class PhotoService {
 
     final since = DateTime.now().subtract(Duration(days: days));
     final albums = await PhotoManager.getAssetPathList(
+      // Single "all photos" album — avoids the same asset appearing once per
+      // album (Recents/Camera Roll/Favorites…), which caused duplicate uploads.
+      onlyAll: true,
       type: RequestType.image,
       filterOption: FilterOptionGroup(
         updateTimeCond: DateTimeCond(min: since, max: DateTime.now()),

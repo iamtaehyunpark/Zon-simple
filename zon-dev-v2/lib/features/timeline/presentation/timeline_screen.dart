@@ -174,9 +174,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     final items = _buildItems(b);
     final located = items.where((i) => i.hasLocation).toList();
 
-    final coords = b.route.length >= 2
-        ? [for (final e in b.route) [e.lng, e.lat]]
-        : [for (final i in located) [i.lng!, i.lat!]];
+    // Trace = the day's located nodes (check-ins, auto anchors, stamps) joined
+    // in time order. (Auto anchors sample movement, so this follows the path.)
+    final coords = [for (final i in located) [i.lng!, i.lat!]];
     await drawLine(map, coords, kBrandGreen.toARGB32(), idPrefix: 'tl-path');
 
     await drawPins(
