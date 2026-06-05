@@ -517,6 +517,18 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     _reload();
   }
 
+  // Edit a note's time from the inline editor (drag reordering still works too).
+  Future<void> _changeNoteTime(_TlItem item) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(item.time),
+    );
+    if (picked == null) return;
+    final t = DateTime(
+        _day.year, _day.month, _day.day, picked.hour, picked.minute);
+    await _persistNoteTime(item.id, t);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(timelineNotifierProvider);
@@ -586,6 +598,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 onTapItem: _onTapNode,
                 onLongPressItem: _onLongPressNode,
                 onSaveText: _saveText,
+                onChangeNoteTime: _changeNoteTime,
                 onAddPhotos: _addPhotosInline,
                 onMore: _moreCheckIn,
                 onDelete: _deleteItem,
@@ -624,6 +637,7 @@ class _ListPanel extends StatelessWidget {
   final void Function(_TlItem) onTapItem;
   final void Function(_TlItem) onLongPressItem;
   final void Function(_TlItem, String) onSaveText;
+  final void Function(_TlItem) onChangeNoteTime;
   final void Function(_TlItem) onAddPhotos;
   final void Function(_TlItem) onMore;
   final Future<void> Function(_TlItem) onDelete;
@@ -643,6 +657,7 @@ class _ListPanel extends StatelessWidget {
     required this.onTapItem,
     required this.onLongPressItem,
     required this.onSaveText,
+    required this.onChangeNoteTime,
     required this.onAddPhotos,
     required this.onMore,
     required this.onDelete,
@@ -812,6 +827,9 @@ class _ListPanel extends StatelessWidget {
                                     item: it,
                                     onSave: (t) => onSaveText(it, t),
                                     onMore: it.isNote ? null : () => onMore(it),
+                                    onChangeTime: it.isNote
+                                        ? () => onChangeNoteTime(it)
+                                        : null,
                                   ),
                               ],
                             ),
@@ -1050,10 +1068,12 @@ class _InlineNodeEditor extends StatefulWidget {
   final _TlItem item;
   final void Function(String text) onSave;
   final VoidCallback? onMore; // check-in only (full sheet)
+  final VoidCallback? onChangeTime; // note only
   const _InlineNodeEditor({
     required this.item,
     required this.onSave,
     this.onMore,
+    this.onChangeTime,
   });
 
   @override
@@ -1093,6 +1113,16 @@ class _InlineNodeEditorState extends State<_InlineNodeEditor> {
           const SizedBox(height: 8),
           Row(
             children: [
+              if (widget.onChangeTime != null) ...[
+                const Icon(Icons.schedule, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(DateFormat('h:mm a').format(widget.item.time),
+                    style:
+                        const TextStyle(color: Colors.grey, fontSize: 12)),
+                TextButton(
+                    onPressed: widget.onChangeTime,
+                    child: const Text('Change time')),
+              ],
               if (widget.onMore != null)
                 TextButton(onPressed: widget.onMore, child: const Text('More')),
               const Spacer(),
