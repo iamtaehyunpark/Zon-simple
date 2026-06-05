@@ -92,6 +92,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
             mode: state.uri.queryParameters['mode'] == 'stamp'
                 ? CheckinMode.stamp
                 : CheckinMode.checkIn,
+            fromCheckInId: state.uri.queryParameters['fromCheckIn'],
           ),
         ),
       ),

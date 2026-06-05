@@ -4,6 +4,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../data/models/stamp.dart';
 import '../../../../data/models/check_in.dart';
+import '../../../../data/models/enums.dart';
 import '../../../../data/repositories/stamp_repository.dart';
 import '../../../../data/repositories/check_in_repository.dart';
 import '../../../../core/location/gps_service.dart';
@@ -139,6 +140,26 @@ class CheckinNotifier extends _$CheckinNotifier {
   ) =>
       _fetchSuggestions(lat, lng, query: query);
 
+  /// Open the stamp editor pre-filled from an existing check-in (its note,
+  /// photos, place and tags) so promotion is an editable step, not instant.
+  void startStampFromCheckIn(CheckIn ci, List<String> photoUrls) {
+    _mode = CheckinMode.stamp;
+    state = CheckinState.editingStamp(
+      draft: StampDraft(
+        checkInId: ci.id,
+        placeName: ci.placeName,
+        lat: ci.lat,
+        lng: ci.lng,
+        externalPlaceId: ci.externalPlaceId,
+        externalSource: ci.externalSource,
+        caption: ci.note,
+        taggedUserIds: ci.taggedUserIds,
+        existingPhotoUrls: photoUrls,
+        visibility: StampVisibility.public,
+      ),
+    );
+  }
+
   void beginEditing(ExternalPlace? place) {
     final current = state;
     if (current is! _PlaceSelected) return;
@@ -204,8 +225,39 @@ class CheckinNotifier extends _$CheckinNotifier {
     if (current is _EditingStamp) {
       state = const CheckinState.saving();
       final d = current.draft;
-      final urls = await _uploadAll(photoService, d.selectedPhotoPaths);
       final ciRepo = ref.read(checkInRepositoryProvider);
+
+      // Promoting an existing check-in: keep its row (and photos), just edit
+      // and promote — don't create a duplicate check-in.
+      if (d.checkInId != null) {
+        final newUrls = await _uploadAll(photoService, d.selectedPhotoPaths);
+        if (newUrls.isNotEmpty) {
+          await ciRepo.addCheckInPhotos(d.checkInId!, newUrls);
+        }
+        await ciRepo.updateCheckIn(d.checkInId!, {
+          'place_name': d.placeName,
+          'normalized_place_name': d.placeName.toLowerCase().trim(),
+          'note': d.caption,
+        });
+        final promo = await ciRepo.promoteToStamp(
+          d.checkInId!,
+          visibility: d.visibility,
+          caption: d.caption,
+          sensoryTags: d.sensoryTags,
+          taggedUserIds: d.taggedUserIds,
+        );
+        promo.fold(
+          (err) => state = CheckinState.error(err.message),
+          (stampId) {
+            ref.invalidate(feedNotifierProvider);
+            ref.invalidate(timelineNotifierProvider);
+            state = CheckinState.completeStamp(stampId);
+          },
+        );
+        return;
+      }
+
+      final urls = await _uploadAll(photoService, d.selectedPhotoPaths);
       // stamp ⊂ check-in: create the underlying check-in first, then promote.
       final ciRes = await ciRepo.createCheckIn(
         CheckInDraft(

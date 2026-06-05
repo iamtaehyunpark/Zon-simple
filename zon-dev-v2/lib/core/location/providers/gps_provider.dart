@@ -16,8 +16,9 @@ part 'gps_provider.g.dart';
 GpsService gpsService(GpsServiceRef ref) => GpsService();
 
 /// App-wide foreground location tracker (keepAlive): one subscription records
-/// the route while the app is open, and drops a passive "auto" check-in anchor
-/// at the start of each session (linking the trace across launches).
+/// the route while the app is open, and when the session ends drops a passive
+/// "auto" check-in at the end of the tracked path (linking the trace across
+/// launches), skipped when it lands too close to the last one.
 @Riverpod(keepAlive: true)
 class GpsNotifier extends _$GpsNotifier {
   StreamSubscription<Position>? _sub;
@@ -25,15 +26,25 @@ class GpsNotifier extends _$GpsNotifier {
   /// In-memory path (lng,lat) of this foreground session — the live map line.
   final List<List<double>> sessionPath = [];
 
-  bool _sessionAnchored = false;
-  DateTime? _lastAnchorAt;
+  // Latest fix this session, and the location of the last auto anchor we
+  // dropped (kept in memory across sessions so re-opens in place don't spam).
+  double? _lastLat;
+  double? _lastLng;
   double? _lastAnchorLat;
   double? _lastAnchorLng;
   static const _uuid = Uuid();
 
+  // A session must cover at least this much ground before it's worth anchoring,
+  // and the end point must be at least this far from the previous anchor.
+  static const double _kMinSessionMoveM = 50;
+  static const double _kMinAnchorGapM = 80;
+
   @override
   AsyncValue<Position?> build() {
-    ref.onDispose(_stop);
+    ref.onDispose(() {
+      _sub?.cancel();
+      _sub = null;
+    });
     return const AsyncValue.data(null);
   }
 
@@ -51,11 +62,9 @@ class GpsNotifier extends _$GpsNotifier {
     _sub = service.startTracking().listen(
       (position) {
         state = AsyncValue.data(position);
+        _lastLat = position.latitude;
+        _lastLng = position.longitude;
         sessionPath.add([position.longitude, position.latitude]);
-        if (!_sessionAnchored) {
-          _sessionAnchored = true;
-          _maybeAnchor(position);
-        }
         batcher.add(RawLocationEvent(
           id: _uuid.v4(),
           userId: '',
@@ -70,45 +79,49 @@ class GpsNotifier extends _$GpsNotifier {
     );
   }
 
-  /// Drop a passive auto check-in at session start — skipped if we anchored
-  /// recently and haven't really moved (avoids spam on quick re-opens).
-  Future<void> _maybeAnchor(Position pos) async {
-    final last = _lastAnchorAt;
-    if (last != null && _lastAnchorLat != null) {
-      final recent =
-          DateTime.now().difference(last) < const Duration(minutes: 30);
-      final near = Geolocator.distanceBetween(_lastAnchorLat!, _lastAnchorLng!,
-              pos.latitude, pos.longitude) <
-          100;
-      if (recent && near) return;
+  /// Drop a passive auto check-in at the end of the tracked path — skipped if
+  /// the session barely moved, or it lands within [_kMinAnchorGapM] of the last
+  /// anchor (e.g. you opened and closed the app without leaving).
+  Future<void> _anchorPath() async {
+    final lat = _lastLat, lng = _lastLng;
+    if (lat == null || lng == null) return;
+
+    if (sessionPath.length >= 2) {
+      final start = sessionPath.first; // [lng, lat]
+      final moved =
+          Geolocator.distanceBetween(start[1], start[0], lat, lng);
+      if (moved < _kMinSessionMoveM) return;
     }
-    _lastAnchorAt = DateTime.now();
-    _lastAnchorLat = pos.latitude;
-    _lastAnchorLng = pos.longitude;
+    if (_lastAnchorLat != null && _lastAnchorLng != null) {
+      final gap = Geolocator.distanceBetween(
+          _lastAnchorLat!, _lastAnchorLng!, lat, lng);
+      if (gap < _kMinAnchorGapM) return;
+    }
+    _lastAnchorLat = lat;
+    _lastAnchorLng = lng;
 
     var name = 'On the move';
     try {
-      final svc =
-          ref.read(placeServiceForProvider(pos.latitude, pos.longitude));
-      final results = await svc.nearby(pos.latitude, pos.longitude);
+      final svc = ref.read(placeServiceForProvider(lat, lng));
+      final results = await svc.nearby(lat, lng);
       if (results.isNotEmpty) name = results.first.name;
     } catch (_) {/* keep fallback */}
 
     await ref.read(checkInRepositoryProvider).createCheckIn(
           CheckInDraft(
             placeName: name,
-            lat: pos.latitude,
-            lng: pos.longitude,
+            lat: lat,
+            lng: lng,
             source: CheckInSource.auto,
           ),
         );
   }
 
-  void _stop() {
-    _sub?.cancel();
+  Future<void> stopTracking() async {
+    final sub = _sub;
+    if (sub == null) return;
     _sub = null;
-    _sessionAnchored = false;
+    await sub.cancel();
+    await _anchorPath();
   }
-
-  void stopTracking() => _stop();
 }

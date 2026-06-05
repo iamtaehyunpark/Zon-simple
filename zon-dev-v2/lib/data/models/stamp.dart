@@ -53,6 +53,9 @@ class StampDraft with _$StampDraft {
     @Default([]) List<String> sensoryTags,
     @Default([]) List<String> taggedUserIds,
     @Default([]) List<String> selectedPhotoPaths,
+    // Already-uploaded photos carried in from a source check-in (display-only;
+    // they're re-pointed to the stamp on promote, not re-uploaded).
+    @Default([]) List<String> existingPhotoUrls,
     String? coverPhotoPath,
   }) = _StampDraft;
 

@@ -186,10 +186,24 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       sourceId: 'tl-checkins-source',
       layerId: 'tl-checkins-layer',
       pins: [
-        for (final i in located.where((i) => !i.isStamp))
+        for (final i in located.where((i) => !i.isStamp && !i.isAuto))
           MapPin(id: i.id, kind: 'checkin', name: i.name, lat: i.lat!, lng: i.lng!),
       ],
       color: _kCheckinBlue,
+    );
+    // Auto anchors: tiny, faint dots so the trace reads but stays uncluttered.
+    await drawPins(
+      map,
+      sourceId: 'tl-auto-source',
+      layerId: 'tl-auto-layer',
+      pins: [
+        for (final i in located.where((i) => !i.isStamp && i.isAuto))
+          MapPin(id: i.id, kind: 'checkin', name: i.name, lat: i.lat!, lng: i.lng!),
+      ],
+      color: 0xFF9E9E9E,
+      circleRadius: 2.5,
+      strokeWidth: 0.0,
+      opacity: 0.55,
     );
     await drawPins(
       map,
@@ -241,7 +255,11 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       final features = await map.queryRenderedFeatures(
         RenderedQueryGeometry.fromScreenCoordinate(ctx.touchPosition),
         RenderedQueryOptions(
-          layerIds: const ['tl-checkins-layer', 'tl-stamps-layer'],
+          layerIds: const [
+            'tl-checkins-layer',
+            'tl-auto-layer',
+            'tl-stamps-layer'
+          ],
           filter: null,
         ),
       );
@@ -447,20 +465,11 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     _reload();
   }
 
-  Future<void> _promote(BuildContext sheetCtx, CheckIn ci) async {
+  // Promote = open the stamp editor pre-filled from the check-in (note, photos,
+  // place), so the user reviews/edits before it becomes a stamp.
+  void _promote(BuildContext sheetCtx, CheckIn ci) {
     Navigator.pop(sheetCtx);
-    final r = await ref
-        .read(checkInRepositoryProvider)
-        .promoteToStamp(ci.id, visibility: StampVisibility.public);
-    r.fold(
-      (err) => ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(err.message))),
-      (stampId) {
-        if (!mounted) return;
-        context.push('/stamp/$stampId');
-        _reload();
-      },
-    );
+    context.push('/checkin?fromCheckIn=${ci.id}');
   }
 
   // ── Notes ─────────────────────────────────────────────────────

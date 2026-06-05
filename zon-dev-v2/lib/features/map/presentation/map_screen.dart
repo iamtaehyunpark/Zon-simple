@@ -6,7 +6,6 @@ import 'package:intl/intl.dart';
 import '../../../app.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/check_in.dart';
-import '../../../data/models/enums.dart';
 import '../../../data/models/raw_location_event.dart';
 import '../../../data/repositories/stamp_repository.dart';
 import '../../../data/repositories/check_in_repository.dart';
@@ -111,6 +110,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ],
       color: _kCheckinBlue,
     );
+    // Auto anchors are passive trace dots — render them tiny and faint so they
+    // don't clutter the map the way full check-in pins would.
     await drawPins(
       map,
       sourceId: 'my-auto-source',
@@ -121,6 +122,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             MapPin(id: c.id, kind: 'checkin', name: c.placeName, lat: c.lat, lng: c.lng),
       ],
       color: 0xFF9E9E9E,
+      circleRadius: 2.5,
+      strokeWidth: 0.0,
+      opacity: 0.55,
     );
     await drawPins(
       map,
@@ -143,7 +147,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final map = _map;
     final path = ref.read(gpsNotifierProvider.notifier).sessionPath;
     if (map == null || path.length < 2) return;
-    await drawLine(map, path, kBrandGreen.toARGB32(), idPrefix: 'live-route');
+    await upsertLine(map, path, kBrandGreen.toARGB32(), idPrefix: 'live-route');
   }
 
   Future<void> _onMapTap(MapContentGestureContext context) async {
@@ -211,18 +215,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
-  Future<void> _promote(BuildContext sheetCtx, CheckIn checkIn) async {
+  // Open the stamp editor pre-filled from this check-in instead of promoting
+  // instantly, so the user can review/edit first.
+  void _promote(BuildContext sheetCtx, CheckIn checkIn) {
     Navigator.pop(sheetCtx);
-    final res = await ref
-        .read(checkInRepositoryProvider)
-        .promoteToStamp(checkIn.id, visibility: StampVisibility.public);
-    res.fold(
-      (err) => ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(err.message))),
-      (stampId) {
-        if (mounted) context.push('/stamp/$stampId');
-      },
-    );
+    context.push('/checkin?fromCheckIn=${checkIn.id}');
   }
 
   @override

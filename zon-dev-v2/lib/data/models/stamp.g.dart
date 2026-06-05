@@ -106,6 +106,10 @@ _$StampDraftImpl _$$StampDraftImplFromJson(Map<String, dynamic> json) =>
               ?.map((e) => e as String)
               .toList() ??
           const [],
+      existingPhotoUrls: (json['existingPhotoUrls'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
       coverPhotoPath: json['coverPhotoPath'] as String?,
     );
 
@@ -123,5 +127,6 @@ Map<String, dynamic> _$$StampDraftImplToJson(_$StampDraftImpl instance) =>
       'sensoryTags': instance.sensoryTags,
       'taggedUserIds': instance.taggedUserIds,
       'selectedPhotoPaths': instance.selectedPhotoPaths,
+      'existingPhotoUrls': instance.existingPhotoUrls,
       'coverPhotoPath': instance.coverPhotoPath,
     };

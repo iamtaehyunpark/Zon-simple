@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/repositories/check_in_repository.dart';
 import '../../../shared/widgets/app_states.dart';
 import 'providers/checkin_provider.dart';
 import 'stamp_editor.dart';
@@ -11,12 +12,16 @@ class CheckinEntry extends ConsumerStatefulWidget {
   final double? lat;
   final double? lng;
   final CheckinMode mode;
+  // When set, the flow opens straight into the stamp editor pre-filled from
+  // this existing check-in (promote-to-stamp as an editable step).
+  final String? fromCheckInId;
 
   const CheckinEntry({
     super.key,
     this.lat,
     this.lng,
     this.mode = CheckinMode.checkIn,
+    this.fromCheckInId,
   });
 
   @override
@@ -32,10 +37,33 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(checkinNotifierProvider.notifier)
-          .startCheckin(lat: widget.lat, lng: widget.lng, mode: widget.mode);
+      if (widget.fromCheckInId != null) {
+        _startFromCheckIn(widget.fromCheckInId!);
+      } else {
+        ref
+            .read(checkinNotifierProvider.notifier)
+            .startCheckin(lat: widget.lat, lng: widget.lng, mode: widget.mode);
+      }
     });
+  }
+
+  Future<void> _startFromCheckIn(String id) async {
+    final repo = ref.read(checkInRepositoryProvider);
+    final res = await repo.getCheckIn(id);
+    final ci = res.fold((_) => null, (c) => c);
+    if (ci == null) {
+      if (mounted) {
+        ref
+            .read(checkinNotifierProvider.notifier)
+            .startCheckin(mode: CheckinMode.stamp);
+      }
+      return;
+    }
+    final photos = await repo.getCheckInPhotos(id);
+    if (!mounted) return;
+    ref
+        .read(checkinNotifierProvider.notifier)
+        .startStampFromCheckIn(ci, [for (final p in photos) p.url]);
   }
 
   @override
@@ -69,7 +97,8 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
   @override
   Widget build(BuildContext context) {
     final checkinState = ref.watch(checkinNotifierProvider);
-    final isStamp = widget.mode == CheckinMode.stamp;
+    final isStamp =
+        widget.mode == CheckinMode.stamp || widget.fromCheckInId != null;
 
     return Scaffold(
       appBar: AppBar(

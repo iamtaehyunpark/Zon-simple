@@ -736,7 +736,10 @@ mixin _$StampDraft {
   String? get caption => throw _privateConstructorUsedError;
   List<String> get sensoryTags => throw _privateConstructorUsedError;
   List<String> get taggedUserIds => throw _privateConstructorUsedError;
-  List<String> get selectedPhotoPaths => throw _privateConstructorUsedError;
+  List<String> get selectedPhotoPaths =>
+      throw _privateConstructorUsedError; // Already-uploaded photos carried in from a source check-in (display-only;
+// they're re-pointed to the stamp on promote, not re-uploaded).
+  List<String> get existingPhotoUrls => throw _privateConstructorUsedError;
   String? get coverPhotoPath => throw _privateConstructorUsedError;
 
   /// Serializes this StampDraft to a JSON map.
@@ -768,6 +771,7 @@ abstract class $StampDraftCopyWith<$Res> {
       List<String> sensoryTags,
       List<String> taggedUserIds,
       List<String> selectedPhotoPaths,
+      List<String> existingPhotoUrls,
       String? coverPhotoPath});
 }
 
@@ -798,6 +802,7 @@ class _$StampDraftCopyWithImpl<$Res, $Val extends StampDraft>
     Object? sensoryTags = null,
     Object? taggedUserIds = null,
     Object? selectedPhotoPaths = null,
+    Object? existingPhotoUrls = null,
     Object? coverPhotoPath = freezed,
   }) {
     return _then(_value.copyWith(
@@ -849,6 +854,10 @@ class _$StampDraftCopyWithImpl<$Res, $Val extends StampDraft>
           ? _value.selectedPhotoPaths
           : selectedPhotoPaths // ignore: cast_nullable_to_non_nullable
               as List<String>,
+      existingPhotoUrls: null == existingPhotoUrls
+          ? _value.existingPhotoUrls
+          : existingPhotoUrls // ignore: cast_nullable_to_non_nullable
+              as List<String>,
       coverPhotoPath: freezed == coverPhotoPath
           ? _value.coverPhotoPath
           : coverPhotoPath // ignore: cast_nullable_to_non_nullable
@@ -878,6 +887,7 @@ abstract class _$$StampDraftImplCopyWith<$Res>
       List<String> sensoryTags,
       List<String> taggedUserIds,
       List<String> selectedPhotoPaths,
+      List<String> existingPhotoUrls,
       String? coverPhotoPath});
 }
 
@@ -906,6 +916,7 @@ class __$$StampDraftImplCopyWithImpl<$Res>
     Object? sensoryTags = null,
     Object? taggedUserIds = null,
     Object? selectedPhotoPaths = null,
+    Object? existingPhotoUrls = null,
     Object? coverPhotoPath = freezed,
   }) {
     return _then(_$StampDraftImpl(
@@ -957,6 +968,10 @@ class __$$StampDraftImplCopyWithImpl<$Res>
           ? _value._selectedPhotoPaths
           : selectedPhotoPaths // ignore: cast_nullable_to_non_nullable
               as List<String>,
+      existingPhotoUrls: null == existingPhotoUrls
+          ? _value._existingPhotoUrls
+          : existingPhotoUrls // ignore: cast_nullable_to_non_nullable
+              as List<String>,
       coverPhotoPath: freezed == coverPhotoPath
           ? _value.coverPhotoPath
           : coverPhotoPath // ignore: cast_nullable_to_non_nullable
@@ -981,10 +996,12 @@ class _$StampDraftImpl implements _StampDraft {
       final List<String> sensoryTags = const [],
       final List<String> taggedUserIds = const [],
       final List<String> selectedPhotoPaths = const [],
+      final List<String> existingPhotoUrls = const [],
       this.coverPhotoPath})
       : _sensoryTags = sensoryTags,
         _taggedUserIds = taggedUserIds,
-        _selectedPhotoPaths = selectedPhotoPaths;
+        _selectedPhotoPaths = selectedPhotoPaths,
+        _existingPhotoUrls = existingPhotoUrls;
 
   factory _$StampDraftImpl.fromJson(Map<String, dynamic> json) =>
       _$$StampDraftImplFromJson(json);
@@ -1036,12 +1053,26 @@ class _$StampDraftImpl implements _StampDraft {
     return EqualUnmodifiableListView(_selectedPhotoPaths);
   }
 
+// Already-uploaded photos carried in from a source check-in (display-only;
+// they're re-pointed to the stamp on promote, not re-uploaded).
+  final List<String> _existingPhotoUrls;
+// Already-uploaded photos carried in from a source check-in (display-only;
+// they're re-pointed to the stamp on promote, not re-uploaded).
+  @override
+  @JsonKey()
+  List<String> get existingPhotoUrls {
+    if (_existingPhotoUrls is EqualUnmodifiableListView)
+      return _existingPhotoUrls;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_existingPhotoUrls);
+  }
+
   @override
   final String? coverPhotoPath;
 
   @override
   String toString() {
-    return 'StampDraft(existingStampId: $existingStampId, checkInId: $checkInId, placeName: $placeName, lat: $lat, lng: $lng, externalPlaceId: $externalPlaceId, externalSource: $externalSource, visibility: $visibility, caption: $caption, sensoryTags: $sensoryTags, taggedUserIds: $taggedUserIds, selectedPhotoPaths: $selectedPhotoPaths, coverPhotoPath: $coverPhotoPath)';
+    return 'StampDraft(existingStampId: $existingStampId, checkInId: $checkInId, placeName: $placeName, lat: $lat, lng: $lng, externalPlaceId: $externalPlaceId, externalSource: $externalSource, visibility: $visibility, caption: $caption, sensoryTags: $sensoryTags, taggedUserIds: $taggedUserIds, selectedPhotoPaths: $selectedPhotoPaths, existingPhotoUrls: $existingPhotoUrls, coverPhotoPath: $coverPhotoPath)';
   }
 
   @override
@@ -1070,6 +1101,8 @@ class _$StampDraftImpl implements _StampDraft {
                 .equals(other._taggedUserIds, _taggedUserIds) &&
             const DeepCollectionEquality()
                 .equals(other._selectedPhotoPaths, _selectedPhotoPaths) &&
+            const DeepCollectionEquality()
+                .equals(other._existingPhotoUrls, _existingPhotoUrls) &&
             (identical(other.coverPhotoPath, coverPhotoPath) ||
                 other.coverPhotoPath == coverPhotoPath));
   }
@@ -1090,6 +1123,7 @@ class _$StampDraftImpl implements _StampDraft {
       const DeepCollectionEquality().hash(_sensoryTags),
       const DeepCollectionEquality().hash(_taggedUserIds),
       const DeepCollectionEquality().hash(_selectedPhotoPaths),
+      const DeepCollectionEquality().hash(_existingPhotoUrls),
       coverPhotoPath);
 
   /// Create a copy of StampDraft
@@ -1122,6 +1156,7 @@ abstract class _StampDraft implements StampDraft {
       final List<String> sensoryTags,
       final List<String> taggedUserIds,
       final List<String> selectedPhotoPaths,
+      final List<String> existingPhotoUrls,
       final String? coverPhotoPath}) = _$StampDraftImpl;
 
   factory _StampDraft.fromJson(Map<String, dynamic> json) =
@@ -1150,7 +1185,11 @@ abstract class _StampDraft implements StampDraft {
   @override
   List<String> get taggedUserIds;
   @override
-  List<String> get selectedPhotoPaths;
+  List<String>
+      get selectedPhotoPaths; // Already-uploaded photos carried in from a source check-in (display-only;
+// they're re-pointed to the stamp on promote, not re-uploaded).
+  @override
+  List<String> get existingPhotoUrls;
   @override
   String? get coverPhotoPath;
 

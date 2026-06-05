@@ -81,6 +81,41 @@ Future<void> drawLine(
     lineColor: color,
     lineWidth: 4.0,
     lineOpacity: 0.75,
+    lineCap: LineCap.ROUND,
+    lineJoin: LineJoin.ROUND,
+  ));
+}
+
+/// Like [drawLine] but updates the existing source in place when present, so
+/// a frequently-growing line (the live route) animates smoothly instead of
+/// flickering through a remove/re-add each time.
+Future<void> upsertLine(
+  MapboxMap map,
+  List<List<double>> coords,
+  int color, {
+  String idPrefix = 'route',
+}) async {
+  if (coords.length < 2) return;
+  final sourceId = '$idPrefix-source';
+  final layerId = '$idPrefix-layer';
+  final s = coords.map((c) => '[${c[0]},${c[1]}]').join(',');
+  final data =
+      '{"type":"Feature","geometry":{"type":"LineString","coordinates":[$s]}}';
+  try {
+    if (await map.style.styleSourceExists(sourceId)) {
+      await map.style.setStyleSourceProperty(sourceId, 'data', data);
+      return;
+    }
+  } catch (_) {/* fall through to full add */}
+  await map.style.addSource(GeoJsonSource(id: sourceId, data: data));
+  await map.style.addLayer(LineLayer(
+    id: layerId,
+    sourceId: sourceId,
+    lineColor: color,
+    lineWidth: 4.0,
+    lineOpacity: 0.75,
+    lineCap: LineCap.ROUND,
+    lineJoin: LineJoin.ROUND,
   ));
 }
 
@@ -108,6 +143,9 @@ Future<void> drawPins(
   required String layerId,
   required List<MapPin> pins,
   required int color,
+  double circleRadius = 8.0,
+  double strokeWidth = 2.0,
+  double opacity = 1.0,
 }) async {
   await _remove(map, sourceId, layerId);
   if (pins.isEmpty) return;
@@ -118,9 +156,10 @@ Future<void> drawPins(
   await map.style.addLayer(CircleLayer(
     id: layerId,
     sourceId: sourceId,
-    circleRadius: 8.0,
+    circleRadius: circleRadius,
     circleColor: color,
-    circleStrokeWidth: 2.0,
+    circleOpacity: opacity,
+    circleStrokeWidth: strokeWidth,
     circleStrokeColor: 0xFFFFFFFF,
   ));
 }
