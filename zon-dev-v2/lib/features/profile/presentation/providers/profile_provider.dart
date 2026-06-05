@@ -25,7 +25,7 @@ class ProfileNotifier extends _$ProfileNotifier {
   Future<void> toggleFollow(String targetUserId) async {
     await ref.read(profileRepositoryProvider).follow(targetUserId);
     await _fetch(userId);
-    ref.invalidate(isFollowingProvider(targetUserId));
+    ref.invalidate(followStateProvider(targetUserId));
   }
 }
 
@@ -76,7 +76,12 @@ class ProfileStampsNotifier extends _$ProfileStampsNotifier {
 }
 
 @riverpod
-Future<bool> isFollowing(IsFollowingRef ref, String targetUserId) async {
+Future<FollowState> followState(FollowStateRef ref, String targetUserId) async {
   final repo = ref.watch(profileRepositoryProvider);
-  return repo.isFollowing(targetUserId);
+  return repo.followState(targetUserId);
+}
+
+@riverpod
+Future<List<UserProfile>> followRequests(FollowRequestsRef ref) async {
+  return ref.watch(profileRepositoryProvider).getFollowRequests();
 }

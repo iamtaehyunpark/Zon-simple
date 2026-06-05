@@ -21,6 +21,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _displayNameCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
   String? _avatarUrl;
+  bool _isPrivate = false;
   UserPrivacy _privacy = const UserPrivacy();
   bool _loading = true;
   bool _savingProfile = false;
@@ -47,6 +48,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _displayNameCtrl.text = p.displayName ?? '';
       _bioCtrl.text = p.bio ?? '';
       _avatarUrl = p.avatarUrl;
+      _isPrivate = p.isPrivate;
     });
     privacyRes.fold((_) {}, (pr) => _privacy = pr);
     if (mounted) setState(() => _loading = false);
@@ -78,6 +80,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _updatePrivacy(Map<String, dynamic> updates, UserPrivacy next) async {
     setState(() => _privacy = next);
     await ref.read(privacyRepositoryProvider).update(updates);
+  }
+
+  Future<void> _setPrivateAccount(bool v) async {
+    setState(() => _isPrivate = v);
+    await ref.read(profileRepositoryProvider).updateProfile({'is_private': v});
   }
 
   Future<void> _deleteAccount() async {
@@ -175,6 +182,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 Text('Privacy & location',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Private account'),
+                  subtitle: const Text(
+                      'New followers must be approved; only followers see your public posts'),
+                  value: _isPrivate,
+                  onChanged: _setPrivateAccount,
+                ),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Default stamp visibility'),

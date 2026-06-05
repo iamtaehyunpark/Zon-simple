@@ -29,6 +29,7 @@ mixin _$UserProfile {
   int get followerCount => throw _privateConstructorUsedError;
   int get followingCount => throw _privateConstructorUsedError;
   bool get isFollowing => throw _privateConstructorUsedError;
+  bool get isPrivate => throw _privateConstructorUsedError;
   DateTime? get createdAt => throw _privateConstructorUsedError;
 
   /// Serializes this UserProfile to a JSON map.
@@ -57,6 +58,7 @@ abstract class $UserProfileCopyWith<$Res> {
       int followerCount,
       int followingCount,
       bool isFollowing,
+      bool isPrivate,
       DateTime? createdAt});
 }
 
@@ -84,6 +86,7 @@ class _$UserProfileCopyWithImpl<$Res, $Val extends UserProfile>
     Object? followerCount = null,
     Object? followingCount = null,
     Object? isFollowing = null,
+    Object? isPrivate = null,
     Object? createdAt = freezed,
   }) {
     return _then(_value.copyWith(
@@ -123,6 +126,10 @@ class _$UserProfileCopyWithImpl<$Res, $Val extends UserProfile>
           ? _value.isFollowing
           : isFollowing // ignore: cast_nullable_to_non_nullable
               as bool,
+      isPrivate: null == isPrivate
+          ? _value.isPrivate
+          : isPrivate // ignore: cast_nullable_to_non_nullable
+              as bool,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -149,6 +156,7 @@ abstract class _$$UserProfileImplCopyWith<$Res>
       int followerCount,
       int followingCount,
       bool isFollowing,
+      bool isPrivate,
       DateTime? createdAt});
 }
 
@@ -174,6 +182,7 @@ class __$$UserProfileImplCopyWithImpl<$Res>
     Object? followerCount = null,
     Object? followingCount = null,
     Object? isFollowing = null,
+    Object? isPrivate = null,
     Object? createdAt = freezed,
   }) {
     return _then(_$UserProfileImpl(
@@ -213,6 +222,10 @@ class __$$UserProfileImplCopyWithImpl<$Res>
           ? _value.isFollowing
           : isFollowing // ignore: cast_nullable_to_non_nullable
               as bool,
+      isPrivate: null == isPrivate
+          ? _value.isPrivate
+          : isPrivate // ignore: cast_nullable_to_non_nullable
+              as bool,
       createdAt: freezed == createdAt
           ? _value.createdAt
           : createdAt // ignore: cast_nullable_to_non_nullable
@@ -234,6 +247,7 @@ class _$UserProfileImpl implements _UserProfile {
       this.followerCount = 0,
       this.followingCount = 0,
       this.isFollowing = false,
+      this.isPrivate = false,
       this.createdAt});
 
   factory _$UserProfileImpl.fromJson(Map<String, dynamic> json) =>
@@ -262,11 +276,14 @@ class _$UserProfileImpl implements _UserProfile {
   @JsonKey()
   final bool isFollowing;
   @override
+  @JsonKey()
+  final bool isPrivate;
+  @override
   final DateTime? createdAt;
 
   @override
   String toString() {
-    return 'UserProfile(id: $id, username: $username, displayName: $displayName, avatarUrl: $avatarUrl, bio: $bio, stampCount: $stampCount, followerCount: $followerCount, followingCount: $followingCount, isFollowing: $isFollowing, createdAt: $createdAt)';
+    return 'UserProfile(id: $id, username: $username, displayName: $displayName, avatarUrl: $avatarUrl, bio: $bio, stampCount: $stampCount, followerCount: $followerCount, followingCount: $followingCount, isFollowing: $isFollowing, isPrivate: $isPrivate, createdAt: $createdAt)';
   }
 
   @override
@@ -290,6 +307,8 @@ class _$UserProfileImpl implements _UserProfile {
                 other.followingCount == followingCount) &&
             (identical(other.isFollowing, isFollowing) ||
                 other.isFollowing == isFollowing) &&
+            (identical(other.isPrivate, isPrivate) ||
+                other.isPrivate == isPrivate) &&
             (identical(other.createdAt, createdAt) ||
                 other.createdAt == createdAt));
   }
@@ -307,6 +326,7 @@ class _$UserProfileImpl implements _UserProfile {
       followerCount,
       followingCount,
       isFollowing,
+      isPrivate,
       createdAt);
 
   /// Create a copy of UserProfile
@@ -336,6 +356,7 @@ abstract class _UserProfile implements UserProfile {
       final int followerCount,
       final int followingCount,
       final bool isFollowing,
+      final bool isPrivate,
       final DateTime? createdAt}) = _$UserProfileImpl;
 
   factory _UserProfile.fromJson(Map<String, dynamic> json) =
@@ -359,6 +380,8 @@ abstract class _UserProfile implements UserProfile {
   int get followingCount;
   @override
   bool get isFollowing;
+  @override
+  bool get isPrivate;
   @override
   DateTime? get createdAt;
 

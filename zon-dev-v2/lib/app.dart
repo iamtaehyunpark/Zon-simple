@@ -19,6 +19,7 @@ import 'features/profile/presentation/settings_screen.dart';
 import 'features/profile/presentation/check_in_list_screen.dart';
 import 'features/profile/presentation/user_search_screen.dart';
 import 'features/profile/presentation/user_list_screen.dart';
+import 'features/profile/presentation/follow_requests_screen.dart';
 import 'features/profile/presentation/activity_screen.dart';
 import 'features/feed/presentation/saved_stamps_screen.dart';
 import 'features/photo_import/presentation/photo_suggestion_screen.dart';
@@ -146,6 +147,11 @@ final _routerProvider = Provider<GoRouter>((ref) {
         path: '/activity',
         name: 'activity',
         builder: (_, __) => const ActivityScreen(),
+      ),
+      GoRoute(
+        path: '/follow-requests',
+        name: 'follow-requests',
+        builder: (_, __) => const FollowRequestsScreen(),
       ),
       GoRoute(
         path: '/profile/:id/followers',

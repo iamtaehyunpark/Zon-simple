@@ -9,6 +9,10 @@ import 'base_repository.dart';
 
 part 'profile_repository.g.dart';
 
+/// The viewer's relationship to another account.
+/// none = not following · requested = pending approval (private acct) · following = accepted.
+enum FollowState { none, requested, following }
+
 @riverpod
 ProfileRepository profileRepository(ProfileRepositoryRef ref) => ProfileRepository(
       ref.watch(supabaseClientProvider),
@@ -59,13 +63,16 @@ class ProfileRepository with BaseRepository {
     }
   }
 
-  Future<Either<AppException, bool>> follow(String targetUserId) async {
+  /// Toggle follow. Re-following a private account creates a pending request
+  /// (server-enforced); following a public account is immediate. Calling again
+  /// while a row exists removes it (unfollow / cancel request) → [FollowState.none].
+  Future<Either<AppException, FollowState>> follow(String targetUserId) async {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
       final existing = await client
           .from('follows')
-          .select()
+          .select('status')
           .eq('follower_id', userId)
           .eq('following_id', targetUserId)
           .maybeSingle();
@@ -75,33 +82,84 @@ class ProfileRepository with BaseRepository {
             .delete()
             .eq('follower_id', userId)
             .eq('following_id', targetUserId);
-        return right(false);
-      } else {
-        await client.from('follows').insert({
-          'follower_id': userId,
-          'following_id': targetUserId,
-        });
-        return right(true);
+        return right(FollowState.none);
       }
+      // The DB trigger sets the real status from the target's privacy; mirror it
+      // here for the returned state.
+      final target = await client
+          .from('profiles')
+          .select('is_private')
+          .eq('id', targetUserId)
+          .single();
+      await client.from('follows').insert({
+        'follower_id': userId,
+        'following_id': targetUserId,
+      });
+      return right((target['is_private'] as bool? ?? false)
+          ? FollowState.requested
+          : FollowState.following);
     } catch (e) {
       return left(NetworkError(e.toString()));
     }
   }
 
-  Future<bool> isFollowing(String targetUserId) async {
+  Future<FollowState> followState(String targetUserId) async {
     try {
       final userId = this.userId;
-      if (userId == null) return false;
-      final existing = await client
+      if (userId == null) return FollowState.none;
+      final row = await client
           .from('follows')
-          .select()
+          .select('status')
           .eq('follower_id', userId)
           .eq('following_id', targetUserId)
           .maybeSingle();
-      return existing != null;
+      if (row == null) return FollowState.none;
+      return row['status'] == 'accepted'
+          ? FollowState.following
+          : FollowState.requested;
     } catch (_) {
-      return false;
+      return FollowState.none;
     }
+  }
+
+  /// Incoming pending follow requests (people awaiting my approval).
+  Future<List<UserProfile>> getFollowRequests() async {
+    final userId = this.userId;
+    if (userId == null) return [];
+    try {
+      final data = await client
+          .from('follows')
+          .select('profiles!follows_follower_id_fkey(*)')
+          .eq('following_id', userId)
+          .eq('status', 'pending');
+      return [
+        for (final r in data)
+          if (r['profiles'] != null)
+            _fromRow(r['profiles'] as Map<String, dynamic>)
+      ];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> approveFollow(String requesterId) async {
+    final userId = this.userId;
+    if (userId == null) return;
+    await client
+        .from('follows')
+        .update({'status': 'accepted'})
+        .eq('follower_id', requesterId)
+        .eq('following_id', userId);
+  }
+
+  Future<void> denyFollow(String requesterId) async {
+    final userId = this.userId;
+    if (userId == null) return;
+    await client
+        .from('follows')
+        .delete()
+        .eq('follower_id', requesterId)
+        .eq('following_id', userId);
   }
 
   Future<List<UserProfile>> searchUsers(String query) async {
@@ -125,7 +183,8 @@ class ProfileRepository with BaseRepository {
       final data = await client
           .from('follows')
           .select('profiles!follows_follower_id_fkey(*)')
-          .eq('following_id', userId);
+          .eq('following_id', userId)
+          .eq('status', 'accepted');
       return [
         for (final r in data)
           if (r['profiles'] != null)
@@ -142,7 +201,8 @@ class ProfileRepository with BaseRepository {
       final data = await client
           .from('follows')
           .select('profiles!follows_following_id_fkey(*)')
-          .eq('follower_id', userId);
+          .eq('follower_id', userId)
+          .eq('status', 'accepted');
       return [
         for (final r in data)
           if (r['profiles'] != null)
@@ -173,6 +233,7 @@ class ProfileRepository with BaseRepository {
       stampCount: row['stamp_count'] as int? ?? 0,
       followerCount: row['follower_count'] as int? ?? 0,
       followingCount: row['following_count'] as int? ?? 0,
+      isPrivate: row['is_private'] as bool? ?? false,
       createdAt: row['created_at'] != null
           ? DateTime.parse(row['created_at'] as String)
           : null,

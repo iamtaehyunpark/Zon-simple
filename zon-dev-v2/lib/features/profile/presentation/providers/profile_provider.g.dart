@@ -6,7 +6,7 @@ part of 'profile_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$isFollowingHash() => r'97714e948fba0700ec89319d74821188a8bdc8d8';
+String _$followStateHash() => r'9b23ea8dfd9b49a21be2b14de99b7c899716a7ba';
 
 /// Copied from Dart SDK
 class _SystemHash {
@@ -29,27 +29,27 @@ class _SystemHash {
   }
 }
 
-/// See also [isFollowing].
-@ProviderFor(isFollowing)
-const isFollowingProvider = IsFollowingFamily();
+/// See also [followState].
+@ProviderFor(followState)
+const followStateProvider = FollowStateFamily();
 
-/// See also [isFollowing].
-class IsFollowingFamily extends Family<AsyncValue<bool>> {
-  /// See also [isFollowing].
-  const IsFollowingFamily();
+/// See also [followState].
+class FollowStateFamily extends Family<AsyncValue<FollowState>> {
+  /// See also [followState].
+  const FollowStateFamily();
 
-  /// See also [isFollowing].
-  IsFollowingProvider call(
+  /// See also [followState].
+  FollowStateProvider call(
     String targetUserId,
   ) {
-    return IsFollowingProvider(
+    return FollowStateProvider(
       targetUserId,
     );
   }
 
   @override
-  IsFollowingProvider getProviderOverride(
-    covariant IsFollowingProvider provider,
+  FollowStateProvider getProviderOverride(
+    covariant FollowStateProvider provider,
   ) {
     return call(
       provider.targetUserId,
@@ -68,32 +68,32 @@ class IsFollowingFamily extends Family<AsyncValue<bool>> {
       _allTransitiveDependencies;
 
   @override
-  String? get name => r'isFollowingProvider';
+  String? get name => r'followStateProvider';
 }
 
-/// See also [isFollowing].
-class IsFollowingProvider extends AutoDisposeFutureProvider<bool> {
-  /// See also [isFollowing].
-  IsFollowingProvider(
+/// See also [followState].
+class FollowStateProvider extends AutoDisposeFutureProvider<FollowState> {
+  /// See also [followState].
+  FollowStateProvider(
     String targetUserId,
   ) : this._internal(
-          (ref) => isFollowing(
-            ref as IsFollowingRef,
+          (ref) => followState(
+            ref as FollowStateRef,
             targetUserId,
           ),
-          from: isFollowingProvider,
-          name: r'isFollowingProvider',
+          from: followStateProvider,
+          name: r'followStateProvider',
           debugGetCreateSourceHash:
               const bool.fromEnvironment('dart.vm.product')
                   ? null
-                  : _$isFollowingHash,
-          dependencies: IsFollowingFamily._dependencies,
+                  : _$followStateHash,
+          dependencies: FollowStateFamily._dependencies,
           allTransitiveDependencies:
-              IsFollowingFamily._allTransitiveDependencies,
+              FollowStateFamily._allTransitiveDependencies,
           targetUserId: targetUserId,
         );
 
-  IsFollowingProvider._internal(
+  FollowStateProvider._internal(
     super._createNotifier, {
     required super.name,
     required super.dependencies,
@@ -107,12 +107,12 @@ class IsFollowingProvider extends AutoDisposeFutureProvider<bool> {
 
   @override
   Override overrideWith(
-    FutureOr<bool> Function(IsFollowingRef provider) create,
+    FutureOr<FollowState> Function(FollowStateRef provider) create,
   ) {
     return ProviderOverride(
       origin: this,
-      override: IsFollowingProvider._internal(
-        (ref) => create(ref as IsFollowingRef),
+      override: FollowStateProvider._internal(
+        (ref) => create(ref as FollowStateRef),
         from: from,
         name: null,
         dependencies: null,
@@ -124,13 +124,13 @@ class IsFollowingProvider extends AutoDisposeFutureProvider<bool> {
   }
 
   @override
-  AutoDisposeFutureProviderElement<bool> createElement() {
-    return _IsFollowingProviderElement(this);
+  AutoDisposeFutureProviderElement<FollowState> createElement() {
+    return _FollowStateProviderElement(this);
   }
 
   @override
   bool operator ==(Object other) {
-    return other is IsFollowingProvider && other.targetUserId == targetUserId;
+    return other is FollowStateProvider && other.targetUserId == targetUserId;
   }
 
   @override
@@ -144,20 +144,38 @@ class IsFollowingProvider extends AutoDisposeFutureProvider<bool> {
 
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
-mixin IsFollowingRef on AutoDisposeFutureProviderRef<bool> {
+mixin FollowStateRef on AutoDisposeFutureProviderRef<FollowState> {
   /// The parameter `targetUserId` of this provider.
   String get targetUserId;
 }
 
-class _IsFollowingProviderElement extends AutoDisposeFutureProviderElement<bool>
-    with IsFollowingRef {
-  _IsFollowingProviderElement(super.provider);
+class _FollowStateProviderElement
+    extends AutoDisposeFutureProviderElement<FollowState> with FollowStateRef {
+  _FollowStateProviderElement(super.provider);
 
   @override
-  String get targetUserId => (origin as IsFollowingProvider).targetUserId;
+  String get targetUserId => (origin as FollowStateProvider).targetUserId;
 }
 
-String _$profileNotifierHash() => r'886c5ab75e4627b42eec52e6ce357dd4c3afffc7';
+String _$followRequestsHash() => r'7767b4a5e0f39606771fc4a84ac038d653bcb507';
+
+/// See also [followRequests].
+@ProviderFor(followRequests)
+final followRequestsProvider =
+    AutoDisposeFutureProvider<List<UserProfile>>.internal(
+  followRequests,
+  name: r'followRequestsProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$followRequestsHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef FollowRequestsRef = AutoDisposeFutureProviderRef<List<UserProfile>>;
+String _$profileNotifierHash() => r'adf6208cd39d7270be7201f064b6a802ddcb1684';
 
 abstract class _$ProfileNotifier
     extends BuildlessAutoDisposeNotifier<AsyncValue<UserProfile?>> {

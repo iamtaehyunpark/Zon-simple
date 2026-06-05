@@ -93,7 +93,8 @@ class StampRepository with BaseRepository {
       final data = await client
           .from('follows')
           .select('following_id')
-          .eq('follower_id', userId);
+          .eq('follower_id', userId)
+          .eq('status', 'accepted');
       return data.map((r) => r['following_id'] as String).toList();
     } catch (_) {
       return [];

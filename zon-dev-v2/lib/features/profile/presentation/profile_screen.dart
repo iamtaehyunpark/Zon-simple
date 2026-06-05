@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/repositories/profile_repository.dart';
 import '../../../shared/widgets/app_states.dart';
 import '../../../shared/utils/format.dart';
 import 'providers/profile_provider.dart';
@@ -92,6 +93,25 @@ class ProfileScreen extends ConsumerWidget {
                 actions: isOwnProfile
                     ? [
                         IconButton(
+                          tooltip: 'Follow requests',
+                          icon: Consumer(builder: (ctx, ref, _) {
+                            final reqs = ref
+                                    .watch(followRequestsProvider)
+                                    .valueOrNull ??
+                                const [];
+                            return Badge(
+                              isLabelVisible: reqs.isNotEmpty,
+                              label: Text('${reqs.length}'),
+                              child: const Icon(Icons.person_add_alt_outlined),
+                            );
+                          }),
+                          onPressed: () async {
+                            await context.push('/follow-requests');
+                            ref.invalidate(followRequestsProvider);
+                            ref.invalidate(profileNotifierProvider(targetId));
+                          },
+                        ),
+                        IconButton(
                           icon: const Icon(Icons.bookmark_border),
                           tooltip: 'Saved',
                           onPressed: () => context.push('/saved'),
@@ -135,20 +155,47 @@ class ProfileScreen extends ConsumerWidget {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Consumer(builder: (ctx, ref, _) {
-                      final followingAsync = ref.watch(
-                          isFollowingProvider(targetId));
-                      final isFollowing =
-                          followingAsync.valueOrNull ?? false;
+                      final fs = ref.watch(followStateProvider(targetId))
+                              .valueOrNull ??
+                          FollowState.none;
+                      final label = switch (fs) {
+                        FollowState.following => 'Following',
+                        FollowState.requested => 'Requested',
+                        FollowState.none => 'Follow',
+                      };
                       return FilledButton(
                         onPressed: () => ref
                             .read(profileNotifierProvider(targetId).notifier)
                             .toggleFollow(targetId),
-                        child: Text(isFollowing ? 'Unfollow' : 'Follow'),
+                        child: Text(label),
                       );
                     }),
                   ),
                 ),
-              stampsState.when(
+              // A private account hides its stamps until you're an accepted follower.
+              if (!isOwnProfile &&
+                  profile.isPrivate &&
+                  (ref.watch(followStateProvider(targetId)).valueOrNull ??
+                          FollowState.none) !=
+                      FollowState.following)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(48),
+                    child: Column(
+                      children: [
+                        Icon(Icons.lock_outline, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('This account is private',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        SizedBox(height: 4),
+                        Text('Follow to see their stamps',
+                            style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                stampsState.when(
                 loading: () => const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.all(32),
