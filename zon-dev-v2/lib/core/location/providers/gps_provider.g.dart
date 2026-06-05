@@ -22,7 +22,7 @@ final gpsServiceProvider = AutoDisposeProvider<GpsService>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef GpsServiceRef = AutoDisposeProviderRef<GpsService>;
-String _$gpsNotifierHash() => r'778703ba1228033cdb0f8af7601fb6ae2cfbc565';
+String _$gpsNotifierHash() => r'ce0a2ba516100459d8cbd0b90459283f31d325ad';
 
 /// App-wide foreground location tracker (keepAlive): one subscription records
 /// the route while the app is open, and when the session ends drops a passive

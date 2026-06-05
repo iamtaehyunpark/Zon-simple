@@ -1,5 +1,4 @@
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
-import '../../../data/models/raw_location_event.dart';
 
 /// A point to render on the map, carrying enough to identify it on tap.
 class MapPin {
@@ -38,25 +37,6 @@ Future<void> _remove(MapboxMap map, String sourceId, String layerId) async {
       await map.style.removeStyleSource(sourceId);
     }
   } catch (_) {/* layer/source not present */}
-}
-
-Future<void> drawRouteLine(
-    MapboxMap map, List<RawLocationEvent> events, int color) async {
-  await _remove(map, 'route-source', 'route-layer');
-  if (events.length < 2) return;
-  final coords = events.map((e) => '[${e.lng},${e.lat}]').join(',');
-  await map.style.addSource(GeoJsonSource(
-    id: 'route-source',
-    data:
-        '{"type":"Feature","geometry":{"type":"LineString","coordinates":[$coords]}}',
-  ));
-  await map.style.addLayer(LineLayer(
-    id: 'route-layer',
-    sourceId: 'route-source',
-    lineColor: color,
-    lineWidth: 3.0,
-    lineOpacity: 0.85,
-  ));
 }
 
 /// Draw a polyline from raw [lng,lat] coordinate pairs (uses [idPrefix] so

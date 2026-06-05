@@ -85,11 +85,4 @@ class PhotoService {
     }).toList();
   }
 
-  /// Upload a gallery photo asset to Supabase Storage and return its public URL.
-  Future<String?> uploadPhoto(AssetEntity asset) async {
-    final file = await asset.originFile;
-    if (file == null) return null;
-    return uploadFile(file);
-  }
-
 }
