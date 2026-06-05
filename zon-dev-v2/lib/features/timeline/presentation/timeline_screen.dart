@@ -328,9 +328,36 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     _reload(); // editor stays open and shows the new photos
   }
 
-  Future<void> _deleteNoteInline(_TlItem item) async {
-    await ref.read(timelineNoteRepositoryProvider).delete(item.id);
-    if (mounted) setState(() => _expandedId = null);
+  // Swipe-left to delete a check-in or note. Check-ins confirm first (they
+  // may carry photos); notes delete straight away.
+  Future<void> _deleteItem(_TlItem item) async {
+    if (item.isNote) {
+      await ref.read(timelineNoteRepositoryProvider).delete(item.id);
+    } else if (item.kind == _NodeKind.checkIn) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete check-in?'),
+          content: Text('Remove "${item.name}" from your trace?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      await ref.read(checkInRepositoryProvider).deleteCheckIn(item.id);
+    } else {
+      return;
+    }
+    if (_selectedId == item.id) _selectedId = null;
+    if (_expandedId == item.id) _expandedId = null;
     _reload();
   }
 
@@ -561,7 +588,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 onSaveText: _saveText,
                 onAddPhotos: _addPhotosInline,
                 onMore: _moreCheckIn,
-                onDeleteNote: _deleteNoteInline,
+                onDelete: _deleteItem,
                 onAddNote: _addNote,
                 onEditDiary: _editDiary,
                 onReorder: _onReorder,
@@ -598,7 +625,7 @@ class _ListPanel extends StatelessWidget {
   final void Function(_TlItem, String) onSaveText;
   final void Function(_TlItem) onAddPhotos;
   final void Function(_TlItem) onMore;
-  final void Function(_TlItem) onDeleteNote;
+  final Future<void> Function(_TlItem) onDelete;
   final VoidCallback onAddNote;
   final VoidCallback onEditDiary;
   final void Function(int oldIndex, int newIndex) onReorder;
@@ -616,7 +643,7 @@ class _ListPanel extends StatelessWidget {
     required this.onSaveText,
     required this.onAddPhotos,
     required this.onMore,
-    required this.onDeleteNote,
+    required this.onDelete,
     required this.onAddNote,
     required this.onEditDiary,
     required this.onReorder,
@@ -722,18 +749,45 @@ class _ListPanel extends StatelessWidget {
                         final it = items[i];
                         final editable =
                             it.kind == _NodeKind.checkIn || it.isNote;
+                        final editing = it.id == expandedId;
                         final node = _TimelineNode(
                           item: it,
                           isFirst: i == 0,
                           isLast: i == items.length - 1,
                           selected: it.id == selectedId,
                           onTap: () => onTapItem(it),
+                          // While editing a check-in, the original photo slide
+                          // grows an Add button at its end (no second slide).
+                          onAddPhoto: (it.kind == _NodeKind.checkIn && editing)
+                              ? () => onAddPhotos(it)
+                              : null,
                         );
                         // Notes are long-press draggable; the inline editor is not.
-                        final head = it.isNote
+                        Widget head = it.isNote
                             ? ReorderableDelayedDragStartListener(
                                 index: i, child: node)
                             : node;
+                        // Swipe left to delete a check-in / note.
+                        if (editable) {
+                          head = Dismissible(
+                            key: ValueKey('dismiss_${it.id}'),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              color: Colors.red,
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 24),
+                              child:
+                                  const Icon(Icons.delete, color: Colors.white),
+                            ),
+                            confirmDismiss: (_) async {
+                              // We remove the row via reload, not by letting
+                              // Dismissible drop it from the reorderable list.
+                              await onDelete(it);
+                              return false;
+                            },
+                            child: head,
+                          );
+                        }
                         return KeyedSubtree(
                           key: ValueKey(it.id),
                           child: KeyedSubtree(
@@ -742,15 +796,11 @@ class _ListPanel extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 head,
-                                if (editable && it.id == expandedId)
+                                if (editable && editing)
                                   _InlineNodeEditor(
                                     item: it,
                                     onSave: (t) => onSaveText(it, t),
-                                    onAddPhotos:
-                                        it.isNote ? null : () => onAddPhotos(it),
                                     onMore: it.isNote ? null : () => onMore(it),
-                                    onDelete:
-                                        it.isNote ? () => onDeleteNote(it) : null,
                                   ),
                               ],
                             ),
@@ -790,12 +840,16 @@ class _TimelineNode extends StatelessWidget {
   final bool isLast;
   final bool selected;
   final VoidCallback onTap;
+  // Non-null only while this check-in is being edited → the photo slide shows
+  // an Add tile at its end.
+  final VoidCallback? onAddPhoto;
   const _TimelineNode({
     required this.item,
     required this.isFirst,
     required this.isLast,
     required this.selected,
     required this.onTap,
+    this.onAddPhoto,
   });
 
   Color _color(ColorScheme scheme) {
@@ -922,9 +976,46 @@ class _TimelineNode extends StatelessWidget {
                                 fontSize: 13, color: scheme.onSurfaceVariant),
                           ),
                         ],
-                        if (item.photoUrls.isNotEmpty) ...[
+                        if (item.photoUrls.isNotEmpty || onAddPhoto != null) ...[
                           const SizedBox(height: 8),
-                          PhotoThumbRow(urls: item.photoUrls, size: 64),
+                          if (onAddPhoto == null)
+                            PhotoThumbRow(urls: item.photoUrls, size: 64)
+                          else
+                            SizedBox(
+                              height: 64,
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
+                                children: [
+                                  for (final url in item.photoUrls)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: CachedNetworkImage(
+                                            imageUrl: url,
+                                            width: 64,
+                                            height: 64,
+                                            fit: BoxFit.cover),
+                                      ),
+                                    ),
+                                  GestureDetector(
+                                    onTap: onAddPhoto,
+                                    child: Container(
+                                      width: 64,
+                                      height: 64,
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                            color: Colors.grey.shade400),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(
+                                          Icons.add_a_photo_outlined,
+                                          color: Colors.grey),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                         ],
                       ],
                     ),
@@ -944,15 +1035,11 @@ class _TimelineNode extends StatelessWidget {
 class _InlineNodeEditor extends StatefulWidget {
   final _TlItem item;
   final void Function(String text) onSave;
-  final VoidCallback? onAddPhotos; // check-in only
   final VoidCallback? onMore; // check-in only (full sheet)
-  final VoidCallback? onDelete; // note only
   const _InlineNodeEditor({
     required this.item,
     required this.onSave,
-    this.onAddPhotos,
     this.onMore,
-    this.onDelete,
   });
 
   @override
@@ -971,7 +1058,6 @@ class _InlineNodeEditorState extends State<_InlineNodeEditor> {
 
   @override
   Widget build(BuildContext context) {
-    final isCheckIn = !widget.item.isNote;
     return Padding(
       padding: const EdgeInsets.fromLTRB(50, 0, 12, 12),
       child: Column(
@@ -986,58 +1072,13 @@ class _InlineNodeEditorState extends State<_InlineNodeEditor> {
             onSubmitted: (_) => widget.onSave(_ctrl.text.trim()),
             decoration: InputDecoration(
               isDense: true,
-              hintText:
-                  widget.item.isNote ? 'Edit note…' : 'Add a note…',
+              hintText: widget.item.isNote ? 'Edit note…' : 'Add a note…',
               border: const OutlineInputBorder(),
             ),
           ),
-          if (isCheckIn && widget.onAddPhotos != null) ...[
-            const SizedBox(height: 8),
-            SizedBox(
-              height: 64,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: [
-                  for (final url in widget.item.photoUrls)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 6),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: CachedNetworkImage(
-                            imageUrl: url,
-                            width: 64,
-                            height: 64,
-                            fit: BoxFit.cover),
-                      ),
-                    ),
-                  GestureDetector(
-                    onTap: widget.onAddPhotos,
-                    child: Container(
-                      width: 64,
-                      height: 64,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.add_a_photo_outlined,
-                          color: Colors.grey),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
           const SizedBox(height: 8),
           Row(
             children: [
-              if (widget.onDelete != null)
-                TextButton.icon(
-                  onPressed: widget.onDelete,
-                  icon: const Icon(Icons.delete_outline,
-                      size: 18, color: Colors.red),
-                  label: const Text('Delete',
-                      style: TextStyle(color: Colors.red)),
-                ),
               if (widget.onMore != null)
                 TextButton(onPressed: widget.onMore, child: const Text('More')),
               const Spacer(),
