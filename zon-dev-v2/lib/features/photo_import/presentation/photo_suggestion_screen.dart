@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:intl/intl.dart';
 import 'package:photo_manager/photo_manager.dart';
 import 'package:go_router/go_router.dart';
@@ -11,14 +12,13 @@ import '../../../data/repositories/check_in_repository.dart';
 
 // ignore_for_file: use_build_context_synchronously
 
-/// Photos collected for one place during import → one check-in.
+/// Photos clustered at one spot during import → one check-in.
 class _PhotoGroup {
-  final String placeName;
   final double lat;
   final double lng;
   DateTime takenAt;
   final List<String> urls = [];
-  _PhotoGroup(this.placeName, this.lat, this.lng, this.takenAt);
+  _PhotoGroup(this.lat, this.lng, this.takenAt);
 }
 
 class PhotoSuggestionScreen extends ConsumerStatefulWidget {
@@ -61,14 +61,18 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
     return MemoryImage(data);
   }
 
+  // Photos within this distance of each other are treated as the same place.
+  // (A bit above 5m because EXIF GPS jitter would otherwise split one spot.)
+  static const _kSamePlaceMeters = 20.0;
+
   Future<void> _importSelected() async {
     if (_selected.isEmpty) return;
     setState(() { _uploading = true; _uploadedCount = 0; });
     final assets = _photos.where((p) => _selected.contains(p.id)).toList();
 
-    // Upload each geotagged photo and group by place, so multiple photos at the
-    // same spot become ONE check-in (no duplicates), timed by the earliest photo.
-    final groups = <String, _PhotoGroup>{};
+    // Cluster photos by coordinate proximity → one check-in per cluster, so
+    // photos taken at the same spot don't create duplicate check-ins.
+    final clusters = <_PhotoGroup>[];
     for (final asset in assets) {
       final latLng = await asset.latlngAsync();
       if (latLng != null &&
@@ -76,15 +80,23 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
         final file = await asset.originFile;
         final url = file == null ? null : await _photoService.uploadFile(file);
         if (url != null) {
-          final place = await _resolvePlace(latLng.latitude, latLng.longitude);
-          final g = groups.putIfAbsent(
-            place,
-            () => _PhotoGroup(
-                place, latLng.latitude, latLng.longitude, asset.createDateTime),
-          );
-          g.urls.add(url);
-          if (asset.createDateTime.isBefore(g.takenAt)) {
-            g.takenAt = asset.createDateTime;
+          _PhotoGroup? target;
+          for (final c in clusters) {
+            if (Geolocator.distanceBetween(
+                    c.lat, c.lng, latLng.latitude, latLng.longitude) <
+                _kSamePlaceMeters) {
+              target = c;
+              break;
+            }
+          }
+          if (target == null) {
+            target = _PhotoGroup(
+                latLng.latitude, latLng.longitude, asset.createDateTime);
+            clusters.add(target);
+          }
+          target.urls.add(url);
+          if (asset.createDateTime.isBefore(target.takenAt)) {
+            target.takenAt = asset.createDateTime;
           }
         }
       }
@@ -92,21 +104,22 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
     }
 
     final repo = ref.read(checkInRepositoryProvider);
-    for (final g in groups.values) {
+    for (final c in clusters) {
+      final name = await _resolvePlace(c.lat, c.lng);
       await repo.createCheckIn(
         CheckInDraft(
-          placeName: g.placeName,
-          lat: g.lat,
-          lng: g.lng,
+          placeName: name,
+          lat: c.lat,
+          lng: c.lng,
           source: CheckInSource.photo,
         ),
-        photoUrls: g.urls,
-        visitedAt: g.takenAt,
+        photoUrls: c.urls,
+        visitedAt: c.takenAt,
       );
     }
 
     if (mounted) {
-      final n = groups.length;
+      final n = clusters.length;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$n check-in${n == 1 ? '' : 's'} added')),
       );

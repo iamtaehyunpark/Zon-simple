@@ -34,6 +34,7 @@ class _TlItem {
   final String? text; // note / caption body
   final List<String> photoUrls;
   final bool isPublic;
+  final bool isAuto; // passive auto check-in (gray)
   const _TlItem({
     required this.id,
     required this.kind,
@@ -44,6 +45,7 @@ class _TlItem {
     this.text,
     this.photoUrls = const [],
     this.isPublic = false,
+    this.isAuto = false,
   });
 
   bool get isStamp => kind == _NodeKind.stamp;
@@ -127,6 +129,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
             time: c.visitedAt,
             text: c.note,
             photoUrls: c.photoUrls,
+            isAuto: c.source == CheckInSource.auto,
           ),
       for (final s in b.stamps)
         _TlItem(
@@ -748,23 +751,30 @@ class _TimelineNode extends StatelessWidget {
     required this.onTap,
   });
 
-  Color _color(ColorScheme scheme) => switch (item.kind) {
-        _NodeKind.stamp => scheme.primary,
-        _NodeKind.checkIn => const Color(_kCheckinBlue),
-        _NodeKind.note => const Color(_kNoteAmber),
-      };
+  Color _color(ColorScheme scheme) {
+    if (item.isAuto) return Colors.grey;
+    return switch (item.kind) {
+      _NodeKind.stamp => scheme.primary,
+      _NodeKind.checkIn => const Color(_kCheckinBlue),
+      _NodeKind.note => const Color(_kNoteAmber),
+    };
+  }
 
-  IconData get _icon => switch (item.kind) {
-        _NodeKind.stamp => Icons.auto_awesome,
-        _NodeKind.checkIn => Icons.pin_drop,
-        _NodeKind.note => Icons.sticky_note_2_outlined,
-      };
+  IconData get _icon => item.isAuto
+      ? Icons.gps_fixed
+      : switch (item.kind) {
+          _NodeKind.stamp => Icons.auto_awesome,
+          _NodeKind.checkIn => Icons.pin_drop,
+          _NodeKind.note => Icons.sticky_note_2_outlined,
+        };
 
-  String get _label => switch (item.kind) {
-        _NodeKind.stamp => 'Stamp',
-        _NodeKind.checkIn => 'Check-in',
-        _NodeKind.note => 'Note',
-      };
+  String get _label => item.isAuto
+      ? 'Auto'
+      : switch (item.kind) {
+          _NodeKind.stamp => 'Stamp',
+          _NodeKind.checkIn => 'Check-in',
+          _NodeKind.note => 'Note',
+        };
 
   @override
   Widget build(BuildContext context) {
@@ -833,8 +843,10 @@ class _TimelineNode extends StatelessWidget {
                                 item.isNote ? 'Note' : item.name,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w600),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: item.isAuto ? Colors.grey : null,
+                                ),
                               ),
                             ),
                             _KindChip(label: _label, color: color),

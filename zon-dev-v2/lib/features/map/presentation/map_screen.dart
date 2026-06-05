@@ -106,9 +106,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       layerId: 'my-checkins-layer',
       pins: [
         for (final c in _myCheckIns)
-          MapPin(id: c.id, kind: 'checkin', name: c.placeName, lat: c.lat, lng: c.lng),
+          if (c.source != CheckInSource.auto)
+            MapPin(id: c.id, kind: 'checkin', name: c.placeName, lat: c.lat, lng: c.lng),
       ],
       color: _kCheckinBlue,
+    );
+    await drawPins(
+      map,
+      sourceId: 'my-auto-source',
+      layerId: 'my-auto-layer',
+      pins: [
+        for (final c in _myCheckIns)
+          if (c.source == CheckInSource.auto)
+            MapPin(id: c.id, kind: 'checkin', name: c.placeName, lat: c.lat, lng: c.lng),
+      ],
+      color: 0xFF9E9E9E,
     );
     await drawPins(
       map,
@@ -144,6 +156,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           layerIds: const [
             'my-stamps-layer',
             'my-checkins-layer',
+            'my-auto-layer',
             'followed-layer',
           ],
           filter: null,
@@ -232,7 +245,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     });
 
     final pos = ref.watch(gpsNotifierProvider).valueOrNull;
-    final count = _myStamps.length + _myCheckIns.length;
+    final count = _myStamps.length +
+        _myCheckIns.where((c) => c.source != CheckInSource.auto).length;
 
     return Scaffold(
       body: Stack(
