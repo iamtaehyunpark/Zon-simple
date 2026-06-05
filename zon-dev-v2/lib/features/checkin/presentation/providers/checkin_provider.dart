@@ -181,6 +181,7 @@ class CheckinNotifier extends _$CheckinNotifier {
   }
 
   Future<void> save() async {
+    if (state is _Saving) return; // guard against double-submit
     final current = state;
     final photoService = PhotoService();
 

@@ -11,6 +11,16 @@ import '../../../data/repositories/check_in_repository.dart';
 
 // ignore_for_file: use_build_context_synchronously
 
+/// Photos collected for one place during import → one check-in.
+class _PhotoGroup {
+  final String placeName;
+  final double lat;
+  final double lng;
+  DateTime takenAt;
+  final List<String> urls = [];
+  _PhotoGroup(this.placeName, this.lat, this.lng, this.takenAt);
+}
+
 class PhotoSuggestionScreen extends ConsumerStatefulWidget {
   const PhotoSuggestionScreen({super.key});
 
@@ -54,51 +64,63 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
   Future<void> _importSelected() async {
     if (_selected.isEmpty) return;
     setState(() { _uploading = true; _uploadedCount = 0; });
-    final toUpload = _photos.where((p) => _selected.contains(p.id)).toList();
-    final checkInRepo = ref.read(checkInRepositoryProvider);
-    for (final asset in toUpload) {
-      await _convertToCheckIn(asset, checkInRepo);
+    final assets = _photos.where((p) => _selected.contains(p.id)).toList();
+
+    // Upload each geotagged photo and group by place, so multiple photos at the
+    // same spot become ONE check-in (no duplicates), timed by the earliest photo.
+    final groups = <String, _PhotoGroup>{};
+    for (final asset in assets) {
+      final latLng = await asset.latlngAsync();
+      if (latLng != null &&
+          !(latLng.latitude == 0.0 && latLng.longitude == 0.0)) {
+        final file = await asset.originFile;
+        final url = file == null ? null : await _photoService.uploadFile(file);
+        if (url != null) {
+          final place = await _resolvePlace(latLng.latitude, latLng.longitude);
+          final g = groups.putIfAbsent(
+            place,
+            () => _PhotoGroup(
+                place, latLng.latitude, latLng.longitude, asset.createDateTime),
+          );
+          g.urls.add(url);
+          if (asset.createDateTime.isBefore(g.takenAt)) {
+            g.takenAt = asset.createDateTime;
+          }
+        }
+      }
       if (mounted) setState(() => _uploadedCount++);
     }
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${_selected.length} check-in${_selected.length == 1 ? '' : 's'} added'),
+
+    final repo = ref.read(checkInRepositoryProvider);
+    for (final g in groups.values) {
+      await repo.createCheckIn(
+        CheckInDraft(
+          placeName: g.placeName,
+          lat: g.lat,
+          lng: g.lng,
+          source: CheckInSource.photo,
         ),
+        photoUrls: g.urls,
+        visitedAt: g.takenAt,
+      );
+    }
+
+    if (mounted) {
+      final n = groups.length;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$n check-in${n == 1 ? '' : 's'} added')),
       );
       context.pop();
     }
   }
 
-  /// Turn a geotagged photo into a private check-in (source = photo).
-  Future<void> _convertToCheckIn(
-      AssetEntity asset, CheckInRepository repo) async {
-    final latLng = await asset.latlngAsync();
-    if (latLng == null ||
-        (latLng.latitude == 0.0 && latLng.longitude == 0.0)) {
-      return;
-    }
-    final file = await asset.originFile;
-    final url = file == null ? null : await _photoService.uploadFile(file);
-
-    var placeName = 'Photo location';
+  Future<String> _resolvePlace(double lat, double lng) async {
     try {
-      final service =
-          ref.read(placeServiceForProvider(latLng.latitude, latLng.longitude));
-      final results =
-          await service.nearby(latLng.latitude, latLng.longitude);
-      if (results.isNotEmpty) placeName = results.first.name;
-    } catch (_) {/* keep fallback name */}
-
-    await repo.createCheckIn(
-      CheckInDraft(
-        placeName: placeName,
-        lat: latLng.latitude,
-        lng: latLng.longitude,
-        source: CheckInSource.photo,
-      ),
-      photoUrls: url != null ? [url] : const [],
-    );
+      final service = ref.read(placeServiceForProvider(lat, lng));
+      final results = await service.nearby(lat, lng);
+      if (results.isNotEmpty) return results.first.name;
+    } catch (_) {/* fall through */}
+    return 'Photo location';
   }
 
   @override

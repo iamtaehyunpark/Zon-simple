@@ -32,7 +32,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   List<RawLocationEvent> _route = [];
   List<Stamp> _followedStamps = [];
   List<CheckIn> _sharedCheckIns = [];
-  final List<List<double>> _livePath = [];
   bool _loading = false;
 
   DateTime get _today {
@@ -123,14 +122,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       ],
       color: _kFollowedOrange,
     );
+    await _drawLive();
   }
 
-  /// Live route line for the current foreground session.
+  /// Live route line for the current foreground session (path kept by the
+  /// tracker, so it survives map re-opens).
   Future<void> _drawLive() async {
     final map = _map;
-    if (map == null || _livePath.length < 2) return;
-    await drawLine(map, _livePath, kBrandGreen.toARGB32(),
-        idPrefix: 'live-route');
+    final path = ref.read(gpsNotifierProvider.notifier).sessionPath;
+    if (map == null || path.length < 2) return;
+    await drawLine(map, path, kBrandGreen.toARGB32(), idPrefix: 'live-route');
   }
 
   Future<void> _onMapTap(MapContentGestureContext context) async {
@@ -226,8 +227,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           MapAnimationOptions(duration: 800),
         );
       }
-      // Grow the live route as the user moves.
-      _livePath.add([pos.longitude, pos.latitude]);
+      // Grow the live route as the user moves (path is kept by the tracker).
       _drawLive();
     });
 

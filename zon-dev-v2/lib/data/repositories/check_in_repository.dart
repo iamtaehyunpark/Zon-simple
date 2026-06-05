@@ -25,9 +25,11 @@ class CheckInRepository with BaseRepository {
   CheckInRepository(this.client, {this.currentUserId});
 
   /// Create a check-in. [photoUrls] are already-uploaded storage URLs to attach.
+  /// [visitedAt] defaults to now (use the photo's taken time for photo imports).
   Future<Either<AppException, CheckIn>> createCheckIn(
     CheckInDraft draft, {
     List<String> photoUrls = const [],
+    DateTime? visitedAt,
   }) async {
     try {
       final userId = this.userId;
@@ -45,7 +47,7 @@ class CheckInRepository with BaseRepository {
             'note': draft.note,
             'source': draft.source.name,
             'tagged_user_ids': draft.taggedUserIds,
-            'visited_at': DateTime.now().toIso8601String(),
+            'visited_at': (visitedAt ?? DateTime.now()).toIso8601String(),
           })
           .select()
           .single();

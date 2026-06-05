@@ -18,6 +18,8 @@ GpsService gpsService(GpsServiceRef ref) => GpsService();
 @Riverpod(keepAlive: true)
 class GpsNotifier extends _$GpsNotifier {
   StreamSubscription<Position>? _sub;
+  /// In-memory path (lng,lat) of this foreground session — the live map line.
+  final List<List<double>> sessionPath = [];
   static const _uuid = Uuid();
 
   @override
@@ -42,6 +44,7 @@ class GpsNotifier extends _$GpsNotifier {
     _sub = service.startTracking().listen(
       (position) {
         state = AsyncValue.data(position);
+        sessionPath.add([position.longitude, position.latitude]);
         batcher.add(RawLocationEvent(
           id: _uuid.v4(),
           userId: '',
