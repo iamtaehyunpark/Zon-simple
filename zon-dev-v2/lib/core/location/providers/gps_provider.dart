@@ -30,13 +30,9 @@ class GpsNotifier extends _$GpsNotifier {
   // dropped (kept in memory across sessions so re-opens in place don't spam).
   double? _lastLat;
   double? _lastLng;
-  double? _lastAnchorLat;
-  double? _lastAnchorLng;
   static const _uuid = Uuid();
 
-  // A session must cover at least this much ground before it's worth anchoring,
-  // and the end point must be at least this far from the previous anchor.
-  static const double _kMinSessionMoveM = 50;
+  // Skip a new auto anchor only if today already has a check-in this close.
   static const double _kMinAnchorGapM = 80;
 
   @override
@@ -81,26 +77,23 @@ class GpsNotifier extends _$GpsNotifier {
     );
   }
 
-  /// Drop a passive auto check-in at the end of the tracked path — skipped if
-  /// the session barely moved, or it lands within [_kMinAnchorGapM] of the last
-  /// anchor (e.g. you opened and closed the app without leaving).
+  /// Drop a passive auto check-in at the end of the tracked path. Skipped only
+  /// if *today* already has a check-in within [_kMinAnchorGapM] — so re-opening
+  /// in place mid-day doesn't spam, but a new day always gets a fresh anchor
+  /// even when you haven't moved (the dedup window is per-day, DB-backed so it
+  /// survives app restarts).
   Future<void> _anchorPath() async {
     final lat = _lastLat, lng = _lastLng;
     if (lat == null || lng == null) return;
 
-    if (sessionPath.length >= 2) {
-      final start = sessionPath.first; // [lng, lat]
-      final moved =
-          Geolocator.distanceBetween(start[1], start[0], lat, lng);
-      if (moved < _kMinSessionMoveM) return;
-    }
-    if (_lastAnchorLat != null && _lastAnchorLng != null) {
-      final gap = Geolocator.distanceBetween(
-          _lastAnchorLat!, _lastAnchorLng!, lat, lng);
-      if (gap < _kMinAnchorGapM) return;
-    }
-    _lastAnchorLat = lat;
-    _lastAnchorLng = lng;
+    final repo = ref.read(checkInRepositoryProvider);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final res = await repo.getForDay(today);
+    final todays = res.fold((_) => const <CheckIn>[], (l) => l);
+    final nearbyToday = todays.any((c) =>
+        Geolocator.distanceBetween(c.lat, c.lng, lat, lng) < _kMinAnchorGapM);
+    if (nearbyToday) return;
 
     var name = 'On the move';
     try {
@@ -109,14 +102,14 @@ class GpsNotifier extends _$GpsNotifier {
       if (results.isNotEmpty) name = results.first.name;
     } catch (_) {/* keep fallback */}
 
-    await ref.read(checkInRepositoryProvider).createCheckIn(
-          CheckInDraft(
-            placeName: name,
-            lat: lat,
-            lng: lng,
-            source: CheckInSource.auto,
-          ),
-        );
+    await repo.createCheckIn(
+      CheckInDraft(
+        placeName: name,
+        lat: lat,
+        lng: lng,
+        source: CheckInSource.auto,
+      ),
+    );
   }
 
   Future<void> stopTracking() async {
