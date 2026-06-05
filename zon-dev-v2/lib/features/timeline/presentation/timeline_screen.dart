@@ -288,8 +288,12 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     });
   }
 
-  // Tap a stamp → its full page. Tap a check-in/note → toggle the inline editor.
-  void _onTapNode(_TlItem item) {
+  // Tap a node → just highlight it (same as tapping its pin on the map).
+  void _onTapNode(_TlItem item) => _highlight(item.id);
+
+  // Long-press → act on it: stamp opens its page; check-in/note opens the
+  // inline editor.
+  void _onLongPressNode(_TlItem item) {
     if (item.isStamp) {
       setState(() => _selectedId = item.id);
       _drawSelection();
@@ -580,6 +584,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 isToday: _isToday,
                 controller: _sheetController,
                 onTapItem: _onTapNode,
+                onLongPressItem: _onLongPressNode,
                 onSaveText: _saveText,
                 onAddPhotos: _addPhotosInline,
                 onMore: _moreCheckIn,
@@ -617,6 +622,7 @@ class _ListPanel extends StatelessWidget {
   final bool isToday;
   final DraggableScrollableController controller;
   final void Function(_TlItem) onTapItem;
+  final void Function(_TlItem) onLongPressItem;
   final void Function(_TlItem, String) onSaveText;
   final void Function(_TlItem) onAddPhotos;
   final void Function(_TlItem) onMore;
@@ -635,6 +641,7 @@ class _ListPanel extends StatelessWidget {
     required this.isToday,
     required this.controller,
     required this.onTapItem,
+    required this.onLongPressItem,
     required this.onSaveText,
     required this.onAddPhotos,
     required this.onMore,
@@ -745,23 +752,32 @@ class _ListPanel extends StatelessWidget {
                         final editable =
                             it.kind == _NodeKind.checkIn || it.isNote;
                         final editing = it.id == expandedId;
-                        final node = _TimelineNode(
+                        Widget head = _TimelineNode(
                           item: it,
                           isFirst: i == 0,
                           isLast: i == items.length - 1,
                           selected: it.id == selectedId,
+                          // Tap highlights; long-press edits / opens.
                           onTap: () => onTapItem(it),
+                          onLongPress: () => onLongPressItem(it),
                           // While editing a check-in, the original photo slide
                           // grows an Add button at its end (no second slide).
                           onAddPhoto: (it.kind == _NodeKind.checkIn && editing)
                               ? () => onAddPhotos(it)
                               : null,
+                          // Notes reorder via an explicit drag handle (long-press
+                          // is taken by editing).
+                          trailing: it.isNote
+                              ? ReorderableDragStartListener(
+                                  index: i,
+                                  child: const Padding(
+                                    padding: EdgeInsets.only(left: 4),
+                                    child: Icon(Icons.drag_handle,
+                                        size: 20, color: Colors.grey),
+                                  ),
+                                )
+                              : null,
                         );
-                        // Notes are long-press draggable; the inline editor is not.
-                        Widget head = it.isNote
-                            ? ReorderableDelayedDragStartListener(
-                                index: i, child: node)
-                            : node;
                         // Swipe left to delete a check-in / note.
                         if (editable) {
                           head = Dismissible(
@@ -831,16 +847,21 @@ class _TimelineNode extends StatelessWidget {
   final bool isLast;
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   // Non-null only while this check-in is being edited → the photo slide shows
   // an Add tile at its end.
   final VoidCallback? onAddPhoto;
+  // Optional trailing widget in the header row (e.g. a note's drag handle).
+  final Widget? trailing;
   const _TimelineNode({
     required this.item,
     required this.isFirst,
     required this.isLast,
     required this.selected,
     required this.onTap,
+    this.onLongPress,
     this.onAddPhoto,
+    this.trailing,
   });
 
   Color _color(ColorScheme scheme) {
@@ -880,6 +901,7 @@ class _TimelineNode extends StatelessWidget {
           : Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         child: IntrinsicHeight(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -942,6 +964,7 @@ class _TimelineNode extends StatelessWidget {
                               ),
                             ),
                             _KindChip(label: _label, color: color),
+                            if (trailing != null) trailing!,
                           ],
                         ),
                         const SizedBox(height: 2),
