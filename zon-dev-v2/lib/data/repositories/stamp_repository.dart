@@ -77,7 +77,9 @@ class StampRepository with BaseRepository {
               .select()
               .or('user_id.eq.$userId,user_id.in.(${followingIds.join(',')})');
       final data = await query
-          .order('visited_at', ascending: false)
+          // Feed is newest-posted first (when the stamp was generated), not
+          // by the visit time it records.
+          .order('created_at', ascending: false)
           .range(offset, offset + limit - 1);
       final stamps = data.map(_fromRow).toList();
       return right(await _withEngagement(stamps));
