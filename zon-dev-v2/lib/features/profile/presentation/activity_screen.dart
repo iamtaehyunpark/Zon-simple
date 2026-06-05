@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../shared/widgets/app_states.dart';
+import 'providers/profile_provider.dart';
 
 class ActivityScreen extends ConsumerStatefulWidget {
   const ActivityScreen({super.key});
@@ -68,20 +69,50 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final requests = ref.watch(followRequestsProvider).valueOrNull ?? const [];
+    final hasRequests = requests.isNotEmpty;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Activity')),
       body: _loading
           ? const LoadingView()
-          : _items.isEmpty
+          : (!hasRequests && _items.isEmpty)
               ? const EmptyView(
                   icon: Icons.notifications_none,
                   message: 'No activity yet',
                   subtitle: 'Likes, comments, follows and mentions land here.',
                 )
               : ListView.builder(
-                  itemCount: _items.length,
+                  itemCount: _items.length + (hasRequests ? 1 : 0),
                   itemBuilder: (ctx, i) {
-                    final n = _items[i];
+                    if (hasRequests && i == 0) {
+                      final first = requests.first;
+                      return Column(
+                        children: [
+                          ListTile(
+                            leading: CircleAvatar(
+                              backgroundImage: first.avatarUrl != null
+                                  ? CachedNetworkImageProvider(first.avatarUrl!)
+                                  : null,
+                              child: first.avatarUrl == null
+                                  ? const Icon(Icons.person_add_alt)
+                                  : null,
+                            ),
+                            title: const Text('Follow requests',
+                                style: TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: Text(
+                                '${requests.length} pending approval'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () async {
+                              await context.push('/follow-requests');
+                              ref.invalidate(followRequestsProvider);
+                            },
+                          ),
+                          const Divider(height: 1),
+                        ],
+                      );
+                    }
+                    final n = _items[i - (hasRequests ? 1 : 0)];
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundImage: n.actorAvatar != null

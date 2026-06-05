@@ -93,25 +93,6 @@ class ProfileScreen extends ConsumerWidget {
                 actions: isOwnProfile
                     ? [
                         IconButton(
-                          tooltip: 'Follow requests',
-                          icon: Consumer(builder: (ctx, ref, _) {
-                            final reqs = ref
-                                    .watch(followRequestsProvider)
-                                    .valueOrNull ??
-                                const [];
-                            return Badge(
-                              isLabelVisible: reqs.isNotEmpty,
-                              label: Text('${reqs.length}'),
-                              child: const Icon(Icons.person_add_alt_outlined),
-                            );
-                          }),
-                          onPressed: () async {
-                            await context.push('/follow-requests');
-                            ref.invalidate(followRequestsProvider);
-                            ref.invalidate(profileNotifierProvider(targetId));
-                          },
-                        ),
-                        IconButton(
                           icon: const Icon(Icons.bookmark_border),
                           tooltip: 'Saved',
                           onPressed: () => context.push('/saved'),

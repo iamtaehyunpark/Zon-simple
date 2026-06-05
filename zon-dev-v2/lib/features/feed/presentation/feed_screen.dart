@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/notifications/notification_service.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/repositories/notification_repository.dart';
+import '../../profile/presentation/providers/profile_provider.dart';
 import '../../../shared/widgets/app_states.dart';
 import '../../../shared/utils/format.dart';
 import '../../photo_import/presentation/providers/photo_suggestion_provider.dart';
@@ -17,8 +18,11 @@ class FeedScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feedState = ref.watch(feedNotifierProvider);
+    final requestCount =
+        (ref.watch(followRequestsProvider).valueOrNull ?? const []).length;
     final unread =
-        ref.watch(unreadNotificationCountProvider).valueOrNull ?? 0;
+        (ref.watch(unreadNotificationCountProvider).valueOrNull ?? 0) +
+            requestCount;
 
     return Scaffold(
       appBar: AppBar(
@@ -39,6 +43,7 @@ class FeedScreen extends ConsumerWidget {
             onPressed: () async {
               await context.push('/activity');
               ref.invalidate(unreadNotificationCountProvider);
+              ref.invalidate(followRequestsProvider);
             },
           ),
         ],
