@@ -119,6 +119,10 @@ Future<void> upsertLine(
   ));
 }
 
+/// Remove a polyline previously drawn with [drawLine] / [upsertLine].
+Future<void> removeLine(MapboxMap map, {String idPrefix = 'route'}) =>
+    _remove(map, '$idPrefix-source', '$idPrefix-layer');
+
 /// Draw (or clear, when [pin] is null) a ring highlighting the selected pin.
 Future<void> drawHighlight(MapboxMap map, MapPin? pin, int color) async {
   await _remove(map, 'highlight-source', 'highlight-layer');

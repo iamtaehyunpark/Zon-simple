@@ -58,6 +58,8 @@ class GpsNotifier extends _$GpsNotifier {
     }
     if (_sub != null) return; // guard against re-entrancy across the await
 
+    // Fresh session: the map shows only the path since this open.
+    sessionPath.clear();
     final batcher = ref.read(locationBatcherProvider);
     _sub = service.startTracking().listen(
       (position) {

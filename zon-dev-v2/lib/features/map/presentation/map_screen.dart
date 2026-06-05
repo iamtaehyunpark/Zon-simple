@@ -6,10 +6,8 @@ import 'package:intl/intl.dart';
 import '../../../app.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/check_in.dart';
-import '../../../data/models/raw_location_event.dart';
 import '../../../data/repositories/stamp_repository.dart';
 import '../../../data/repositories/check_in_repository.dart';
-import '../../../data/repositories/location_repository.dart';
 import '../../../core/location/providers/gps_provider.dart';
 import '../../../core/auth/auth_provider.dart';
 import 'map_drawing.dart';
@@ -28,7 +26,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   MapboxMap? _map;
   List<Stamp> _myStamps = [];
   List<CheckIn> _myCheckIns = [];
-  List<RawLocationEvent> _route = [];
   List<Stamp> _followedStamps = [];
   List<CheckIn> _sharedCheckIns = [];
   bool _loading = false;
@@ -53,12 +50,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final day = _today;
     final stampRepo = ref.read(stampRepositoryProvider);
     final checkInRepo = ref.read(checkInRepositoryProvider);
-    final locationRepo = ref.read(locationRepositoryProvider);
 
-    final (myStamps, myCheckIns, route, followedStamps, sharedCheckIns) = await (
+    final (myStamps, myCheckIns, followedStamps, sharedCheckIns) = await (
       stampRepo.getMyStampsForDay(day),
       checkInRepo.getForDay(day),
-      locationRepo.getRouteForDay(day),
       stampRepo.getFollowingStampsForDay(day),
       checkInRepo.getSharedCheckInsForDay(day),
     ).wait;
@@ -67,7 +62,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     setState(() {
       _myStamps = myStamps.getOrElse((_) => []);
       _myCheckIns = myCheckIns.getOrElse((_) => []);
-      _route = route.getOrElse((_) => []);
       _followedStamps = followedStamps.getOrElse((_) => []);
       _sharedCheckIns = sharedCheckIns.getOrElse((_) => []);
       _loading = false;
@@ -88,7 +82,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       debugPrint('puck: $e');
     }
 
-    await drawRouteLine(map, _route, kBrandGreen.toARGB32());
+    // The map page shows only the live path since the app was last opened; the
+    // full historical trace lives on the timeline map instead.
     await drawPins(
       map,
       sourceId: 'my-stamps-source',
@@ -145,8 +140,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   /// tracker, so it survives map re-opens).
   Future<void> _drawLive() async {
     final map = _map;
+    if (map == null) return;
     final path = ref.read(gpsNotifierProvider.notifier).sessionPath;
-    if (map == null || path.length < 2) return;
+    // A new session clears the path → drop any stale line from the last open.
+    if (path.length < 2) {
+      await removeLine(map, idPrefix: 'live-route');
+      return;
+    }
     await upsertLine(map, path, kBrandGreen.toARGB32(), idPrefix: 'live-route');
   }
 
