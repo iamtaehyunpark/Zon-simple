@@ -25,26 +25,6 @@ class PhotoStrip extends StatelessWidget {
       child: ListView(
         scrollDirection: Axis.horizontal,
         children: [
-          GestureDetector(
-            onTap: _add,
-            child: Container(
-              width: 80,
-              height: 80,
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade400),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.add_a_photo_outlined, color: Colors.grey),
-                  SizedBox(height: 4),
-                  Text('Add', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                ],
-              ),
-            ),
-          ),
           for (int i = 0; i < paths.length; i++)
             Padding(
               padding: const EdgeInsets.only(right: 8),
@@ -74,6 +54,26 @@ class PhotoStrip extends StatelessWidget {
                 ],
               ),
             ),
+          // Add button sits at the end of the row, next to the last photo.
+          GestureDetector(
+            onTap: _add,
+            child: Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade400),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.add_a_photo_outlined, color: Colors.grey),
+                  SizedBox(height: 4),
+                  Text('Add', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

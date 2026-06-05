@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../../app.dart';
 import '../../../core/photos/photo_service.dart';
@@ -66,6 +67,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   List<_TlItem> _items = const [];
   String _diary = '';
   String? _selectedId;
+  String? _expandedId; // node whose inline editor is open
   DayBundle? _bundle;
   DayBundle? _drawn;
 
@@ -286,18 +288,53 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     });
   }
 
-  void _openDetail(_TlItem item) {
-    setState(() => _selectedId = item.id);
-    _drawSelection();
-    switch (item.kind) {
-      case _NodeKind.stamp:
-        context.push('/stamp/${item.id}');
-      case _NodeKind.checkIn:
-        _showCheckInDetail(item.id);
-      case _NodeKind.note:
-        _editNote(item);
+  // Tap a stamp → its full page. Tap a check-in/note → toggle the inline editor.
+  void _onTapNode(_TlItem item) {
+    if (item.isStamp) {
+      setState(() => _selectedId = item.id);
+      _drawSelection();
+      context.push('/stamp/${item.id}');
+      return;
     }
+    setState(() {
+      _selectedId = item.id;
+      _expandedId = _expandedId == item.id ? null : item.id;
+    });
+    _drawSelection();
   }
+
+  Future<void> _saveText(_TlItem item, String text) async {
+    if (item.isNote) {
+      await ref.read(timelineNoteRepositoryProvider).update(item.id, text);
+    } else {
+      await ref
+          .read(checkInRepositoryProvider)
+          .updateCheckIn(item.id, {'note': text});
+    }
+    if (mounted) setState(() => _expandedId = null);
+    _reload();
+  }
+
+  Future<void> _addPhotosInline(_TlItem item) async {
+    final picked = await ImagePicker().pickMultiImage();
+    if (picked.isEmpty) return;
+    final service = PhotoService();
+    final urls = <String>[];
+    for (final x in picked) {
+      final u = await service.uploadFile(File(x.path));
+      if (u != null) urls.add(u);
+    }
+    await ref.read(checkInRepositoryProvider).addCheckInPhotos(item.id, urls);
+    _reload(); // editor stays open and shows the new photos
+  }
+
+  Future<void> _deleteNoteInline(_TlItem item) async {
+    await ref.read(timelineNoteRepositoryProvider).delete(item.id);
+    if (mounted) setState(() => _expandedId = null);
+    _reload();
+  }
+
+  void _moreCheckIn(_TlItem item) => _showCheckInDetail(item.id);
 
   Future<void> _showCheckInDetail(String id) async {
     final res = await ref.read(checkInRepositoryProvider).getCheckIn(id);
@@ -413,28 +450,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     _reload();
   }
 
-  Future<void> _editNote(_TlItem item) async {
-    final result = await showModalBottomSheet<({String body, DateTime at})>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _NoteSheet(
-        day: _day,
-        initialAt: item.time,
-        initialBody: item.text ?? '',
-        allowDelete: true,
-      ),
-    );
-    if (result == null) return;
-    final repo = ref.read(timelineNoteRepositoryProvider);
-    if (result.body == _kDeleteSentinel) {
-      await repo.delete(item.id);
-    } else {
-      await repo.update(item.id, result.body.trim());
-      await repo.setTime(item.id, result.at);
-    }
-    _reload();
-  }
-
   Future<void> _editDiary() async {
     final result = await showModalBottomSheet<String>(
       context: context,
@@ -537,11 +552,16 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 items: _items,
                 itemKeys: _itemKeys,
                 selectedId: _selectedId,
+                expandedId: _expandedId,
                 diary: _diary,
                 day: _day,
                 isToday: _isToday,
                 controller: _sheetController,
-                onTapItem: _openDetail,
+                onTapItem: _onTapNode,
+                onSaveText: _saveText,
+                onAddPhotos: _addPhotosInline,
+                onMore: _moreCheckIn,
+                onDeleteNote: _deleteNoteInline,
                 onAddNote: _addNote,
                 onEditDiary: _editDiary,
                 onReorder: _onReorder,
@@ -554,7 +574,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   }
 }
 
-const _kDeleteSentinel = ' __delete__';
 
 class _CheckInEdit {
   final String place;
@@ -570,11 +589,16 @@ class _ListPanel extends StatelessWidget {
   final List<_TlItem> items;
   final Map<String, GlobalKey> itemKeys;
   final String? selectedId;
+  final String? expandedId;
   final String diary;
   final DateTime day;
   final bool isToday;
   final DraggableScrollableController controller;
   final void Function(_TlItem) onTapItem;
+  final void Function(_TlItem, String) onSaveText;
+  final void Function(_TlItem) onAddPhotos;
+  final void Function(_TlItem) onMore;
+  final void Function(_TlItem) onDeleteNote;
   final VoidCallback onAddNote;
   final VoidCallback onEditDiary;
   final void Function(int oldIndex, int newIndex) onReorder;
@@ -583,11 +607,16 @@ class _ListPanel extends StatelessWidget {
     required this.items,
     required this.itemKeys,
     required this.selectedId,
+    required this.expandedId,
     required this.diary,
     required this.day,
     required this.isToday,
     required this.controller,
     required this.onTapItem,
+    required this.onSaveText,
+    required this.onAddPhotos,
+    required this.onMore,
+    required this.onDeleteNote,
     required this.onAddNote,
     required this.onEditDiary,
     required this.onReorder,
@@ -691,24 +720,42 @@ class _ListPanel extends StatelessWidget {
                       onReorderItem: onReorder,
                       itemBuilder: (ctx, i) {
                         final it = items[i];
-                        final node = KeyedSubtree(
-                          key: itemKeys[it.id]!,
-                          child: _TimelineNode(
-                            item: it,
-                            isFirst: i == 0,
-                            isLast: i == items.length - 1,
-                            selected: it.id == selectedId,
-                            onTap: () => onTapItem(it),
+                        final editable =
+                            it.kind == _NodeKind.checkIn || it.isNote;
+                        final node = _TimelineNode(
+                          item: it,
+                          isFirst: i == 0,
+                          isLast: i == items.length - 1,
+                          selected: it.id == selectedId,
+                          onTap: () => onTapItem(it),
+                        );
+                        // Notes are long-press draggable; the inline editor is not.
+                        final head = it.isNote
+                            ? ReorderableDelayedDragStartListener(
+                                index: i, child: node)
+                            : node;
+                        return KeyedSubtree(
+                          key: ValueKey(it.id),
+                          child: KeyedSubtree(
+                            key: itemKeys[it.id]!,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                head,
+                                if (editable && it.id == expandedId)
+                                  _InlineNodeEditor(
+                                    item: it,
+                                    onSave: (t) => onSaveText(it, t),
+                                    onAddPhotos:
+                                        it.isNote ? null : () => onAddPhotos(it),
+                                    onMore: it.isNote ? null : () => onMore(it),
+                                    onDelete:
+                                        it.isNote ? () => onDeleteNote(it) : null,
+                                  ),
+                              ],
+                            ),
                           ),
                         );
-                        if (it.isNote) {
-                          return ReorderableDelayedDragStartListener(
-                            key: ValueKey(it.id),
-                            index: i,
-                            child: node,
-                          );
-                        }
-                        return KeyedSubtree(key: ValueKey(it.id), child: node);
                       },
                     ),
                     SliverToBoxAdapter(
@@ -892,6 +939,120 @@ class _TimelineNode extends StatelessWidget {
   }
 }
 
+/// Inline editor shown under a tapped check-in / note node — quick note text
+/// plus (for check-ins) a photo row with the Add button at the end.
+class _InlineNodeEditor extends StatefulWidget {
+  final _TlItem item;
+  final void Function(String text) onSave;
+  final VoidCallback? onAddPhotos; // check-in only
+  final VoidCallback? onMore; // check-in only (full sheet)
+  final VoidCallback? onDelete; // note only
+  const _InlineNodeEditor({
+    required this.item,
+    required this.onSave,
+    this.onAddPhotos,
+    this.onMore,
+    this.onDelete,
+  });
+
+  @override
+  State<_InlineNodeEditor> createState() => _InlineNodeEditorState();
+}
+
+class _InlineNodeEditorState extends State<_InlineNodeEditor> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: widget.item.text ?? '');
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isCheckIn = !widget.item.isNote;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(50, 0, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            minLines: 1,
+            maxLines: 4,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => widget.onSave(_ctrl.text.trim()),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText:
+                  widget.item.isNote ? 'Edit note…' : 'Add a note…',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          if (isCheckIn && widget.onAddPhotos != null) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 64,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final url in widget.item.photoUrls)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                            imageUrl: url,
+                            width: 64,
+                            height: 64,
+                            fit: BoxFit.cover),
+                      ),
+                    ),
+                  GestureDetector(
+                    onTap: widget.onAddPhotos,
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade400),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.add_a_photo_outlined,
+                          color: Colors.grey),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (widget.onDelete != null)
+                TextButton.icon(
+                  onPressed: widget.onDelete,
+                  icon: const Icon(Icons.delete_outline,
+                      size: 18, color: Colors.red),
+                  label: const Text('Delete',
+                      style: TextStyle(color: Colors.red)),
+                ),
+              if (widget.onMore != null)
+                TextButton(onPressed: widget.onMore, child: const Text('More')),
+              const Spacer(),
+              FilledButton(
+                onPressed: () => widget.onSave(_ctrl.text.trim()),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _KindChip extends StatelessWidget {
   final String label;
   final Color color;
@@ -965,22 +1126,14 @@ class _DiaryCard extends StatelessWidget {
 class _NoteSheet extends StatefulWidget {
   final DateTime day;
   final DateTime initialAt;
-  final String initialBody;
-  final bool allowDelete;
-  const _NoteSheet({
-    required this.day,
-    required this.initialAt,
-    this.initialBody = '',
-    this.allowDelete = false,
-  });
+  const _NoteSheet({required this.day, required this.initialAt});
 
   @override
   State<_NoteSheet> createState() => _NoteSheetState();
 }
 
 class _NoteSheetState extends State<_NoteSheet> {
-  late final TextEditingController _ctrl =
-      TextEditingController(text: widget.initialBody);
+  final TextEditingController _ctrl = TextEditingController();
   late TimeOfDay _time = TimeOfDay.fromDateTime(widget.initialAt);
 
   @override
@@ -1006,8 +1159,7 @@ class _NoteSheetState extends State<_NoteSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(widget.allowDelete ? 'Edit note' : 'Add a note',
-              style: Theme.of(context).textTheme.titleMedium),
+          Text('Add a note', style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 12),
           TextField(
             controller: _ctrl,
@@ -1031,14 +1183,6 @@ class _NoteSheetState extends State<_NoteSheet> {
           const SizedBox(height: 8),
           Row(
             children: [
-              if (widget.allowDelete)
-                TextButton.icon(
-                  onPressed: () => Navigator.pop(
-                      context, (body: _kDeleteSentinel, at: _at)),
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  label: const Text('Delete',
-                      style: TextStyle(color: Colors.red)),
-                ),
               const Spacer(),
               FilledButton(
                 onPressed: _ctrl.text.trim().isEmpty
