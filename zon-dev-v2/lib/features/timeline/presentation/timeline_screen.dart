@@ -554,10 +554,23 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   Future<void> _submitNote(String body) async {
     final text = body.trim();
     if (text.isEmpty) return;
-    // Always use the current wall-clock time of day applied to _day, so notes
-    // added to past days still land at a meaningful time (not a fixed noon).
+    // Default to current wall-clock time on _day, but never before the last
+    // check-in/stamp — notes must appear after visits in the timeline.
     final now = DateTime.now();
-    final at = DateTime(_day.year, _day.month, _day.day, now.hour, now.minute, now.second);
+    var at = DateTime(_day.year, _day.month, _day.day, now.hour, now.minute, now.second);
+    final bundle = _bundle;
+    if (bundle != null) {
+      DateTime? lastVisit;
+      for (final c in bundle.checkIns) {
+        if (lastVisit == null || c.visitedAt.isAfter(lastVisit)) lastVisit = c.visitedAt;
+      }
+      for (final s in bundle.stamps) {
+        if (lastVisit == null || s.visitedAt.isAfter(lastVisit)) lastVisit = s.visitedAt;
+      }
+      if (lastVisit != null && lastVisit.isAfter(at)) {
+        at = lastVisit.add(const Duration(minutes: 1));
+      }
+    }
     await ref.read(timelineNoteRepositoryProvider).add(_day, text, at);
     _reload();
   }
