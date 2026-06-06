@@ -12,6 +12,7 @@ import 'features/feed/presentation/stamp_detail_screen.dart';
 import 'features/feed/presentation/edit_stamp_screen.dart';
 import 'features/map/presentation/map_screen.dart';
 import 'features/checkin/presentation/checkin_entry.dart';
+import 'features/checkin/presentation/check_in_detail_screen.dart';
 import 'features/checkin/presentation/providers/checkin_provider.dart';
 import 'features/timeline/presentation/timeline_screen.dart';
 import 'features/profile/presentation/profile_screen.dart';
@@ -97,6 +98,12 @@ final _routerProvider = Provider<GoRouter>((ref) {
             fromCheckInId: state.uri.queryParameters['fromCheckIn'],
           ),
         ),
+      ),
+      GoRoute(
+        path: '/check-in/:id',
+        name: 'checkin-detail',
+        builder: (ctx, state) =>
+            CheckInDetailScreen(checkInId: state.pathParameters['id']!),
       ),
       GoRoute(
         path: '/stamp/:id',

@@ -584,18 +584,32 @@ class _CheckInSheet extends StatelessWidget {
                 style: const TextStyle(color: Colors.grey)),
             if (checkIn.note != null && checkIn.note!.isNotEmpty) ...[
               const SizedBox(height: 8),
-              Text(checkIn.note!),
+              Text(checkIn.note!,
+                  maxLines: 2, overflow: TextOverflow.ellipsis),
             ],
-            if (onPromote != null) ...[
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: onPromote,
-                  child: const Text('Make a stamp'),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      context.push('/check-in/${checkIn.id}');
+                    },
+                    child: const Text('View details'),
+                  ),
                 ),
-              ),
-            ],
+                if (onPromote != null) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: onPromote,
+                      child: const Text('Make a stamp'),
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
