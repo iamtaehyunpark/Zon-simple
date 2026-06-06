@@ -116,21 +116,6 @@ class CheckInRepository with BaseRepository {
     }
   }
 
-  /// Followed users' shared check-ins for [date] (gated by location sharing).
-  Future<Either<AppException, List<CheckIn>>> getSharedCheckInsForDay(
-      DateTime date) async {
-    try {
-      final userId = this.userId;
-      if (userId == null) return left(const AuthError('Unauthorized'));
-      final data = await client.rpc('shared_check_ins_for_day', params: {
-        'p_date': date.toIso8601String().substring(0, 10),
-      });
-      return right((data as List).map((r) => _fromRow(r)).toList());
-    } catch (e) {
-      return left(NetworkError(e.toString()));
-    }
-  }
-
   /// Last-24h public check-ins from people the viewer follows (map layer).
   /// Separate from getStories() which groups by author for the feed rail.
   Future<Either<AppException, List<CheckIn>>> getFollowingPublicCheckIns() async {
