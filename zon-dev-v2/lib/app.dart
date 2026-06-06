@@ -25,6 +25,7 @@ import 'features/profile/presentation/friend_requests_screen.dart';
 import 'features/profile/presentation/activity_screen.dart';
 import 'features/feed/presentation/saved_stamps_screen.dart';
 import 'features/photo_import/presentation/photo_suggestion_screen.dart';
+import 'features/settings/presentation/location_visibility_screen.dart';
 
 const kBrandGreen = Color(0xFF1D9E75);
 
@@ -165,6 +166,11 @@ final _routerProvider = Provider<GoRouter>((ref) {
         path: '/friend-requests',
         name: 'friend-requests',
         builder: (_, __) => const FriendRequestsScreen(),
+      ),
+      GoRoute(
+        path: '/location-visibility',
+        name: 'location-visibility',
+        builder: (_, __) => const LocationVisibilityScreen(),
       ),
       GoRoute(
         path: '/profile/:id/friends',

@@ -2,12 +2,14 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../core/photos/photo_service.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/privacy_repository.dart';
+import '../../../data/repositories/location_sharing_repository.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -22,6 +24,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _bioCtrl = TextEditingController();
   String? _avatarUrl;
   bool _isPrivate = false;
+  bool _isGhostMode = false;
   UserPrivacy _privacy = const UserPrivacy();
   bool _loading = true;
   bool _savingProfile = false;
@@ -41,8 +44,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _load() async {
-    final profileRes = await ref.read(profileRepositoryProvider).getMyProfile();
-    final privacyRes = await ref.read(privacyRepositoryProvider).getMyPrivacy();
+    final locRepo = ref.read(locationSharingRepositoryProvider);
+    final (profileRes, privacyRes, ghostMode) = await (
+      ref.read(profileRepositoryProvider).getMyProfile(),
+      ref.read(privacyRepositoryProvider).getMyPrivacy(),
+      locRepo.getGhostMode(),
+    ).wait;
     profileRes.fold((_) {}, (p) {
       _usernameCtrl.text = p.username;
       _displayNameCtrl.text = p.displayName ?? '';
@@ -51,7 +58,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _isPrivate = p.isPrivate;
     });
     privacyRes.fold((_) {}, (pr) => _privacy = pr);
-    if (mounted) setState(() => _loading = false);
+    if (mounted) {
+      setState(() {
+        _isGhostMode = ghostMode;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _pickAvatar() async {
@@ -178,8 +190,48 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
                 const Divider(height: 40),
 
-                // ── Privacy & location ────────────────────────
-                Text('Privacy & location',
+                // ── Snap Map location sharing ──────────────────
+                Text('Location sharing',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: Icon(
+                    _isGhostMode
+                        ? Icons.visibility_off
+                        : Icons.location_on,
+                    color: _isGhostMode ? Colors.grey : null,
+                  ),
+                  title: const Text('Ghost Mode'),
+                  subtitle: Text(_isGhostMode
+                      ? 'Your location is hidden from all friends'
+                      : 'Mutual friends can see your live location'),
+                  value: _isGhostMode,
+                  onChanged: (v) async {
+                    setState(() => _isGhostMode = v);
+                    await ref
+                        .read(locationSharingRepositoryProvider)
+                        .setGhostMode(v);
+                    ref.invalidate(ghostModeProvider);
+                  },
+                ),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.people_outline),
+                  title: const Text('Who can see my location'),
+                  subtitle: const Text(
+                      'Hide your location from specific friends'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _isGhostMode
+                      ? null
+                      : () => context.push('/location-visibility'),
+                  enabled: !_isGhostMode,
+                ),
+
+                const Divider(height: 32),
+
+                // ── Privacy & account ──────────────────────────
+                Text('Privacy & account',
                     style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 SwitchListTile(
@@ -211,7 +263,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Share my location on the map'),
+                  title: const Text('Share my trail on the map'),
                   subtitle: const Text(
                       'Let people you follow see your check-ins & route today'),
                   value: _privacy.locationSharingEnabled,
