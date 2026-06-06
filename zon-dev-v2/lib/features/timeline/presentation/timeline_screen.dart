@@ -514,14 +514,16 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
           'photoUrls': s.photoUrls,
         });
       }
+      // Check-ins are not included as location events — only their note text
+      // is surfaced (if present), anonymised as a plain timestamped note.
       for (final c in bundle.checkIns) {
-        if (c.source == CheckInSource.auto) continue;
+        final note = c.note?.trim() ?? '';
+        if (note.isEmpty) continue;
         events.add({
-          'type': 'checkin',
+          'type': 'note',
           'time': _hhmm(c.visitedAt),
-          'place': c.placeName,
-          if (c.note != null && c.note!.isNotEmpty) 'note': c.note,
-          'photoUrls': c.photoUrls,
+          'note': note,
+          'photoUrls': const <String>[],
         });
       }
       for (final n in bundle.notes) {
