@@ -17,7 +17,6 @@ _$UserProfileImpl _$$UserProfileImplFromJson(Map<String, dynamic> json) =>
       friendCount: (json['friendCount'] as num?)?.toInt() ?? 0,
       followerCount: (json['followerCount'] as num?)?.toInt() ?? 0,
       followingCount: (json['followingCount'] as num?)?.toInt() ?? 0,
-      isFollowing: json['isFollowing'] as bool? ?? false,
       isPrivate: json['isPrivate'] as bool? ?? false,
       createdAt: json['createdAt'] == null
           ? null
@@ -35,7 +34,6 @@ Map<String, dynamic> _$$UserProfileImplToJson(_$UserProfileImpl instance) =>
       'friendCount': instance.friendCount,
       'followerCount': instance.followerCount,
       'followingCount': instance.followingCount,
-      'isFollowing': instance.isFollowing,
       'isPrivate': instance.isPrivate,
       'createdAt': instance.createdAt?.toIso8601String(),
     };

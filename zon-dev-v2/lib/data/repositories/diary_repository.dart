@@ -20,8 +20,6 @@ class DiaryRepository with BaseRepository {
   final String? currentUserId;
   DiaryRepository(this.client, {this.currentUserId});
 
-  String _date(DateTime d) => d.toIso8601String().substring(0, 10);
-
   Future<String> getDiary(DateTime date) async {
     final uid = userId;
     if (uid == null) return '';
@@ -30,7 +28,7 @@ class DiaryRepository with BaseRepository {
           .from('day_diaries')
           .select('body')
           .eq('user_id', uid)
-          .eq('date', _date(date))
+          .eq('date', isoDate(date))
           .maybeSingle();
       return (row?['body'] as String?) ?? '';
     } catch (_) {
@@ -43,7 +41,7 @@ class DiaryRepository with BaseRepository {
     if (uid == null) return;
     await client.from('day_diaries').upsert({
       'user_id': uid,
-      'date': _date(date),
+      'date': isoDate(date),
       'body': body,
       'updated_at': DateTime.now().toIso8601String(),
     });

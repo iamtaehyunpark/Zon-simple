@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:fpdart/fpdart.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -122,12 +123,7 @@ class CheckInRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      final follows = await client
-          .from('follows')
-          .select('following_id')
-          .eq('follower_id', userId)
-          .eq('status', 'accepted');
-      final ids = [for (final r in follows) r['following_id'] as String];
+      final ids = await getFollowingIds(userId);
       if (ids.isEmpty) return right([]);
       final since = DateTime.now().subtract(const Duration(hours: 24));
       final data = await client
@@ -152,15 +148,8 @@ class CheckInRepository with BaseRepository {
     final userId = this.userId;
     if (userId == null) return [];
     try {
-      final follows = await client
-          .from('follows')
-          .select('following_id')
-          .eq('follower_id', userId)
-          .eq('status', 'accepted');
-      final ids = {
-        userId,
-        for (final r in follows) r['following_id'] as String,
-      }.toList();
+      final followingIds = await getFollowingIds(userId);
+      final ids = {userId, ...followingIds}.toList();
       final since = DateTime.now().subtract(const Duration(hours: 24));
       final rows = await client
           .from('check_ins')
@@ -200,7 +189,8 @@ class CheckInRepository with BaseRepository {
         return 0; // already in most-recent order from the query
       });
       return stories;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('getStories: $e');
       return [];
     }
   }

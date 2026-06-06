@@ -77,11 +77,10 @@ class _EditStampScreenState extends ConsumerState<EditStampScreen> {
     for (final id in _removedIds) {
       await repo.deletePhoto(id);
     }
-    final newUrls = <String>[];
-    for (final p in _newPaths) {
-      final u = await photoService.uploadFile(File(p));
-      if (u != null) newUrls.add(u);
-    }
+    final uploadResults = await Future.wait([
+      for (final p in _newPaths) photoService.uploadFile(File(p)),
+    ]);
+    final newUrls = [for (final u in uploadResults) if (u != null) u];
     await repo.addStampPhotos(widget.stampId, newUrls);
 
     final remaining =

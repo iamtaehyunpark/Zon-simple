@@ -31,8 +31,6 @@ class TimelineNoteRepository with BaseRepository {
   final String? currentUserId;
   TimelineNoteRepository(this.client, {this.currentUserId});
 
-  String _date(DateTime d) => d.toIso8601String().substring(0, 10);
-
   Future<List<TimelineNote>> getForDay(DateTime date) async {
     final uid = userId;
     if (uid == null) return [];
@@ -41,7 +39,7 @@ class TimelineNoteRepository with BaseRepository {
           .from('timeline_notes')
           .select()
           .eq('user_id', uid)
-          .eq('date', _date(date))
+          .eq('date', isoDate(date))
           .order('noted_at', ascending: true);
       return [
         for (final r in rows)
@@ -61,7 +59,7 @@ class TimelineNoteRepository with BaseRepository {
     if (uid == null) return;
     await client.from('timeline_notes').insert({
       'user_id': uid,
-      'date': _date(date),
+      'date': isoDate(date),
       'body': body,
       'noted_at': notedAt.toIso8601String(),
     });

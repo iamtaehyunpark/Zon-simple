@@ -47,7 +47,7 @@ class StampRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      final followingIds = await _getFollowingIds(userId);
+      final followingIds = await getFollowingIds(userId);
       if (followingIds.isEmpty) return right([]);
       final data = await client
           .from('v_feed_stamps')
@@ -69,7 +69,7 @@ class StampRepository with BaseRepository {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
-      final followingIds = await _getFollowingIds(userId);
+      final followingIds = await getFollowingIds(userId);
       final query = followingIds.isEmpty
           ? client.from('v_feed_stamps').select()
           : client
@@ -88,20 +88,7 @@ class StampRepository with BaseRepository {
     }
   }
 
-  Future<List<String>> _getFollowingIds(String userId) async {
-    try {
-      final data = await client
-          .from('follows')
-          .select('following_id')
-          .eq('follower_id', userId)
-          .eq('status', 'accepted');
-      return data.map((r) => r['following_id'] as String).toList();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  Future<Either<AppException, List<Stamp>>> getUserStamps(
+Future<Either<AppException, List<Stamp>>> getUserStamps(
     String userId, {
     bool publicOnly = true,
     int limit = 30,

@@ -15,7 +15,6 @@ class UserProfile with _$UserProfile {
     @Default(0) int friendCount,
     @Default(0) int followerCount,
     @Default(0) int followingCount,
-    @Default(false) bool isFollowing,
     @Default(false) bool isPrivate,
     DateTime? createdAt,
   }) = _UserProfile;

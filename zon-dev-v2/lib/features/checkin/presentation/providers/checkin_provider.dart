@@ -294,12 +294,11 @@ class CheckinNotifier extends _$CheckinNotifier {
   }
 
   Future<List<String>> _uploadAll(PhotoService service, List<String> paths) async {
-    final urls = <String>[];
-    for (final p in paths) {
-      final url = await service.uploadFile(File(p));
-      if (url != null) urls.add(url);
-    }
-    return urls;
+    if (paths.isEmpty) return [];
+    final results = await Future.wait([
+      for (final p in paths) service.uploadFile(File(p)),
+    ]);
+    return [for (final url in results) if (url != null) url];
   }
 
   void reset() => state = const CheckinState.idle();

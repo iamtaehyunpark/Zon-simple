@@ -341,11 +341,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     final picked = await ImagePicker().pickMultiImage();
     if (picked.isEmpty) return;
     final service = PhotoService();
-    final urls = <String>[];
-    for (final x in picked) {
-      final u = await service.uploadFile(File(x.path));
-      if (u != null) urls.add(u);
-    }
+    final results = await Future.wait([
+      for (final x in picked) service.uploadFile(File(x.path)),
+    ]);
+    final urls = [for (final u in results) if (u != null) u];
     await ref.read(checkInRepositoryProvider).addCheckInPhotos(item.id, urls);
     _reload(); // editor stays open and shows the new photos
   }
@@ -426,12 +425,11 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     for (final pid in result.removedPhotoIds) {
       await repo.deletePhoto(pid);
     }
-    final urls = <String>[];
     final photoService = PhotoService();
-    for (final p in result.newPaths) {
-      final u = await photoService.uploadFile(File(p));
-      if (u != null) urls.add(u);
-    }
+    final uploadResults = await Future.wait([
+      for (final p in result.newPaths) photoService.uploadFile(File(p)),
+    ]);
+    final urls = [for (final u in uploadResults) if (u != null) u];
     await repo.addCheckInPhotos(ci.id, urls);
     await repo.updateCheckIn(ci.id, {
       'place_name': result.place,

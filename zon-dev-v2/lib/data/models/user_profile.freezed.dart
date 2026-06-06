@@ -29,7 +29,6 @@ mixin _$UserProfile {
   int get friendCount => throw _privateConstructorUsedError;
   int get followerCount => throw _privateConstructorUsedError;
   int get followingCount => throw _privateConstructorUsedError;
-  bool get isFollowing => throw _privateConstructorUsedError;
   bool get isPrivate => throw _privateConstructorUsedError;
   DateTime? get createdAt => throw _privateConstructorUsedError;
 
@@ -59,7 +58,6 @@ abstract class $UserProfileCopyWith<$Res> {
       int friendCount,
       int followerCount,
       int followingCount,
-      bool isFollowing,
       bool isPrivate,
       DateTime? createdAt});
 }
@@ -88,7 +86,6 @@ class _$UserProfileCopyWithImpl<$Res, $Val extends UserProfile>
     Object? friendCount = null,
     Object? followerCount = null,
     Object? followingCount = null,
-    Object? isFollowing = null,
     Object? isPrivate = null,
     Object? createdAt = freezed,
   }) {
@@ -129,10 +126,6 @@ class _$UserProfileCopyWithImpl<$Res, $Val extends UserProfile>
           ? _value.followingCount
           : followingCount // ignore: cast_nullable_to_non_nullable
               as int,
-      isFollowing: null == isFollowing
-          ? _value.isFollowing
-          : isFollowing // ignore: cast_nullable_to_non_nullable
-              as bool,
       isPrivate: null == isPrivate
           ? _value.isPrivate
           : isPrivate // ignore: cast_nullable_to_non_nullable
@@ -163,7 +156,6 @@ abstract class _$$UserProfileImplCopyWith<$Res>
       int friendCount,
       int followerCount,
       int followingCount,
-      bool isFollowing,
       bool isPrivate,
       DateTime? createdAt});
 }
@@ -190,7 +182,6 @@ class __$$UserProfileImplCopyWithImpl<$Res>
     Object? friendCount = null,
     Object? followerCount = null,
     Object? followingCount = null,
-    Object? isFollowing = null,
     Object? isPrivate = null,
     Object? createdAt = freezed,
   }) {
@@ -231,10 +222,6 @@ class __$$UserProfileImplCopyWithImpl<$Res>
           ? _value.followingCount
           : followingCount // ignore: cast_nullable_to_non_nullable
               as int,
-      isFollowing: null == isFollowing
-          ? _value.isFollowing
-          : isFollowing // ignore: cast_nullable_to_non_nullable
-              as bool,
       isPrivate: null == isPrivate
           ? _value.isPrivate
           : isPrivate // ignore: cast_nullable_to_non_nullable
@@ -260,7 +247,6 @@ class _$UserProfileImpl implements _UserProfile {
       this.friendCount = 0,
       this.followerCount = 0,
       this.followingCount = 0,
-      this.isFollowing = false,
       this.isPrivate = false,
       this.createdAt});
 
@@ -291,16 +277,13 @@ class _$UserProfileImpl implements _UserProfile {
   final int followingCount;
   @override
   @JsonKey()
-  final bool isFollowing;
-  @override
-  @JsonKey()
   final bool isPrivate;
   @override
   final DateTime? createdAt;
 
   @override
   String toString() {
-    return 'UserProfile(id: $id, username: $username, displayName: $displayName, avatarUrl: $avatarUrl, bio: $bio, stampCount: $stampCount, friendCount: $friendCount, followerCount: $followerCount, followingCount: $followingCount, isFollowing: $isFollowing, isPrivate: $isPrivate, createdAt: $createdAt)';
+    return 'UserProfile(id: $id, username: $username, displayName: $displayName, avatarUrl: $avatarUrl, bio: $bio, stampCount: $stampCount, friendCount: $friendCount, followerCount: $followerCount, followingCount: $followingCount, isPrivate: $isPrivate, createdAt: $createdAt)';
   }
 
   @override
@@ -324,8 +307,6 @@ class _$UserProfileImpl implements _UserProfile {
                 other.followerCount == followerCount) &&
             (identical(other.followingCount, followingCount) ||
                 other.followingCount == followingCount) &&
-            (identical(other.isFollowing, isFollowing) ||
-                other.isFollowing == isFollowing) &&
             (identical(other.isPrivate, isPrivate) ||
                 other.isPrivate == isPrivate) &&
             (identical(other.createdAt, createdAt) ||
@@ -345,7 +326,6 @@ class _$UserProfileImpl implements _UserProfile {
       friendCount,
       followerCount,
       followingCount,
-      isFollowing,
       isPrivate,
       createdAt);
 
@@ -376,7 +356,6 @@ abstract class _UserProfile implements UserProfile {
       final int friendCount,
       final int followerCount,
       final int followingCount,
-      final bool isFollowing,
       final bool isPrivate,
       final DateTime? createdAt}) = _$UserProfileImpl;
 
@@ -401,8 +380,6 @@ abstract class _UserProfile implements UserProfile {
   int get followerCount;
   @override
   int get followingCount;
-  @override
-  bool get isFollowing;
   @override
   bool get isPrivate;
   @override
