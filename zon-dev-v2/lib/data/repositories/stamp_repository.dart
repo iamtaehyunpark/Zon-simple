@@ -39,23 +39,23 @@ class StampRepository with BaseRepository {
     }
   }
 
-  /// Public stamps from people the user follows, for a given day (map/social).
-  Future<Either<AppException, List<Stamp>>> getFollowingStampsForDay(
-      DateTime day) async {
+  /// Public stamps from people the user follows within [from, to) (map layer).
+  Future<Either<AppException, List<Stamp>>> getFollowingStamps({
+    required DateTime from,
+    required DateTime to,
+  }) async {
     try {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
       final followingIds = await _getFollowingIds(userId);
       if (followingIds.isEmpty) return right([]);
-      final start = DateTime(day.year, day.month, day.day);
-      final end = start.add(const Duration(days: 1));
       final data = await client
           .from('v_feed_stamps')
           .select()
           .inFilter('user_id', followingIds)
-          .gte('visited_at', start.toIso8601String())
-          .lt('visited_at', end.toIso8601String())
-          .order('visited_at', ascending: true);
+          .gte('visited_at', from.toIso8601String())
+          .lt('visited_at', to.toIso8601String())
+          .order('visited_at', ascending: false);
       return right(data.map(_fromRow).toList());
     } catch (e) {
       return left(NetworkError(e.toString()));

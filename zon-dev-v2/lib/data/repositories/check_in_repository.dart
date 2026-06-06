@@ -131,6 +131,35 @@ class CheckInRepository with BaseRepository {
     }
   }
 
+  /// Last-24h public check-ins from people the viewer follows (map layer).
+  /// Separate from getStories() which groups by author for the feed rail.
+  Future<Either<AppException, List<CheckIn>>> getFollowingPublicCheckIns() async {
+    try {
+      final userId = this.userId;
+      if (userId == null) return left(const AuthError('Unauthorized'));
+      final follows = await client
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', userId)
+          .eq('status', 'accepted');
+      final ids = [for (final r in follows) r['following_id'] as String];
+      if (ids.isEmpty) return right([]);
+      final since = DateTime.now().subtract(const Duration(hours: 24));
+      final data = await client
+          .from('check_ins')
+          .select()
+          .inFilter('user_id', ids)
+          .eq('visibility', 'public')
+          .gte('visited_at', since.toIso8601String())
+          .order('visited_at', ascending: false);
+      return right((data as List)
+          .map((r) => _fromRow(r as Map<String, dynamic>))
+          .toList());
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
   /// Recent (last 24h) public check-ins from people you follow + yourself,
   /// grouped per author for the feed "stories" rail. Your own story sorts first;
   /// others by most-recent activity.
