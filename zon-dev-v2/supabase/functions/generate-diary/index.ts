@@ -101,9 +101,9 @@ Deno.serve(async (req: Request) => {
       model: 'gemini-3.1-flash-lite',
       systemInstruction:
         "You are a personal diary writing assistant. Given a list of activities and optional photos from the user's day, " +
-        'write a warm, reflective first-person diary entry. Write 2–4 paragraphs. ' +
-        'Be specific about what they experienced — use details from the photos and activity descriptions. ' +
-        'Do not list events mechanically. Do not start with "Dear Diary". Write in a natural, personal voice.',
+        'write a first-person diary entry. Write 2–4 paragraphs. ' +
+        'Use details from the photos and activity descriptions. ' +
+        'Do not list events mechanically. Write in a natural voice.',
       generationConfig: { maxOutputTokens: 600 },
     });
 

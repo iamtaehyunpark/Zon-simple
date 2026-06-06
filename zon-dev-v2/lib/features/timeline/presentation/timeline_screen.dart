@@ -402,6 +402,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
           Navigator.pop(ctx);
           _deleteCheckIn(ci);
         },
+        onMerge: () {
+          Navigator.pop(ctx);
+          _mergeCheckIn(ci);
+        },
         onViewStamp: ci.stampId != null
             ? () {
                 Navigator.pop(ctx);
@@ -441,6 +445,78 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     _reload();
   }
 
+  Future<void> _mergeCheckIn(CheckIn keep) async {
+    // Collect other manual check-ins from the same day as merge candidates.
+    final candidates = (_bundle?.checkIns ?? [])
+        .where((c) => c.id != keep.id && c.source != CheckInSource.auto)
+        .toList()
+      ..sort((a, b) => a.visitedAt.compareTo(b.visitedAt));
+
+    if (candidates.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No other check-ins to merge with today')),
+        );
+      }
+      return;
+    }
+
+    final into = await showModalBottomSheet<CheckIn>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('Merge "${keep.placeName}" into…',
+                  style: Theme.of(ctx).textTheme.titleMedium),
+            ),
+            const Divider(height: 1),
+            for (final c in candidates)
+              ListTile(
+                leading: const Icon(Icons.pin_drop_outlined),
+                title: Text(c.placeName),
+                subtitle: Text(DateFormat('h:mm a').format(c.visitedAt)),
+                onTap: () => Navigator.pop(ctx, c),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (into == null || !mounted) return;
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Merge check-ins?'),
+        content: Text(
+            'Photos and notes from "${keep.placeName}" will be added to '
+            '"${into.placeName}". "${keep.placeName}" will be deleted.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Merge')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+
+    final result = await ref
+        .read(checkInRepositoryProvider)
+        .mergeCheckIns(into.id, keep.id);
+    result.fold(
+      (e) => ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Merge failed: $e'))),
+      (_) => _reload(),
+    );
+  }
+
   Future<void> _deleteCheckIn(CheckIn ci) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -478,9 +554,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   Future<void> _submitNote(String body) async {
     final text = body.trim();
     if (text.isEmpty) return;
-    final at = _isToday
-        ? DateTime.now()
-        : DateTime(_day.year, _day.month, _day.day, 12);
+    // Always use the current wall-clock time of day applied to _day, so notes
+    // added to past days still land at a meaningful time (not a fixed noon).
+    final now = DateTime.now();
+    final at = DateTime(_day.year, _day.month, _day.day, now.hour, now.minute, now.second);
     await ref.read(timelineNoteRepositoryProvider).add(_day, text, at);
     _reload();
   }
@@ -1642,12 +1719,14 @@ class _CheckInDetailSheet extends StatelessWidget {
   final VoidCallback onPromote;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onMerge;
   final VoidCallback? onViewStamp;
   const _CheckInDetailSheet({
     required this.checkIn,
     required this.onPromote,
     required this.onEdit,
     required this.onDelete,
+    required this.onMerge,
     this.onViewStamp,
   });
 
@@ -1670,6 +1749,10 @@ class _CheckInDetailSheet extends StatelessWidget {
                 ),
                 IconButton(
                     icon: const Icon(Icons.edit_outlined), onPressed: onEdit),
+                IconButton(
+                    icon: const Icon(Icons.merge_outlined),
+                    tooltip: 'Merge into…',
+                    onPressed: onMerge),
                 IconButton(
                     icon:
                         const Icon(Icons.delete_outline, color: Colors.red),

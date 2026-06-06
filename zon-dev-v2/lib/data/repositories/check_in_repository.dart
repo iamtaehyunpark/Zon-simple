@@ -239,6 +239,43 @@ class CheckInRepository with BaseRepository {
     }
   }
 
+  /// Absorb [intoId] into [keepId]: re-point photos, append note, delete [intoId].
+  /// The caller decides which is "keep" (typically the earlier / primary one).
+  Future<Either<AppException, Unit>> mergeCheckIns(
+      String keepId, String intoId) async {
+    try {
+      // 1. Move photos
+      await client
+          .from('photos')
+          .update({'check_in_id': keepId})
+          .eq('check_in_id', intoId);
+
+      // 2. Append note
+      final rows = await client
+          .from('check_ins')
+          .select('note')
+          .inFilter('id', [keepId, intoId]);
+      final noteFor = {for (final r in rows) r['id'] as String: r['note'] as String?};
+      final intoNote = noteFor[intoId]?.trim() ?? '';
+      if (intoNote.isNotEmpty) {
+        final keepNote = noteFor[keepId]?.trim() ?? '';
+        final merged = [keepNote, intoNote]
+            .where((n) => n.isNotEmpty)
+            .join('\n');
+        await client
+            .from('check_ins')
+            .update({'note': merged, 'updated_at': DateTime.now().toIso8601String()})
+            .eq('id', keepId);
+      }
+
+      // 3. Delete absorbed check-in
+      await client.from('check_ins').delete().eq('id', intoId);
+      return right(unit);
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
   /// Promote a check-in into a stamp (1 check-in → at most 1 stamp).
   /// Copies place + photos over and links `stamps.check_in_id`. Returns the
   /// stamp id (the existing one if already promoted).

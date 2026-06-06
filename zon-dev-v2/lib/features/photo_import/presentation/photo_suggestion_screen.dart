@@ -61,65 +61,86 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
     return MemoryImage(data);
   }
 
-  // Photos within this distance of each other are treated as the same place.
-  // (A bit above 5m because EXIF GPS jitter would otherwise split one spot.)
-  static const _kSamePlaceMeters = 20.0;
+  // Sequential photos within this distance (metres) are merged into one check-in.
+  static const _kSequentialMergeMeters = 150.0;
 
   Future<void> _importSelected() async {
     if (_selected.isEmpty) return;
     setState(() { _uploading = true; _uploadedCount = 0; });
-    final assets = _photos.where((p) => _selected.contains(p.id)).toList();
 
-    // Cluster photos by coordinate proximity → one check-in per cluster, so
-    // photos taken at the same spot don't create duplicate check-ins.
-    final clusters = <_PhotoGroup>[];
+    // Sort selected assets chronologically before grouping.
+    final assets = _photos.where((p) => _selected.contains(p.id)).toList()
+      ..sort((a, b) => a.createDateTime.compareTo(b.createDateTime));
+
+    final repo = ref.read(checkInRepositoryProvider);
+
+    // Fetch existing check-ins so we can detect "breaks" between sequential
+    // photos (if a check-in already exists between two photo times, they belong
+    // to different visits even if geographically close).
+    final existingRes = await repo.getMyCheckIns(limit: 500);
+    final existing = existingRes.getOrElse((_) => <CheckIn>[]);
+
+    // Build groups sequentially: a photo joins the current group only if
+    // (a) it is within threshold distance of the group's representative point
+    // AND (b) no existing check-in sits between the previous photo's time and
+    // this photo's time.
+    final groups = <_PhotoGroup>[];
+    DateTime? prevTime;
+
     for (final asset in assets) {
       final latLng = await asset.latlngAsync();
-      if (latLng != null &&
-          !(latLng.latitude == 0.0 && latLng.longitude == 0.0)) {
-        final file = await asset.originFile;
-        final url = file == null ? null : await _photoService.uploadFile(file);
-        if (url != null) {
-          _PhotoGroup? target;
-          for (final c in clusters) {
-            if (Geolocator.distanceBetween(
-                    c.lat, c.lng, latLng.latitude, latLng.longitude) <
-                _kSamePlaceMeters) {
-              target = c;
-              break;
-            }
-          }
-          if (target == null) {
-            target = _PhotoGroup(
-                latLng.latitude, latLng.longitude, asset.createDateTime);
-            clusters.add(target);
-          }
-          target.urls.add(url);
-          if (asset.createDateTime.isBefore(target.takenAt)) {
-            target.takenAt = asset.createDateTime;
-          }
-        }
+      if (latLng == null ||
+          (latLng.latitude == 0.0 && latLng.longitude == 0.0)) {
+        if (mounted) setState(() => _uploadedCount++);
+        continue;
       }
+      final file = await asset.originFile;
+      final url = file == null ? null : await _photoService.uploadFile(file);
+      if (url == null) {
+        if (mounted) setState(() => _uploadedCount++);
+        continue;
+      }
+
+      final photoTime = asset.createDateTime;
+      final last = groups.isEmpty ? null : groups.last;
+      bool merge = false;
+
+      if (last != null && prevTime != null) {
+        final dist = Geolocator.distanceBetween(
+            last.lat, last.lng, latLng.latitude, latLng.longitude);
+        final hasBreak = existing.any((c) =>
+            c.visitedAt.isAfter(prevTime!) && c.visitedAt.isBefore(photoTime));
+        merge = dist < _kSequentialMergeMeters && !hasBreak;
+      }
+
+      if (merge) {
+        last!.urls.add(url);
+        if (photoTime.isBefore(last.takenAt)) last.takenAt = photoTime;
+      } else {
+        groups.add(_PhotoGroup(latLng.latitude, latLng.longitude, photoTime)
+          ..urls.add(url));
+      }
+
+      prevTime = photoTime;
       if (mounted) setState(() => _uploadedCount++);
     }
 
-    final repo = ref.read(checkInRepositoryProvider);
-    for (final c in clusters) {
-      final name = await _resolvePlace(c.lat, c.lng);
+    for (final g in groups) {
+      final name = await _resolvePlace(g.lat, g.lng);
       await repo.createCheckIn(
         CheckInDraft(
           placeName: name,
-          lat: c.lat,
-          lng: c.lng,
+          lat: g.lat,
+          lng: g.lng,
           source: CheckInSource.photo,
         ),
-        photoUrls: c.urls,
-        visitedAt: c.takenAt,
+        photoUrls: g.urls,
+        visitedAt: g.takenAt,
       );
     }
 
     if (mounted) {
-      final n = clusters.length;
+      final n = groups.length;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$n check-in${n == 1 ? '' : 's'} added')),
       );
