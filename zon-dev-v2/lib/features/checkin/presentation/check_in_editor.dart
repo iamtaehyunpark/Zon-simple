@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../data/models/check_in.dart';
+import '../../../data/models/enums.dart';
 import 'photo_strip.dart';
 import 'user_tag_field.dart';
 
@@ -95,10 +96,16 @@ class _CheckInEditorBodyState extends State<CheckInEditorBody> {
                       _update(_draft.copyWith(taggedUserIds: ids)),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Check-ins are private — they log your trace. You can turn one '
-                  'into a stamp later.',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Share as a story'),
+                  subtitle: const Text(
+                      'Public for 24h in your followers’ feed. Off = private trace.'),
+                  value: _draft.visibility == StampVisibility.public,
+                  onChanged: (v) => _update(_draft.copyWith(
+                    visibility:
+                        v ? StampVisibility.public : StampVisibility.private,
+                  )),
                 ),
               ],
             ),

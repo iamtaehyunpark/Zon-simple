@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../../../core/notifications/notification_service.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/repositories/notification_repository.dart';
+import '../../../data/repositories/check_in_repository.dart';
 import '../../profile/presentation/providers/profile_provider.dart';
 import '../../../shared/widgets/app_states.dart';
 import '../../../shared/utils/format.dart';
@@ -51,6 +52,7 @@ class FeedScreen extends ConsumerWidget {
       body: Column(
         children: [
           const _PhotoSuggestionBanner(),
+          const _StoriesRail(),
           Expanded(
             child: feedState.when(
         loading: () => const LoadingView(),
@@ -274,6 +276,200 @@ class _ActionBtn extends StatelessWidget {
             Icon(icon, size: 20, color: color),
             const SizedBox(width: 4),
             Text(compactCount(count), style: const TextStyle(fontSize: 13)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Horizontal "stories" rail of recent public check-ins from people you follow
+/// (and your own). Hidden when there are none. Tap an avatar to view that
+/// author's recent public check-ins. (Concept like IG stories; styling TBD.)
+class _StoriesRail extends ConsumerWidget {
+  const _StoriesRail();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stories = ref.watch(feedStoriesProvider).valueOrNull ?? const [];
+    if (stories.isEmpty) return const SizedBox.shrink();
+    return Container(
+      height: 96,
+      decoration: BoxDecoration(
+        border: Border(
+            bottom: BorderSide(color: Theme.of(context).dividerColor)),
+      ),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        itemCount: stories.length,
+        itemBuilder: (ctx, i) {
+          final s = stories[i];
+          return GestureDetector(
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (_) => _StoryView(story: s),
+            ),
+            child: SizedBox(
+              width: 72,
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF1D9E75), Color(0xFF2196F3)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: CircleAvatar(
+                      radius: 28,
+                      backgroundColor: Theme.of(context).colorScheme.surface,
+                      child: CircleAvatar(
+                        radius: 26,
+                        backgroundImage: s.avatarUrl != null
+                            ? CachedNetworkImageProvider(s.avatarUrl!)
+                            : null,
+                        child: s.avatarUrl == null
+                            ? const Icon(Icons.person)
+                            : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '@${s.username}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Basic viewer for one author's recent public check-ins (tap right/left to
+/// page). Concept-level only — visual design will be refined separately.
+class _StoryView extends StatefulWidget {
+  final CheckInStory story;
+  const _StoryView({required this.story});
+
+  @override
+  State<_StoryView> createState() => _StoryViewState();
+}
+
+class _StoryViewState extends State<_StoryView> {
+  int _i = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.story.checkIns;
+    final c = items[_i];
+    final photo = c.photoUrls.isNotEmpty ? c.photoUrls.first : null;
+    return Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: GestureDetector(
+        onTapUp: (d) {
+          final mid = MediaQuery.of(context).size.width / 2;
+          final next = d.globalPosition.dx > mid ? _i + 1 : _i - 1;
+          if (next < 0) return;
+          if (next >= items.length) {
+            Navigator.pop(context);
+            return;
+          }
+          setState(() => _i = next);
+        },
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (photo != null)
+              CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover)
+            else
+              const ColoredBox(color: Colors.black),
+            // Progress segments.
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 8,
+              right: 8,
+              child: Row(
+                children: [
+                  for (int k = 0; k < items.length; k++)
+                    Expanded(
+                      child: Container(
+                        height: 3,
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                        color: k <= _i ? Colors.white : Colors.white38,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 20,
+              left: 12,
+              right: 12,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundImage: widget.story.avatarUrl != null
+                        ? CachedNetworkImageProvider(widget.story.avatarUrl!)
+                        : null,
+                    child: widget.story.avatarUrl == null
+                        ? const Icon(Icons.person, size: 16)
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Text('@${widget.story.username}',
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.of(context).padding.bottom + 24,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.pin_drop, color: Colors.white, size: 18),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(c.placeName,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(DateFormat('MMM d, h:mm a').format(c.visitedAt),
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  if (c.note != null && c.note!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(c.note!,
+                        style: const TextStyle(color: Colors.white)),
+                  ],
+                ],
+              ),
+            ),
           ],
         ),
       ),

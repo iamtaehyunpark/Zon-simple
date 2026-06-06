@@ -29,7 +29,9 @@ mixin _$CheckIn {
   String? get externalPlaceId => throw _privateConstructorUsedError;
   String? get externalSource => throw _privateConstructorUsedError;
   String? get note => throw _privateConstructorUsedError;
-  CheckInSource get source => throw _privateConstructorUsedError;
+  CheckInSource get source =>
+      throw _privateConstructorUsedError; // Private by default (trace layer); public ones surface as feed stories.
+  StampVisibility get visibility => throw _privateConstructorUsedError;
   List<String> get taggedUserIds => throw _privateConstructorUsedError;
   List<String> get photoUrls => throw _privateConstructorUsedError;
   int get photoCount =>
@@ -64,6 +66,7 @@ abstract class $CheckInCopyWith<$Res> {
       String? externalSource,
       String? note,
       CheckInSource source,
+      StampVisibility visibility,
       List<String> taggedUserIds,
       List<String> photoUrls,
       int photoCount,
@@ -98,6 +101,7 @@ class _$CheckInCopyWithImpl<$Res, $Val extends CheckIn>
     Object? externalSource = freezed,
     Object? note = freezed,
     Object? source = null,
+    Object? visibility = null,
     Object? taggedUserIds = null,
     Object? photoUrls = null,
     Object? photoCount = null,
@@ -147,6 +151,10 @@ class _$CheckInCopyWithImpl<$Res, $Val extends CheckIn>
           ? _value.source
           : source // ignore: cast_nullable_to_non_nullable
               as CheckInSource,
+      visibility: null == visibility
+          ? _value.visibility
+          : visibility // ignore: cast_nullable_to_non_nullable
+              as StampVisibility,
       taggedUserIds: null == taggedUserIds
           ? _value.taggedUserIds
           : taggedUserIds // ignore: cast_nullable_to_non_nullable
@@ -197,6 +205,7 @@ abstract class _$$CheckInImplCopyWith<$Res> implements $CheckInCopyWith<$Res> {
       String? externalSource,
       String? note,
       CheckInSource source,
+      StampVisibility visibility,
       List<String> taggedUserIds,
       List<String> photoUrls,
       int photoCount,
@@ -229,6 +238,7 @@ class __$$CheckInImplCopyWithImpl<$Res>
     Object? externalSource = freezed,
     Object? note = freezed,
     Object? source = null,
+    Object? visibility = null,
     Object? taggedUserIds = null,
     Object? photoUrls = null,
     Object? photoCount = null,
@@ -278,6 +288,10 @@ class __$$CheckInImplCopyWithImpl<$Res>
           ? _value.source
           : source // ignore: cast_nullable_to_non_nullable
               as CheckInSource,
+      visibility: null == visibility
+          ? _value.visibility
+          : visibility // ignore: cast_nullable_to_non_nullable
+              as StampVisibility,
       taggedUserIds: null == taggedUserIds
           ? _value._taggedUserIds
           : taggedUserIds // ignore: cast_nullable_to_non_nullable
@@ -324,6 +338,7 @@ class _$CheckInImpl implements _CheckIn {
       this.externalSource,
       this.note,
       this.source = CheckInSource.manual,
+      this.visibility = StampVisibility.private,
       final List<String> taggedUserIds = const [],
       final List<String> photoUrls = const [],
       this.photoCount = 0,
@@ -358,6 +373,10 @@ class _$CheckInImpl implements _CheckIn {
   @override
   @JsonKey()
   final CheckInSource source;
+// Private by default (trace layer); public ones surface as feed stories.
+  @override
+  @JsonKey()
+  final StampVisibility visibility;
   final List<String> _taggedUserIds;
   @override
   @JsonKey()
@@ -391,7 +410,7 @@ class _$CheckInImpl implements _CheckIn {
 
   @override
   String toString() {
-    return 'CheckIn(id: $id, userId: $userId, placeName: $placeName, normalizedPlaceName: $normalizedPlaceName, lat: $lat, lng: $lng, externalPlaceId: $externalPlaceId, externalSource: $externalSource, note: $note, source: $source, taggedUserIds: $taggedUserIds, photoUrls: $photoUrls, photoCount: $photoCount, stampId: $stampId, visitedAt: $visitedAt, createdAt: $createdAt, updatedAt: $updatedAt)';
+    return 'CheckIn(id: $id, userId: $userId, placeName: $placeName, normalizedPlaceName: $normalizedPlaceName, lat: $lat, lng: $lng, externalPlaceId: $externalPlaceId, externalSource: $externalSource, note: $note, source: $source, visibility: $visibility, taggedUserIds: $taggedUserIds, photoUrls: $photoUrls, photoCount: $photoCount, stampId: $stampId, visitedAt: $visitedAt, createdAt: $createdAt, updatedAt: $updatedAt)';
   }
 
   @override
@@ -413,6 +432,8 @@ class _$CheckInImpl implements _CheckIn {
                 other.externalSource == externalSource) &&
             (identical(other.note, note) || other.note == note) &&
             (identical(other.source, source) || other.source == source) &&
+            (identical(other.visibility, visibility) ||
+                other.visibility == visibility) &&
             const DeepCollectionEquality()
                 .equals(other._taggedUserIds, _taggedUserIds) &&
             const DeepCollectionEquality()
@@ -442,6 +463,7 @@ class _$CheckInImpl implements _CheckIn {
       externalSource,
       note,
       source,
+      visibility,
       const DeepCollectionEquality().hash(_taggedUserIds),
       const DeepCollectionEquality().hash(_photoUrls),
       photoCount,
@@ -478,6 +500,7 @@ abstract class _CheckIn implements CheckIn {
       final String? externalSource,
       final String? note,
       final CheckInSource source,
+      final StampVisibility visibility,
       final List<String> taggedUserIds,
       final List<String> photoUrls,
       final int photoCount,
@@ -507,7 +530,10 @@ abstract class _CheckIn implements CheckIn {
   @override
   String? get note;
   @override
-  CheckInSource get source;
+  CheckInSource
+      get source; // Private by default (trace layer); public ones surface as feed stories.
+  @override
+  StampVisibility get visibility;
   @override
   List<String> get taggedUserIds;
   @override
@@ -544,6 +570,7 @@ mixin _$CheckInDraft {
   String? get externalSource => throw _privateConstructorUsedError;
   String? get note => throw _privateConstructorUsedError;
   CheckInSource get source => throw _privateConstructorUsedError;
+  StampVisibility get visibility => throw _privateConstructorUsedError;
   List<String> get taggedUserIds => throw _privateConstructorUsedError;
   List<String> get photoPaths => throw _privateConstructorUsedError;
 
@@ -571,6 +598,7 @@ abstract class $CheckInDraftCopyWith<$Res> {
       String? externalSource,
       String? note,
       CheckInSource source,
+      StampVisibility visibility,
       List<String> taggedUserIds,
       List<String> photoPaths});
 }
@@ -597,6 +625,7 @@ class _$CheckInDraftCopyWithImpl<$Res, $Val extends CheckInDraft>
     Object? externalSource = freezed,
     Object? note = freezed,
     Object? source = null,
+    Object? visibility = null,
     Object? taggedUserIds = null,
     Object? photoPaths = null,
   }) {
@@ -629,6 +658,10 @@ class _$CheckInDraftCopyWithImpl<$Res, $Val extends CheckInDraft>
           ? _value.source
           : source // ignore: cast_nullable_to_non_nullable
               as CheckInSource,
+      visibility: null == visibility
+          ? _value.visibility
+          : visibility // ignore: cast_nullable_to_non_nullable
+              as StampVisibility,
       taggedUserIds: null == taggedUserIds
           ? _value.taggedUserIds
           : taggedUserIds // ignore: cast_nullable_to_non_nullable
@@ -657,6 +690,7 @@ abstract class _$$CheckInDraftImplCopyWith<$Res>
       String? externalSource,
       String? note,
       CheckInSource source,
+      StampVisibility visibility,
       List<String> taggedUserIds,
       List<String> photoPaths});
 }
@@ -681,6 +715,7 @@ class __$$CheckInDraftImplCopyWithImpl<$Res>
     Object? externalSource = freezed,
     Object? note = freezed,
     Object? source = null,
+    Object? visibility = null,
     Object? taggedUserIds = null,
     Object? photoPaths = null,
   }) {
@@ -713,6 +748,10 @@ class __$$CheckInDraftImplCopyWithImpl<$Res>
           ? _value.source
           : source // ignore: cast_nullable_to_non_nullable
               as CheckInSource,
+      visibility: null == visibility
+          ? _value.visibility
+          : visibility // ignore: cast_nullable_to_non_nullable
+              as StampVisibility,
       taggedUserIds: null == taggedUserIds
           ? _value._taggedUserIds
           : taggedUserIds // ignore: cast_nullable_to_non_nullable
@@ -736,6 +775,7 @@ class _$CheckInDraftImpl implements _CheckInDraft {
       this.externalSource,
       this.note,
       this.source = CheckInSource.manual,
+      this.visibility = StampVisibility.private,
       final List<String> taggedUserIds = const [],
       final List<String> photoPaths = const []})
       : _taggedUserIds = taggedUserIds,
@@ -759,6 +799,9 @@ class _$CheckInDraftImpl implements _CheckInDraft {
   @override
   @JsonKey()
   final CheckInSource source;
+  @override
+  @JsonKey()
+  final StampVisibility visibility;
   final List<String> _taggedUserIds;
   @override
   @JsonKey()
@@ -779,7 +822,7 @@ class _$CheckInDraftImpl implements _CheckInDraft {
 
   @override
   String toString() {
-    return 'CheckInDraft(placeName: $placeName, lat: $lat, lng: $lng, externalPlaceId: $externalPlaceId, externalSource: $externalSource, note: $note, source: $source, taggedUserIds: $taggedUserIds, photoPaths: $photoPaths)';
+    return 'CheckInDraft(placeName: $placeName, lat: $lat, lng: $lng, externalPlaceId: $externalPlaceId, externalSource: $externalSource, note: $note, source: $source, visibility: $visibility, taggedUserIds: $taggedUserIds, photoPaths: $photoPaths)';
   }
 
   @override
@@ -797,6 +840,8 @@ class _$CheckInDraftImpl implements _CheckInDraft {
                 other.externalSource == externalSource) &&
             (identical(other.note, note) || other.note == note) &&
             (identical(other.source, source) || other.source == source) &&
+            (identical(other.visibility, visibility) ||
+                other.visibility == visibility) &&
             const DeepCollectionEquality()
                 .equals(other._taggedUserIds, _taggedUserIds) &&
             const DeepCollectionEquality()
@@ -814,6 +859,7 @@ class _$CheckInDraftImpl implements _CheckInDraft {
       externalSource,
       note,
       source,
+      visibility,
       const DeepCollectionEquality().hash(_taggedUserIds),
       const DeepCollectionEquality().hash(_photoPaths));
 
@@ -842,6 +888,7 @@ abstract class _CheckInDraft implements CheckInDraft {
       final String? externalSource,
       final String? note,
       final CheckInSource source,
+      final StampVisibility visibility,
       final List<String> taggedUserIds,
       final List<String> photoPaths}) = _$CheckInDraftImpl;
 
@@ -862,6 +909,8 @@ abstract class _CheckInDraft implements CheckInDraft {
   String? get note;
   @override
   CheckInSource get source;
+  @override
+  StampVisibility get visibility;
   @override
   List<String> get taggedUserIds;
   @override

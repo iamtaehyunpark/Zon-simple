@@ -17,6 +17,20 @@ CheckInRepository checkInRepository(CheckInRepositoryRef ref) =>
       currentUserId: ref.watch(currentUserProvider)?.id,
     );
 
+/// One author's recent public check-ins, grouped for the feed "stories" rail.
+class CheckInStory {
+  final String userId;
+  final String username;
+  final String? avatarUrl;
+  final List<CheckIn> checkIns; // newest first
+  const CheckInStory({
+    required this.userId,
+    required this.username,
+    required this.avatarUrl,
+    required this.checkIns,
+  });
+}
+
 class CheckInRepository with BaseRepository {
   @override
   final SupabaseClient client;
@@ -46,6 +60,7 @@ class CheckInRepository with BaseRepository {
             'external_source': draft.externalSource,
             'note': draft.note,
             'source': draft.source.name,
+            'visibility': draft.visibility.name,
             'tagged_user_ids': draft.taggedUserIds,
             'visited_at': (visitedAt ?? DateTime.now()).toIso8601String(),
           })
@@ -113,6 +128,66 @@ class CheckInRepository with BaseRepository {
       return right((data as List).map((r) => _fromRow(r)).toList());
     } catch (e) {
       return left(NetworkError(e.toString()));
+    }
+  }
+
+  /// Recent (last 24h) public check-ins from people you follow + yourself,
+  /// grouped per author for the feed "stories" rail. Your own story sorts first;
+  /// others by most-recent activity.
+  Future<List<CheckInStory>> getStories() async {
+    final userId = this.userId;
+    if (userId == null) return [];
+    try {
+      final follows = await client
+          .from('follows')
+          .select('following_id')
+          .eq('follower_id', userId)
+          .eq('status', 'accepted');
+      final ids = {
+        userId,
+        for (final r in follows) r['following_id'] as String,
+      }.toList();
+      final since = DateTime.now().subtract(const Duration(hours: 24));
+      final rows = await client
+          .from('check_ins')
+          .select('*, profiles!check_ins_user_id_fkey(username, avatar_url)')
+          .inFilter('user_id', ids)
+          .eq('visibility', 'public')
+          .gte('visited_at', since.toIso8601String())
+          .order('visited_at', ascending: false);
+
+      // Attach photo URLs so the story viewer is self-contained.
+      final checkIns = [for (final r in rows) _fromRow(r)];
+      final photos = await photoUrlsByCheckIn([for (final c in checkIns) c.id]);
+
+      final byUser = <String, CheckInStory>{};
+      final order = <String>[];
+      for (final r in rows) {
+        final ci = _fromRow(r)
+            .copyWith(photoUrls: photos[r['id'] as String] ?? const []);
+        final prof = r['profiles'] as Map<String, dynamic>?;
+        final existing = byUser[ci.userId];
+        if (existing == null) {
+          order.add(ci.userId);
+          byUser[ci.userId] = CheckInStory(
+            userId: ci.userId,
+            username: prof?['username'] as String? ?? 'someone',
+            avatarUrl: prof?['avatar_url'] as String?,
+            checkIns: [ci],
+          );
+        } else {
+          existing.checkIns.add(ci);
+        }
+      }
+      final stories = [for (final id in order) byUser[id]!];
+      stories.sort((a, b) {
+        if (a.userId == userId) return -1;
+        if (b.userId == userId) return 1;
+        return 0; // already in most-recent order from the query
+      });
+      return stories;
+    } catch (_) {
+      return [];
     }
   }
 
@@ -310,6 +385,9 @@ class CheckInRepository with BaseRepository {
       externalSource: row['external_source'] as String?,
       note: row['note'] as String?,
       source: _sourceFromString(row['source'] as String?),
+      visibility: row['visibility'] == 'public'
+          ? StampVisibility.public
+          : StampVisibility.private,
       taggedUserIds: (row['tagged_user_ids'] as List?)
               ?.map((e) => e.toString())
               .toList() ??

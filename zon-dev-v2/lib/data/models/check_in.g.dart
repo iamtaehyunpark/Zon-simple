@@ -19,6 +19,9 @@ _$CheckInImpl _$$CheckInImplFromJson(Map<String, dynamic> json) =>
       note: json['note'] as String?,
       source: $enumDecodeNullable(_$CheckInSourceEnumMap, json['source']) ??
           CheckInSource.manual,
+      visibility:
+          $enumDecodeNullable(_$StampVisibilityEnumMap, json['visibility']) ??
+              StampVisibility.private,
       taggedUserIds: (json['taggedUserIds'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
@@ -50,6 +53,7 @@ Map<String, dynamic> _$$CheckInImplToJson(_$CheckInImpl instance) =>
       'externalSource': instance.externalSource,
       'note': instance.note,
       'source': _$CheckInSourceEnumMap[instance.source]!,
+      'visibility': _$StampVisibilityEnumMap[instance.visibility]!,
       'taggedUserIds': instance.taggedUserIds,
       'photoUrls': instance.photoUrls,
       'photoCount': instance.photoCount,
@@ -65,6 +69,11 @@ const _$CheckInSourceEnumMap = {
   CheckInSource.auto: 'auto',
 };
 
+const _$StampVisibilityEnumMap = {
+  StampVisibility.private: 'private',
+  StampVisibility.public: 'public',
+};
+
 _$CheckInDraftImpl _$$CheckInDraftImplFromJson(Map<String, dynamic> json) =>
     _$CheckInDraftImpl(
       placeName: json['placeName'] as String,
@@ -75,6 +84,9 @@ _$CheckInDraftImpl _$$CheckInDraftImplFromJson(Map<String, dynamic> json) =>
       note: json['note'] as String?,
       source: $enumDecodeNullable(_$CheckInSourceEnumMap, json['source']) ??
           CheckInSource.manual,
+      visibility:
+          $enumDecodeNullable(_$StampVisibilityEnumMap, json['visibility']) ??
+              StampVisibility.private,
       taggedUserIds: (json['taggedUserIds'] as List<dynamic>?)
               ?.map((e) => e as String)
               .toList() ??
@@ -94,6 +106,7 @@ Map<String, dynamic> _$$CheckInDraftImplToJson(_$CheckInDraftImpl instance) =>
       'externalSource': instance.externalSource,
       'note': instance.note,
       'source': _$CheckInSourceEnumMap[instance.source]!,
+      'visibility': _$StampVisibilityEnumMap[instance.visibility]!,
       'taggedUserIds': instance.taggedUserIds,
       'photoPaths': instance.photoPaths,
     };

@@ -1,8 +1,15 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../../data/models/stamp.dart';
 import '../../../../data/repositories/stamp_repository.dart';
+import '../../../../data/repositories/check_in_repository.dart';
 
 part 'feed_provider.g.dart';
+
+/// Recent public check-ins grouped per author for the feed "stories" rail.
+@riverpod
+Future<List<CheckInStory>> feedStories(FeedStoriesRef ref) {
+  return ref.watch(checkInRepositoryProvider).getStories();
+}
 
 @riverpod
 class FeedNotifier extends _$FeedNotifier {

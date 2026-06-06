@@ -437,6 +437,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       'place_name': result.place,
       'normalized_place_name': result.place.toLowerCase().trim(),
       'note': result.note,
+      'visibility': result.isPublic ? 'public' : 'private',
     });
     _reload();
   }
@@ -629,8 +630,9 @@ class _CheckInEdit {
   final String note;
   final Set<String> removedPhotoIds;
   final List<String> newPaths;
+  final bool isPublic;
   const _CheckInEdit(
-      this.place, this.note, this.removedPhotoIds, this.newPaths);
+      this.place, this.note, this.removedPhotoIds, this.newPaths, this.isPublic);
 }
 
 // ── The hovering, draggable list panel ──────────────────────────
@@ -1314,6 +1316,8 @@ class _EditCheckInSheetState extends State<_EditCheckInSheet> {
       TextEditingController(text: widget.checkIn.note ?? '');
   final Set<String> _removed = {};
   final List<String> _newPaths = [];
+  late bool _isPublic =
+      widget.checkIn.visibility == StampVisibility.public;
 
   @override
   void dispose() {
@@ -1397,7 +1401,15 @@ class _EditCheckInSheetState extends State<_EditCheckInSheet> {
                   ..addAll(p);
               }),
             ),
-            const SizedBox(height: 16),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Share as a story'),
+              subtitle: const Text(
+                  'Public for 24h in your followers’ feed. Off = private.'),
+              value: _isPublic,
+              onChanged: (v) => setState(() => _isPublic = v),
+            ),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: FilledButton(
@@ -1406,7 +1418,7 @@ class _EditCheckInSheetState extends State<_EditCheckInSheet> {
                     : () => Navigator.pop(
                         context,
                         _CheckInEdit(_place.text.trim(), _note.text.trim(),
-                            _removed, _newPaths)),
+                            _removed, _newPaths, _isPublic)),
                 child: const Text('Save'),
               ),
             ),

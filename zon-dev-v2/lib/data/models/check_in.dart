@@ -1,4 +1,5 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
+import 'enums.dart';
 
 part 'check_in.freezed.dart';
 part 'check_in.g.dart';
@@ -21,6 +22,8 @@ class CheckIn with _$CheckIn {
     String? externalSource,
     String? note,
     @Default(CheckInSource.manual) CheckInSource source,
+    // Private by default (trace layer); public ones surface as feed stories.
+    @Default(StampVisibility.private) StampVisibility visibility,
     @Default([]) List<String> taggedUserIds,
     @Default([]) List<String> photoUrls,
     @Default(0) int photoCount,
@@ -45,6 +48,7 @@ class CheckInDraft with _$CheckInDraft {
     String? externalSource,
     String? note,
     @Default(CheckInSource.manual) CheckInSource source,
+    @Default(StampVisibility.private) StampVisibility visibility,
     @Default([]) List<String> taggedUserIds,
     @Default([]) List<String> photoPaths,
   }) = _CheckInDraft;
