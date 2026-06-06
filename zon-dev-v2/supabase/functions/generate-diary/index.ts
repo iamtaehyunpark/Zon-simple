@@ -98,7 +98,7 @@ Deno.serve(async (req: Request) => {
     // ── Call Gemini 2.0 Flash Lite ────────────────────────────────────────────
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash-lite',
+      model: 'gemini-3.1-flash-lite',
       systemInstruction:
         "You are a personal diary writing assistant. Given a list of activities and optional photos from the user's day, " +
         'write a warm, reflective first-person diary entry. Write 2–4 paragraphs. ' +
