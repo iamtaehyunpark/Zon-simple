@@ -19,11 +19,14 @@ class FeedScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feedState = ref.watch(feedNotifierProvider);
-    final requestCount =
+    final followReqCount =
         (ref.watch(followRequestsProvider).valueOrNull ?? const []).length;
+    final friendReqCount =
+        (ref.watch(friendRequestsProvider).valueOrNull ?? const []).length;
     final unread =
         (ref.watch(unreadNotificationCountProvider).valueOrNull ?? 0) +
-            requestCount;
+            followReqCount +
+            friendReqCount;
 
     return Scaffold(
       appBar: AppBar(
@@ -45,6 +48,7 @@ class FeedScreen extends ConsumerWidget {
               await context.push('/activity');
               ref.invalidate(unreadNotificationCountProvider);
               ref.invalidate(followRequestsProvider);
+              ref.invalidate(friendRequestsProvider);
             },
           ),
         ],

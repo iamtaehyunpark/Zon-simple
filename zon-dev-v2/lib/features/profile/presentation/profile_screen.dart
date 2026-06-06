@@ -9,6 +9,134 @@ import '../../../shared/utils/format.dart';
 import 'providers/profile_provider.dart';
 import '../../../core/auth/auth_provider.dart';
 
+// ── Social action buttons (Add Friend + Follow) ───────────────────────────
+
+class _SocialButtons extends ConsumerWidget {
+  final String targetId;
+  const _SocialButtons({required this.targetId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fs = ref.watch(friendStateProvider(targetId)).valueOrNull ??
+        FriendState.none;
+    final fw = ref.watch(followStateProvider(targetId)).valueOrNull ??
+        FollowState.none;
+    final notifier =
+        ref.read(profileNotifierProvider(targetId).notifier);
+
+    return Row(
+      children: [
+        Expanded(child: _friendButton(context, ref, fs, fw, notifier)),
+        const SizedBox(width: 8),
+        Expanded(child: _followButton(context, ref, fw, notifier, targetId)),
+      ],
+    );
+  }
+
+  Widget _friendButton(
+    BuildContext context,
+    WidgetRef ref,
+    FriendState fs,
+    FollowState fw,
+    ProfileNotifier notifier,
+  ) {
+    switch (fs) {
+      case FriendState.none:
+        return FilledButton.icon(
+          icon: const Icon(Icons.person_add_outlined, size: 18),
+          label: const Text('Add Friend'),
+          onPressed: () => notifier.sendFriendRequest(),
+        );
+      case FriendState.requestedByMe:
+        return OutlinedButton.icon(
+          icon: const Icon(Icons.hourglass_empty, size: 18),
+          label: const Text('Requested'),
+          onPressed: () => notifier.cancelFriendRequest(),
+        );
+      case FriendState.requestedByThem:
+        return FilledButton.icon(
+          icon: const Icon(Icons.people_alt_outlined, size: 18),
+          label: const Text('Respond'),
+          onPressed: () => _showRespondMenu(context, ref),
+        );
+      case FriendState.friends:
+        return PopupMenuButton<_FriendAction>(
+          onSelected: (a) {
+            if (a == _FriendAction.unfriend) notifier.unfriend();
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: _FriendAction.unfriend,
+              child: Text('Unfriend'),
+            ),
+          ],
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.people_alt, size: 18),
+            label: const Text('Friends'),
+            onPressed: null, // handled by PopupMenuButton
+          ),
+        );
+    }
+  }
+
+  void _showRespondMenu(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.check_circle_outline),
+              title: const Text('Confirm'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await ref
+                    .read(profileRepositoryProvider)
+                    .acceptFriendRequest(targetId);
+                ref.invalidate(friendStateProvider(targetId));
+                ref.invalidate(friendRequestsProvider);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.cancel_outlined),
+              title: const Text('Delete'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await ref
+                    .read(profileRepositoryProvider)
+                    .denyFriendRequest(targetId);
+                ref.invalidate(friendStateProvider(targetId));
+                ref.invalidate(friendRequestsProvider);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _followButton(
+    BuildContext context,
+    WidgetRef ref,
+    FollowState fw,
+    ProfileNotifier notifier,
+    String targetId,
+  ) {
+    final label = switch (fw) {
+      FollowState.following => 'Following',
+      FollowState.requested => 'Requested',
+      FollowState.none => 'Follow',
+    };
+    return OutlinedButton(
+      onPressed: () => notifier.toggleFollow(targetId),
+      child: Text(label),
+    );
+  }
+}
+
+enum _FriendAction { unfriend }
+
 class ProfileScreen extends ConsumerWidget {
   final String? userId;
   const ProfileScreen({super.key, this.userId});
@@ -115,8 +243,12 @@ class ProfileScreen extends ConsumerWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
+                      _StatItem(label: 'Stamps', value: profile.stampCount),
                       _StatItem(
-                          label: 'Stamps', value: profile.stampCount),
+                          label: 'Friends',
+                          value: profile.friendCount,
+                          onTap: () =>
+                              context.push('/profile/$targetId/friends')),
                       _StatItem(
                           label: 'Followers',
                           value: profile.followerCount,
@@ -135,30 +267,18 @@ class ProfileScreen extends ConsumerWidget {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Consumer(builder: (ctx, ref, _) {
-                      final fs = ref.watch(followStateProvider(targetId))
-                              .valueOrNull ??
-                          FollowState.none;
-                      final label = switch (fs) {
-                        FollowState.following => 'Following',
-                        FollowState.requested => 'Requested',
-                        FollowState.none => 'Follow',
-                      };
-                      return FilledButton(
-                        onPressed: () => ref
-                            .read(profileNotifierProvider(targetId).notifier)
-                            .toggleFollow(targetId),
-                        child: Text(label),
-                      );
-                    }),
+                    child: _SocialButtons(targetId: targetId),
                   ),
                 ),
-              // A private account hides its stamps until you're an accepted follower.
+              // A private account hides its stamps until you're an accepted follower or friend.
               if (!isOwnProfile &&
                   profile.isPrivate &&
                   (ref.watch(followStateProvider(targetId)).valueOrNull ??
                           FollowState.none) !=
-                      FollowState.following)
+                      FollowState.following &&
+                  (ref.watch(friendStateProvider(targetId)).valueOrNull ??
+                          FriendState.none) !=
+                      FriendState.friends)
                 const SliverToBoxAdapter(
                   child: Padding(
                     padding: EdgeInsets.all(48),

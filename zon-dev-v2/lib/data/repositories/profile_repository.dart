@@ -9,9 +9,11 @@ import 'base_repository.dart';
 
 part 'profile_repository.g.dart';
 
-/// The viewer's relationship to another account.
-/// none = not following · requested = pending approval (private acct) · following = accepted.
+/// The viewer's relationship to another account (follow graph).
 enum FollowState { none, requested, following }
+
+/// The viewer's friendship state with another account.
+enum FriendState { none, requestedByMe, requestedByThem, friends }
 
 @riverpod
 ProfileRepository profileRepository(ProfileRepositoryRef ref) => ProfileRepository(
@@ -213,6 +215,135 @@ class ProfileRepository with BaseRepository {
     }
   }
 
+  // ── Friendship helpers ───────────────────────────────────────────────────
+
+  /// Returns the canonical (user_a, user_b) pair where user_a < user_b.
+  (String, String) _pair(String x, String y) =>
+      x.compareTo(y) < 0 ? (x, y) : (y, x);
+
+  Future<FriendState> friendState(String targetId) async {
+    final uid = userId;
+    if (uid == null) return FriendState.none;
+    final (a, b) = _pair(uid, targetId);
+    try {
+      final row = await client
+          .from('friendships')
+          .select('status, requested_by')
+          .eq('user_a', a)
+          .eq('user_b', b)
+          .maybeSingle();
+      if (row == null) return FriendState.none;
+      if (row['status'] == 'accepted') return FriendState.friends;
+      return row['requested_by'] as String == uid
+          ? FriendState.requestedByMe
+          : FriendState.requestedByThem;
+    } catch (_) {
+      return FriendState.none;
+    }
+  }
+
+  Future<Either<AppException, FriendState>> sendFriendRequest(
+      String targetId) async {
+    try {
+      final uid = userId;
+      if (uid == null) return left(const AuthError('Unauthorized'));
+      final (a, b) = _pair(uid, targetId);
+      await client.from('friendships').insert({
+        'user_a': a,
+        'user_b': b,
+        'requested_by': uid,
+        'status': 'pending',
+      });
+      return right(FriendState.requestedByMe);
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+  Future<Either<AppException, Unit>> removeFriendship(String targetId) async {
+    try {
+      final uid = userId;
+      if (uid == null) return left(const AuthError('Unauthorized'));
+      final (a, b) = _pair(uid, targetId);
+      await client.from('friendships').delete().eq('user_a', a).eq('user_b', b);
+      return right(unit);
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+  Future<Either<AppException, Unit>> acceptFriendRequest(
+      String requesterId) async {
+    try {
+      final uid = userId;
+      if (uid == null) return left(const AuthError('Unauthorized'));
+      final (a, b) = _pair(uid, requesterId);
+      await client
+          .from('friendships')
+          .update({'status': 'accepted'})
+          .eq('user_a', a)
+          .eq('user_b', b);
+      return right(unit);
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+  Future<Either<AppException, Unit>> denyFriendRequest(
+      String requesterId) async {
+    try {
+      final uid = userId;
+      if (uid == null) return left(const AuthError('Unauthorized'));
+      final (a, b) = _pair(uid, requesterId);
+      await client
+          .from('friendships')
+          .delete()
+          .eq('user_a', a)
+          .eq('user_b', b);
+      return right(unit);
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+  /// Incoming pending friend requests (people waiting for my approval).
+  Future<List<UserProfile>> getIncomingFriendRequests() async {
+    final uid = userId;
+    if (uid == null) return [];
+    try {
+      final rows = await client
+          .from('friendships')
+          .select('requested_by')
+          .or('user_a.eq.$uid,user_b.eq.$uid')
+          .eq('status', 'pending')
+          .neq('requested_by', uid);
+      final ids = [for (final r in rows) r['requested_by'] as String];
+      return getProfilesByIds(ids);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Accepted friends for [userId].
+  Future<List<UserProfile>> getFriends(String userId) async {
+    try {
+      final rows = await client
+          .from('friendships')
+          .select('user_a, user_b')
+          .or('user_a.eq.$userId,user_b.eq.$userId')
+          .eq('status', 'accepted');
+      final otherIds = [
+        for (final r in rows)
+          (r['user_a'] as String) == userId
+              ? r['user_b'] as String
+              : r['user_a'] as String
+      ];
+      return getProfilesByIds(otherIds);
+    } catch (_) {
+      return [];
+    }
+  }
+
   Future<List<UserProfile>> getProfilesByIds(List<String> ids) async {
     if (ids.isEmpty) return [];
     try {
@@ -231,6 +362,7 @@ class ProfileRepository with BaseRepository {
       avatarUrl: row['avatar_url'] as String?,
       bio: row['bio'] as String?,
       stampCount: row['stamp_count'] as int? ?? 0,
+      friendCount: row['friend_count'] as int? ?? 0,
       followerCount: row['follower_count'] as int? ?? 0,
       followingCount: row['following_count'] as int? ?? 0,
       isPrivate: row['is_private'] as bool? ?? false,

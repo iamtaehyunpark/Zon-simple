@@ -27,6 +27,22 @@ class ProfileNotifier extends _$ProfileNotifier {
     await _fetch(userId);
     ref.invalidate(followStateProvider(targetUserId));
   }
+
+  Future<void> sendFriendRequest() async {
+    await ref.read(profileRepositoryProvider).sendFriendRequest(userId);
+    ref.invalidate(friendStateProvider(userId));
+  }
+
+  Future<void> cancelFriendRequest() async {
+    await ref.read(profileRepositoryProvider).removeFriendship(userId);
+    ref.invalidate(friendStateProvider(userId));
+  }
+
+  Future<void> unfriend() async {
+    await ref.read(profileRepositoryProvider).removeFriendship(userId);
+    await _fetch(userId);
+    ref.invalidate(friendStateProvider(userId));
+  }
 }
 
 @riverpod
@@ -77,11 +93,20 @@ class ProfileStampsNotifier extends _$ProfileStampsNotifier {
 
 @riverpod
 Future<FollowState> followState(FollowStateRef ref, String targetUserId) async {
-  final repo = ref.watch(profileRepositoryProvider);
-  return repo.followState(targetUserId);
+  return ref.watch(profileRepositoryProvider).followState(targetUserId);
+}
+
+@riverpod
+Future<FriendState> friendState(FriendStateRef ref, String targetUserId) async {
+  return ref.watch(profileRepositoryProvider).friendState(targetUserId);
 }
 
 @riverpod
 Future<List<UserProfile>> followRequests(FollowRequestsRef ref) async {
   return ref.watch(profileRepositoryProvider).getFollowRequests();
+}
+
+@riverpod
+Future<List<UserProfile>> friendRequests(FriendRequestsRef ref) async {
+  return ref.watch(profileRepositoryProvider).getIncomingFriendRequests();
 }

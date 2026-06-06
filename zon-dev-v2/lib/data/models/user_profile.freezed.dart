@@ -26,6 +26,7 @@ mixin _$UserProfile {
   String? get avatarUrl => throw _privateConstructorUsedError;
   String? get bio => throw _privateConstructorUsedError;
   int get stampCount => throw _privateConstructorUsedError;
+  int get friendCount => throw _privateConstructorUsedError;
   int get followerCount => throw _privateConstructorUsedError;
   int get followingCount => throw _privateConstructorUsedError;
   bool get isFollowing => throw _privateConstructorUsedError;
@@ -55,6 +56,7 @@ abstract class $UserProfileCopyWith<$Res> {
       String? avatarUrl,
       String? bio,
       int stampCount,
+      int friendCount,
       int followerCount,
       int followingCount,
       bool isFollowing,
@@ -83,6 +85,7 @@ class _$UserProfileCopyWithImpl<$Res, $Val extends UserProfile>
     Object? avatarUrl = freezed,
     Object? bio = freezed,
     Object? stampCount = null,
+    Object? friendCount = null,
     Object? followerCount = null,
     Object? followingCount = null,
     Object? isFollowing = null,
@@ -113,6 +116,10 @@ class _$UserProfileCopyWithImpl<$Res, $Val extends UserProfile>
       stampCount: null == stampCount
           ? _value.stampCount
           : stampCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      friendCount: null == friendCount
+          ? _value.friendCount
+          : friendCount // ignore: cast_nullable_to_non_nullable
               as int,
       followerCount: null == followerCount
           ? _value.followerCount
@@ -153,6 +160,7 @@ abstract class _$$UserProfileImplCopyWith<$Res>
       String? avatarUrl,
       String? bio,
       int stampCount,
+      int friendCount,
       int followerCount,
       int followingCount,
       bool isFollowing,
@@ -179,6 +187,7 @@ class __$$UserProfileImplCopyWithImpl<$Res>
     Object? avatarUrl = freezed,
     Object? bio = freezed,
     Object? stampCount = null,
+    Object? friendCount = null,
     Object? followerCount = null,
     Object? followingCount = null,
     Object? isFollowing = null,
@@ -209,6 +218,10 @@ class __$$UserProfileImplCopyWithImpl<$Res>
       stampCount: null == stampCount
           ? _value.stampCount
           : stampCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      friendCount: null == friendCount
+          ? _value.friendCount
+          : friendCount // ignore: cast_nullable_to_non_nullable
               as int,
       followerCount: null == followerCount
           ? _value.followerCount
@@ -244,6 +257,7 @@ class _$UserProfileImpl implements _UserProfile {
       this.avatarUrl,
       this.bio,
       this.stampCount = 0,
+      this.friendCount = 0,
       this.followerCount = 0,
       this.followingCount = 0,
       this.isFollowing = false,
@@ -268,6 +282,9 @@ class _$UserProfileImpl implements _UserProfile {
   final int stampCount;
   @override
   @JsonKey()
+  final int friendCount;
+  @override
+  @JsonKey()
   final int followerCount;
   @override
   @JsonKey()
@@ -283,7 +300,7 @@ class _$UserProfileImpl implements _UserProfile {
 
   @override
   String toString() {
-    return 'UserProfile(id: $id, username: $username, displayName: $displayName, avatarUrl: $avatarUrl, bio: $bio, stampCount: $stampCount, followerCount: $followerCount, followingCount: $followingCount, isFollowing: $isFollowing, isPrivate: $isPrivate, createdAt: $createdAt)';
+    return 'UserProfile(id: $id, username: $username, displayName: $displayName, avatarUrl: $avatarUrl, bio: $bio, stampCount: $stampCount, friendCount: $friendCount, followerCount: $followerCount, followingCount: $followingCount, isFollowing: $isFollowing, isPrivate: $isPrivate, createdAt: $createdAt)';
   }
 
   @override
@@ -301,6 +318,8 @@ class _$UserProfileImpl implements _UserProfile {
             (identical(other.bio, bio) || other.bio == bio) &&
             (identical(other.stampCount, stampCount) ||
                 other.stampCount == stampCount) &&
+            (identical(other.friendCount, friendCount) ||
+                other.friendCount == friendCount) &&
             (identical(other.followerCount, followerCount) ||
                 other.followerCount == followerCount) &&
             (identical(other.followingCount, followingCount) ||
@@ -323,6 +342,7 @@ class _$UserProfileImpl implements _UserProfile {
       avatarUrl,
       bio,
       stampCount,
+      friendCount,
       followerCount,
       followingCount,
       isFollowing,
@@ -353,6 +373,7 @@ abstract class _UserProfile implements UserProfile {
       final String? avatarUrl,
       final String? bio,
       final int stampCount,
+      final int friendCount,
       final int followerCount,
       final int followingCount,
       final bool isFollowing,
@@ -374,6 +395,8 @@ abstract class _UserProfile implements UserProfile {
   String? get bio;
   @override
   int get stampCount;
+  @override
+  int get friendCount;
   @override
   int get followerCount;
   @override

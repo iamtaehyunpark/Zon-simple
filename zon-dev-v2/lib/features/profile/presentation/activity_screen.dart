@@ -43,6 +43,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
       'comment' => '$who commented on your stamp',
       'follow' => '$who started following you',
       'follow_accepted' => '$who accepted your follow request',
+      'friend_request' => '$who sent you a friend request',
+      'friend_accepted' => '$who accepted your friend request',
       'tag' => '$who tagged you in a stamp',
       'mention' => '$who mentioned you',
       _ => '$who did something',
@@ -54,6 +56,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
         'comment' => Icons.comment,
         'follow' => Icons.person_add,
         'follow_accepted' => Icons.how_to_reg,
+        'friend_request' => Icons.person_add_alt_1,
+        'friend_accepted' => Icons.people_alt,
         'tag' => Icons.local_offer,
         'mention' => Icons.alternate_email,
         _ => Icons.notifications,
@@ -69,24 +73,57 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final requests = ref.watch(followRequestsProvider).valueOrNull ?? const [];
-    final hasRequests = requests.isNotEmpty;
+    final followReqs = ref.watch(followRequestsProvider).valueOrNull ?? const [];
+    final friendReqs = ref.watch(friendRequestsProvider).valueOrNull ?? const [];
+    final hasFollowReqs = followReqs.isNotEmpty;
+    final hasFriendReqs = friendReqs.isNotEmpty;
+    final extraRows = (hasFriendReqs ? 1 : 0) + (hasFollowReqs ? 1 : 0);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Activity')),
       body: _loading
           ? const LoadingView()
-          : (!hasRequests && _items.isEmpty)
+          : (extraRows == 0 && _items.isEmpty)
               ? const EmptyView(
                   icon: Icons.notifications_none,
                   message: 'No activity yet',
                   subtitle: 'Likes, comments, follows and mentions land here.',
                 )
               : ListView.builder(
-                  itemCount: _items.length + (hasRequests ? 1 : 0),
+                  itemCount: _items.length + extraRows,
                   itemBuilder: (ctx, i) {
-                    if (hasRequests && i == 0) {
-                      final first = requests.first;
+                    // Row 0: friend requests (if any)
+                    if (hasFriendReqs && i == 0) {
+                      final first = friendReqs.first;
+                      return Column(
+                        children: [
+                          ListTile(
+                            leading: CircleAvatar(
+                              backgroundImage: first.avatarUrl != null
+                                  ? CachedNetworkImageProvider(first.avatarUrl!)
+                                  : null,
+                              child: first.avatarUrl == null
+                                  ? const Icon(Icons.people_alt_outlined)
+                                  : null,
+                            ),
+                            title: const Text('Friend requests',
+                                style: TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle:
+                                Text('${friendReqs.length} pending'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () async {
+                              await context.push('/friend-requests');
+                              ref.invalidate(friendRequestsProvider);
+                            },
+                          ),
+                          const Divider(height: 1),
+                        ],
+                      );
+                    }
+                    // Row 1 (or 0 if no friend reqs): follow requests (if any)
+                    final followRow = hasFriendReqs ? 1 : 0;
+                    if (hasFollowReqs && i == followRow) {
+                      final first = followReqs.first;
                       return Column(
                         children: [
                           ListTile(
@@ -100,8 +137,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                             ),
                             title: const Text('Follow requests',
                                 style: TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text(
-                                '${requests.length} pending approval'),
+                            subtitle:
+                                Text('${followReqs.length} pending approval'),
                             trailing: const Icon(Icons.chevron_right),
                             onTap: () async {
                               await context.push('/follow-requests');
@@ -112,7 +149,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                         ],
                       );
                     }
-                    final n = _items[i - (hasRequests ? 1 : 0)];
+                    final n = _items[i - extraRows];
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundImage: n.actorAvatar != null
@@ -123,7 +160,8 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                             : null,
                       ),
                       title: Text(_text(n)),
-                      subtitle: Text(DateFormat('MMM d, h:mm a').format(n.sentAt)),
+                      subtitle:
+                          Text(DateFormat('MMM d, h:mm a').format(n.sentAt)),
                       onTap: () => _onTap(n),
                     );
                   },

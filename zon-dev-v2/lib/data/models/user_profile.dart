@@ -12,6 +12,7 @@ class UserProfile with _$UserProfile {
     String? avatarUrl,
     String? bio,
     @Default(0) int stampCount,
+    @Default(0) int friendCount,
     @Default(0) int followerCount,
     @Default(0) int followingCount,
     @Default(false) bool isFollowing,

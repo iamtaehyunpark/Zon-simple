@@ -6,7 +6,7 @@ part of 'profile_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$followStateHash() => r'9b23ea8dfd9b49a21be2b14de99b7c899716a7ba';
+String _$followStateHash() => r'7b2d77d94b8c6515ac468cdbdfc62ae21596b07f';
 
 /// Copied from Dart SDK
 class _SystemHash {
@@ -157,6 +157,136 @@ class _FollowStateProviderElement
   String get targetUserId => (origin as FollowStateProvider).targetUserId;
 }
 
+String _$friendStateHash() => r'b357007b95ea7c71e15740cf49c8c62990adade1';
+
+/// See also [friendState].
+@ProviderFor(friendState)
+const friendStateProvider = FriendStateFamily();
+
+/// See also [friendState].
+class FriendStateFamily extends Family<AsyncValue<FriendState>> {
+  /// See also [friendState].
+  const FriendStateFamily();
+
+  /// See also [friendState].
+  FriendStateProvider call(
+    String targetUserId,
+  ) {
+    return FriendStateProvider(
+      targetUserId,
+    );
+  }
+
+  @override
+  FriendStateProvider getProviderOverride(
+    covariant FriendStateProvider provider,
+  ) {
+    return call(
+      provider.targetUserId,
+    );
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'friendStateProvider';
+}
+
+/// See also [friendState].
+class FriendStateProvider extends AutoDisposeFutureProvider<FriendState> {
+  /// See also [friendState].
+  FriendStateProvider(
+    String targetUserId,
+  ) : this._internal(
+          (ref) => friendState(
+            ref as FriendStateRef,
+            targetUserId,
+          ),
+          from: friendStateProvider,
+          name: r'friendStateProvider',
+          debugGetCreateSourceHash:
+              const bool.fromEnvironment('dart.vm.product')
+                  ? null
+                  : _$friendStateHash,
+          dependencies: FriendStateFamily._dependencies,
+          allTransitiveDependencies:
+              FriendStateFamily._allTransitiveDependencies,
+          targetUserId: targetUserId,
+        );
+
+  FriendStateProvider._internal(
+    super._createNotifier, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.targetUserId,
+  }) : super.internal();
+
+  final String targetUserId;
+
+  @override
+  Override overrideWith(
+    FutureOr<FriendState> Function(FriendStateRef provider) create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: FriendStateProvider._internal(
+        (ref) => create(ref as FriendStateRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        targetUserId: targetUserId,
+      ),
+    );
+  }
+
+  @override
+  AutoDisposeFutureProviderElement<FriendState> createElement() {
+    return _FriendStateProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is FriendStateProvider && other.targetUserId == targetUserId;
+  }
+
+  @override
+  int get hashCode {
+    var hash = _SystemHash.combine(0, runtimeType.hashCode);
+    hash = _SystemHash.combine(hash, targetUserId.hashCode);
+
+    return _SystemHash.finish(hash);
+  }
+}
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+mixin FriendStateRef on AutoDisposeFutureProviderRef<FriendState> {
+  /// The parameter `targetUserId` of this provider.
+  String get targetUserId;
+}
+
+class _FriendStateProviderElement
+    extends AutoDisposeFutureProviderElement<FriendState> with FriendStateRef {
+  _FriendStateProviderElement(super.provider);
+
+  @override
+  String get targetUserId => (origin as FriendStateProvider).targetUserId;
+}
+
 String _$followRequestsHash() => r'7767b4a5e0f39606771fc4a84ac038d653bcb507';
 
 /// See also [followRequests].
@@ -175,7 +305,25 @@ final followRequestsProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef FollowRequestsRef = AutoDisposeFutureProviderRef<List<UserProfile>>;
-String _$profileNotifierHash() => r'adf6208cd39d7270be7201f064b6a802ddcb1684';
+String _$friendRequestsHash() => r'cdf8781e5840c5c1918df03a359cafc65c519b93';
+
+/// See also [friendRequests].
+@ProviderFor(friendRequests)
+final friendRequestsProvider =
+    AutoDisposeFutureProvider<List<UserProfile>>.internal(
+  friendRequests,
+  name: r'friendRequestsProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$friendRequestsHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef FriendRequestsRef = AutoDisposeFutureProviderRef<List<UserProfile>>;
+String _$profileNotifierHash() => r'3d82fa3ad6a9f36d5f010cc44c377378c5757f98';
 
 abstract class _$ProfileNotifier
     extends BuildlessAutoDisposeNotifier<AsyncValue<UserProfile?>> {
