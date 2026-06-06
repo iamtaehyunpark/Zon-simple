@@ -70,6 +70,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   String? _expandedId; // node whose inline editor is open
   DayBundle? _bundle;
   DayBundle? _drawn;
+  bool _isGeneratingDiary = false;
 
   final _sheetController = DraggableScrollableController();
   final Map<String, GlobalKey> _itemKeys = {};
@@ -495,6 +496,98 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     _reload();
   }
 
+  Future<void> _generateDiary() async {
+    final bundle = _bundle;
+    if (bundle == null || _isGeneratingDiary) return;
+    setState(() => _isGeneratingDiary = true);
+
+    try {
+      // Build events sorted by time — skip auto check-ins (GPS noise).
+      final events = <Map<String, dynamic>>[];
+      for (final s in bundle.stamps) {
+        events.add({
+          'type': 'stamp',
+          'time': _hhmm(s.visitedAt),
+          'place': s.placeName,
+          if (s.caption != null && s.caption!.isNotEmpty) 'caption': s.caption,
+          if (s.sensoryTags.isNotEmpty) 'tags': s.sensoryTags,
+          'photoUrls': s.photoUrls,
+        });
+      }
+      for (final c in bundle.checkIns) {
+        if (c.source == CheckInSource.auto) continue;
+        events.add({
+          'type': 'checkin',
+          'time': _hhmm(c.visitedAt),
+          'place': c.placeName,
+          if (c.note != null && c.note!.isNotEmpty) 'note': c.note,
+          'photoUrls': c.photoUrls,
+        });
+      }
+      for (final n in bundle.notes) {
+        events.add({
+          'type': 'note',
+          'time': _hhmm(n.notedAt),
+          'note': n.body,
+          'photoUrls': const <String>[],
+        });
+      }
+      events.sort((a, b) =>
+          (a['time'] as String).compareTo(b['time'] as String));
+
+      if (events.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Nothing to generate from yet')),
+          );
+        }
+        return;
+      }
+
+      // Download + resize photos in memory (≤ 5 total, never stored).
+      int photoCount = 0;
+      for (final event in events) {
+        final urls = (event.remove('photoUrls') as List).cast<String>();
+        final b64s = <String>[];
+        for (final url in urls) {
+          if (photoCount >= 5) break;
+          final b64 = await PhotoService.resizeForLlm(url);
+          if (b64 != null) {
+            b64s.add(b64);
+            photoCount++;
+          }
+        }
+        event['photos'] = b64s;
+      }
+
+      final diary = await ref
+          .read(diaryRepositoryProvider)
+          .generateDiary(_day, events);
+
+      if (!mounted) return;
+
+      // Pre-fill the edit sheet with the generated text; user saves or discards.
+      final saved = await showModalBottomSheet<String>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => _EditDiarySheet(initial: diary, day: _day),
+      );
+      if (saved == null) return;
+      await ref.read(diaryRepositoryProvider).saveDiary(_day, saved);
+      _reload();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Generation failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isGeneratingDiary = false);
+    }
+  }
+
+  static String _hhmm(DateTime dt) => DateFormat('HH:mm').format(dt);
+
   // Long-press drag of a note → reposition it. Its time becomes the next
   // node's time minus one minute (so it sorts just before that node).
   void _onReorder(int oldIndex, int newIndex) {
@@ -612,6 +705,8 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 onDelete: _deleteItem,
                 onAddNote: _submitNote,
                 onEditDiary: _editDiary,
+                onGenerateDiary: _generateDiary,
+                generatingDiary: _isGeneratingDiary,
                 onReorder: _onReorder,
               ),
             ],
@@ -652,6 +747,8 @@ class _ListPanel extends StatelessWidget {
   final Future<void> Function(_TlItem) onDelete;
   final Future<void> Function(String) onAddNote;
   final VoidCallback onEditDiary;
+  final VoidCallback onGenerateDiary;
+  final bool generatingDiary;
   final void Function(int oldIndex, int newIndex) onReorder;
 
   const _ListPanel({
@@ -672,6 +769,8 @@ class _ListPanel extends StatelessWidget {
     required this.onDelete,
     required this.onAddNote,
     required this.onEditDiary,
+    required this.onGenerateDiary,
+    required this.generatingDiary,
     required this.onReorder,
   });
 
@@ -855,7 +954,12 @@ class _ListPanel extends StatelessWidget {
                       ),
                     ),
                     SliverToBoxAdapter(
-                        child: _DiaryCard(diary: diary, onEdit: onEditDiary)),
+                        child: _DiaryCard(
+                          diary: diary,
+                          onEdit: onEditDiary,
+                          onGenerate: onGenerateDiary,
+                          generating: generatingDiary,
+                        )),
                     const SliverToBoxAdapter(child: SizedBox(height: 32)),
                   ],
                 ),
@@ -1170,7 +1274,14 @@ class _KindChip extends StatelessWidget {
 class _DiaryCard extends StatelessWidget {
   final String diary;
   final VoidCallback onEdit;
-  const _DiaryCard({required this.diary, required this.onEdit});
+  final VoidCallback onGenerate;
+  final bool generating;
+  const _DiaryCard({
+    required this.diary,
+    required this.onEdit,
+    required this.onGenerate,
+    required this.generating,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1194,6 +1305,28 @@ class _DiaryCard extends StatelessWidget {
                     const Text('Diary',
                         style: TextStyle(fontWeight: FontWeight.w700)),
                     const Spacer(),
+                    // AI generate button
+                    Tooltip(
+                      message: 'Generate with AI',
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: generating
+                            ? const Padding(
+                                padding: EdgeInsets.all(7),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              )
+                            : IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.auto_awesome,
+                                    size: 18),
+                                color: Colors.grey[600],
+                                onPressed: onGenerate,
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
                     Icon(empty ? Icons.edit_outlined : Icons.edit,
                         size: 18, color: Colors.grey),
                   ],

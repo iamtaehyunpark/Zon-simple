@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -70,6 +73,32 @@ class PhotoService {
       return Supabase.instance.client.storage
           .from(bucket)
           .getPublicUrl(filename);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Download [url], compress to ≤ 512 px, and return a base64-encoded JPEG
+  /// string. The resized bytes are never written to disk or stored — they exist
+  /// only in memory for the duration of the LLM call.
+  ///
+  /// Returns null on any network or compression failure.
+  static Future<String?> resizeForLlm(String url) async {
+    try {
+      final response = await Dio().get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = response.data;
+      if (bytes == null || bytes.isEmpty) return null;
+      final compressed = await FlutterImageCompress.compressWithList(
+        Uint8List.fromList(bytes),
+        minWidth: 512,
+        minHeight: 512,
+        quality: 75,
+        format: CompressFormat.jpeg,
+      );
+      return base64Encode(compressed);
     } catch (_) {
       return null;
     }

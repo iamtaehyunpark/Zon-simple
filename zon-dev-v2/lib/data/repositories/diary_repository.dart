@@ -36,6 +36,22 @@ class DiaryRepository with BaseRepository {
     }
   }
 
+  /// Call the generate-diary Edge Function with pre-processed events.
+  /// Events must already have [photos] as base64 JPEG strings (resized
+  /// client-side via PhotoService.resizeForLlm). Returns the generated text.
+  Future<String> generateDiary(
+    DateTime date,
+    List<Map<String, dynamic>> events,
+  ) async {
+    if (userId == null) throw Exception('Unauthorized');
+    // invoke() throws on HTTP error; on success, result.data is the decoded JSON.
+    final result = await client.functions.invoke(
+      'generate-diary',
+      body: {'date': isoDate(date), 'events': events},
+    );
+    return (result.data as Map<String, dynamic>?)?['diary'] as String? ?? '';
+  }
+
   Future<void> saveDiary(DateTime date, String body) async {
     final uid = userId;
     if (uid == null) return;
