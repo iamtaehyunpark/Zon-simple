@@ -514,17 +514,28 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
           'photoUrls': s.photoUrls,
         });
       }
-      // Check-ins are not included as location events — only their note text
-      // is surfaced (if present), anonymised as a plain timestamped note.
       for (final c in bundle.checkIns) {
-        final note = c.note?.trim() ?? '';
-        if (note.isEmpty) continue;
-        events.add({
-          'type': 'note',
-          'time': _hhmm(c.visitedAt),
-          'note': note,
-          'photoUrls': const <String>[],
-        });
+        if (c.source != CheckInSource.auto) {
+          // Manual check-in: include as a full event.
+          events.add({
+            'type': 'checkin',
+            'time': _hhmm(c.visitedAt),
+            'place': c.placeName,
+            if (c.note != null && c.note!.isNotEmpty) 'note': c.note,
+            'photoUrls': c.photoUrls,
+          });
+        } else {
+          // Auto (GPS) check-in: skip entirely unless it has a note,
+          // in which case surface the note text only (no place, no photos).
+          final note = c.note?.trim() ?? '';
+          if (note.isEmpty) continue;
+          events.add({
+            'type': 'note',
+            'time': _hhmm(c.visitedAt),
+            'note': note,
+            'photoUrls': const <String>[],
+          });
+        }
       }
       for (final n in bundle.notes) {
         events.add({
