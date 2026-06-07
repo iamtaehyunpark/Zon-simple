@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/models/enums.dart';
+import '../../../shared/widgets/place_search_field.dart';
 import 'photo_strip.dart';
 import 'user_tag_field.dart';
 
@@ -57,13 +58,11 @@ class _CheckInEditorBodyState extends State<CheckInEditorBody> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
+                PlaceSearchField(
                   controller: _placeCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Place name',
-                    prefixIcon: Icon(Icons.place),
-                    border: OutlineInputBorder(),
-                  ),
+                  lat: _draft.lat,
+                  lng: _draft.lng,
+                  labelText: 'Place name',
                   onChanged: (v) => _update(_draft.copyWith(placeName: v)),
                 ),
                 const SizedBox(height: 16),

@@ -6,6 +6,7 @@ import 'package:photo_manager/photo_manager.dart';
 import '../../../core/photos/photo_service.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/repositories/check_in_repository.dart';
+import '../../../shared/widgets/place_search_field.dart';
 
 // ── Shared data model ─────────────────────────────────────────────────────────
 
@@ -320,13 +321,11 @@ class _GroupPage extends StatelessWidget {
           const SizedBox(height: 16),
 
           // ── Place name ────────────────────────────────────────────────────
-          TextField(
+          PlaceSearchField(
             controller: placeCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Place',
-              prefixIcon: Icon(Icons.place_outlined),
-              border: OutlineInputBorder(),
-            ),
+            lat: group.lat,
+            lng: group.lng,
+            labelText: 'Place',
           ),
           const SizedBox(height: 12),
 

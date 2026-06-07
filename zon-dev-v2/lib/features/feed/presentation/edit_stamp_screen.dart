@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/photos/photo_service.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/repositories/stamp_repository.dart';
+import '../../../shared/widgets/place_search_field.dart';
 
 class EditStampScreen extends ConsumerStatefulWidget {
   final String stampId;
@@ -29,6 +30,8 @@ class _EditStampScreenState extends ConsumerState<EditStampScreen> {
   final List<String> _newPaths = [];
   List<String> _tags = [];
   StampVisibility _visibility = StampVisibility.private;
+  double _lat = 0;
+  double _lng = 0;
   bool _loading = true;
   bool _saving = false;
 
@@ -54,6 +57,8 @@ class _EditStampScreenState extends ConsumerState<EditStampScreen> {
       _captionCtrl.text = s.caption ?? '';
       _tags = List.of(s.sensoryTags);
       _visibility = s.visibility;
+      _lat = s.lat;
+      _lng = s.lng;
     });
     if (mounted) {
       setState(() {
@@ -133,13 +138,11 @@ class _EditStampScreenState extends ConsumerState<EditStampScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextField(
+                  PlaceSearchField(
                     controller: _placeCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Place name',
-                      prefixIcon: Icon(Icons.place),
-                      border: OutlineInputBorder(),
-                    ),
+                    lat: _lat,
+                    lng: _lng,
+                    labelText: 'Place name',
                     onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 16),

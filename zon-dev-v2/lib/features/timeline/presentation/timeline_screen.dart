@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../../app.dart';
 import '../../../core/photos/photo_service.dart';
+import '../../../shared/widgets/place_search_field.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/repositories/check_in_repository.dart';
@@ -1580,10 +1581,12 @@ class _EditCheckInSheetState extends State<_EditCheckInSheet> {
             Text('Edit check-in',
                 style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
-            TextField(
+            PlaceSearchField(
               controller: _place,
-              decoration: const InputDecoration(
-                  labelText: 'Place name', border: OutlineInputBorder()),
+              lat: widget.checkIn.lat,
+              lng: widget.checkIn.lng,
+              labelText: 'Place name',
+              onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 12),
             TextField(
