@@ -297,6 +297,16 @@ class MainShell extends StatelessWidget {
                 context.push('/checkin?mode=stamp');
               },
             ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined,
+                  color: kBrandGreen),
+              title: const Text('Photo check-in'),
+              subtitle: const Text('Import geotagged photos from your library'),
+              onTap: () {
+                Navigator.pop(ctx);
+                context.push('/photo-suggestions');
+              },
+            ),
           ],
         ),
       ),
