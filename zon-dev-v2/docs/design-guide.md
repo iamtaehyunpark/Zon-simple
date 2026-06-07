@@ -1,6 +1,6 @@
 # ZON — UI/UX Design Guide
 
-> Version 1.0 · 2026-06-07
+> Version 1.0 · 2026-06-07 
 > This is a ground-up design guide. The current app is a debugging POC — ignore it entirely.
 > Map discovery features (Phase A–E from `map-discovery-plan.md`) are not yet built;
 > their design considerations are marked **[MAP PLACEHOLDER]** throughout.
@@ -30,12 +30,12 @@ check-in with more effort; a check-in is just a breadcrumb the user chose to nam
 
 ### 1.2 Personality
 
-| Dimension | Direction |
-|---|---|
-| Tone | Personal, warm, slightly quiet — a journal, not a billboard |
-| Energy | Calm with moments of delight (not flat, not loud) |
-| Trust | Privacy-first by default; sharing is always an explicit act |
-| Density | Generous whitespace in feed/timeline; dense in map mode |
+| Dimension | Direction                                                    |
+| --------- | ------------------------------------------------------------ |
+| Tone      | Personal, warm, slightly quiet — a journal, not a billboard |
+| Energy    | Calm with moments of delight (not flat, not loud)            |
+| Trust     | Privacy-first by default; sharing is always an explicit act  |
+| Density   | Generous whitespace in feed/timeline; dense in map mode      |
 
 ---
 
@@ -46,22 +46,22 @@ check-in with more effort; a check-in is just a breadcrumb the user chose to nam
 Define the full palette before choosing a brand color. Exact hex values are left to the visual
 designer; these are roles.
 
-| Token | Role | Notes |
-|---|---|---|
-| `--brand` | Primary interactive + trail color | Should read on both white backgrounds and satellite map tiles. A warm deep teal or forest green works; avoid pure blue (conflicts with map water) and pure red (conflicts with error states) |
-| `--brand-soft` | Check-in pins, stories ring, selection states | ~20% opacity of `--brand` |
-| `--stamp` | Stamp-specific accent | Can be the same as `--brand` or a warmer sibling; stamps are promoted check-ins |
-| `--checkin` | Manual check-in pins | Differentiated from stamp but in the same family |
-| `--auto` | Auto / passive check-in pins | Muted grey; these are GPS breadcrumbs, not user-chosen moments |
-| `--note` | Timeline free-text notes | Warm amber — connotes handwriting |
-| `--surface-0` | Page/sheet background | Near-white in light mode |
-| `--surface-1` | Card background | Slight elevation from surface-0 |
-| `--surface-2` | Elevated sheet, modal | |
-| `--on-surface` | Primary text | |
-| `--on-surface-muted` | Secondary text, timestamps | |
-| `--outline` | Borders, dividers | |
-| `--error` | Destructive actions, error states | Standard red |
-| `--map-dark` | Map background (dark mode / night mode) | Near-black; map SDK handles tile theming |
+| Token                  | Role                                          | Notes                                                                                                                                                                                        |
+| ---------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--brand`            | Primary interactive + trail color             | Should read on both white backgrounds and satellite map tiles. A warm deep teal or forest green works; avoid pure blue (conflicts with map water) and pure red (conflicts with error states) |
+| `--brand-soft`       | Check-in pins, stories ring, selection states | ~20% opacity of `--brand`                                                                                                                                                                  |
+| `--stamp`            | Stamp-specific accent                         | Can be the same as `--brand` or a warmer sibling; stamps are promoted check-ins                                                                                                            |
+| `--checkin`          | Manual check-in pins                          | Differentiated from stamp but in the same family                                                                                                                                             |
+| `--auto`             | Auto / passive check-in pins                  | Muted grey; these are GPS breadcrumbs, not user-chosen moments                                                                                                                               |
+| `--note`             | Timeline free-text notes                      | Warm amber — connotes handwriting                                                                                                                                                           |
+| `--surface-0`        | Page/sheet background                         | Near-white in light mode                                                                                                                                                                     |
+| `--surface-1`        | Card background                               | Slight elevation from surface-0                                                                                                                                                              |
+| `--surface-2`        | Elevated sheet, modal                         |                                                                                                                                                                                              |
+| `--on-surface`       | Primary text                                  |                                                                                                                                                                                              |
+| `--on-surface-muted` | Secondary text, timestamps                    |                                                                                                                                                                                              |
+| `--outline`          | Borders, dividers                             |                                                                                                                                                                                              |
+| `--error`            | Destructive actions, error states             | Standard red                                                                                                                                                                                 |
+| `--map-dark`         | Map background (dark mode / night mode)       | Near-black; map SDK handles tile theming                                                                                                                                                     |
 
 **Light / Dark:** Design both. The map is naturally dark-mode-friendly (satellite/dark tile
 styles look better at night). The diary/feed sections should have a clean light default but
@@ -73,16 +73,16 @@ support dark.
 
 One typeface family is enough. Use weight and size for hierarchy; avoid mixing families.
 
-| Style | Usage | Size / Weight |
-|---|---|---|
-| `display` | Hero place names on detail pages | 28–32 / Bold |
-| `title-lg` | Screen titles, place names in cards | 20–22 / SemiBold |
-| `title-md` | Section headers, sheet titles | 17–18 / SemiBold |
-| `title-sm` | Card metadata labels | 14 / SemiBold |
-| `body` | Captions, notes, diary text | 15–16 / Regular |
-| `body-sm` | Secondary metadata, timestamps | 13 / Regular |
-| `label` | Chips, buttons, kind badges | 11–12 / SemiBold, uppercase tracking |
-| `mono` | Coordinates, IDs if shown | System mono |
+| Style        | Usage                               | Size / Weight                         |
+| ------------ | ----------------------------------- | ------------------------------------- |
+| `display`  | Hero place names on detail pages    | 28–32 / Bold                         |
+| `title-lg` | Screen titles, place names in cards | 20–22 / SemiBold                     |
+| `title-md` | Section headers, sheet titles       | 17–18 / SemiBold                     |
+| `title-sm` | Card metadata labels                | 14 / SemiBold                         |
+| `body`     | Captions, notes, diary text         | 15–16 / Regular                      |
+| `body-sm`  | Secondary metadata, timestamps      | 13 / Regular                          |
+| `label`    | Chips, buttons, kind badges         | 11–12 / SemiBold, uppercase tracking |
+| `mono`     | Coordinates, IDs if shown           | System mono                           |
 
 Line height: 1.4× for body, 1.2× for titles.
 Minimum tap-target text: 44pt height, regardless of font size.
@@ -104,12 +104,12 @@ Corner radii: `8` (chips, small cards) · `12` (input fields) · `16` (sheets, c
 
 Map is ground zero. Everything floating above the map uses elevation shadows.
 
-| Level | Usage |
-|---|---|
-| 0 | Map surface |
-| 1 | Floating search bar, filter strip (4dp shadow) |
-| 2 | Bottom snap panel, place preview cards (8dp shadow) |
-| 3 | Full modal sheets (16dp shadow + dim backdrop) |
+| Level | Usage                                               |
+| ----- | --------------------------------------------------- |
+| 0     | Map surface                                         |
+| 1     | Floating search bar, filter strip (4dp shadow)      |
+| 2     | Bottom snap panel, place preview cards (8dp shadow) |
+| 3     | Full modal sheets (16dp shadow + dim backdrop)      |
 
 Avoid drop shadows in feed/timeline — those sections use background color to separate layers.
 
@@ -124,6 +124,7 @@ Filled icon = active / selected state.
 Outlined icon = inactive / unselected.
 
 Custom icons needed for ZON-specific concepts:
+
 - Stamp (a stylized postage stamp or wax seal)
 - Check-in pin (distinct from Google Maps pin)
 - Trail/breadcrumb
@@ -152,12 +153,12 @@ Consider a pill shape or oversized circle with a subtle brand-color glow.
 
 ### 3.2 Navigation patterns
 
-| Pattern | When to use |
-|---|---|
-| Bottom sheet (snap panel) | Quick detail view that doesn't break map context |
-| Full-screen push | Detail pages with rich content (stamp detail, profile, place detail) |
-| Modal sheet | Creation flows, editors, pickers |
-| In-place expand | Inline editors on the timeline (do not push for a quick note edit) |
+| Pattern                   | When to use                                                          |
+| ------------------------- | -------------------------------------------------------------------- |
+| Bottom sheet (snap panel) | Quick detail view that doesn't break map context                     |
+| Full-screen push          | Detail pages with rich content (stamp detail, profile, place detail) |
+| Modal sheet               | Creation flows, editors, pickers                                     |
+| In-place expand           | Inline editors on the timeline (do not push for a quick note edit)   |
 
 Avoid nested push navigation deeper than 3 levels. Prefer bottom sheets over push for
 contextual detail so the user never loses their map/timeline position.
@@ -324,6 +325,7 @@ small dots (consistent with the pin system from the main map). Auto anchors as t
 Tapping a pin highlights the corresponding list item — and vice versa (list → map camera flies).
 
 **Timeline list nodes:** Three visual types with distinct colors and icons:
+
 - **Check-in** (blue) — pin icon; place name prominent; note and photos below
 - **Stamp** (brand) — star/wax-seal icon; slight brand-color tint on the row
 - **Note** (amber) — pencil/note icon; text body prominent; no place name
@@ -490,6 +492,7 @@ from "Follow" to reinforce that they are different relationships — a small ico
 **Purpose:** Account control. Not a dumping ground.
 
 Sections:
+
 1. **Profile** — Edit name, bio, avatar
 2. **Privacy** — Private account toggle, Ghost mode toggle (live location), Location visibility (per-friend)
 3. **Notifications** — Toggle types
@@ -509,6 +512,7 @@ At the top: pending friend requests section (if any), then pending follow reques
 chronological notifications.
 
 Notification types to design rows for:
+
 - Someone liked your stamp
 - Someone commented
 - Someone started following you / follow request
@@ -524,6 +528,7 @@ Notification types to design rows for:
 ### 5.1 Bottom snap panel
 
 Used on map (social layer) and map (nearby list — placeholder). Consistent pattern:
+
 - **Collapsed:** 64pt high; handle (40×4pt pill) centered at top; one-line summary text
 - **Mid-snap:** ~40% screen height; header row + scrollable content
 - **Expanded:** 85% screen height; full list
@@ -534,6 +539,7 @@ The handle area is the only drag target. Content below is independently scrollab
 
 Used everywhere a place is being selected (check-in creation, stamp edit, photo inspection).
 Consistent behavior regardless of context:
+
 - Attached below the text field (not full-screen overlay)
 - Top item: "Use coordinate" — always shown, auto-resolves nearby name
 - Remaining: nearby or search results (max 5)
@@ -543,16 +549,16 @@ Consistent behavior regardless of context:
 
 All map pins use a consistent visual language:
 
-| Type | Shape | Color | Size |
-|---|---|---|---|
-| Own check-in | Filled circle | Blue | 14pt |
-| Own stamp | Teardrop / pin | Brand | 16pt |
-| Auto anchor | Filled dot | Grey | 6pt |
-| Following stamp | Filled circle | Orange | 12pt |
-| Following story | Ring + dot | Pink | 12pt |
-| Friend location | Avatar circle | — | 32pt |
-| **[MAP PLACEHOLDER]** Search result | Outlined pin | Neutral | 14pt |
-| **[MAP PLACEHOLDER]** Hot place | Sized circle | Category color | 16–40pt |
+| Type                                      | Shape          | Color          | Size     |
+| ----------------------------------------- | -------------- | -------------- | -------- |
+| Own check-in                              | Filled circle  | Blue           | 14pt     |
+| Own stamp                                 | Teardrop / pin | Brand          | 16pt     |
+| Auto anchor                               | Filled dot     | Grey           | 6pt      |
+| Following stamp                           | Filled circle  | Orange         | 12pt     |
+| Following story                           | Ring + dot     | Pink           | 12pt     |
+| Friend location                           | Avatar circle  | —             | 32pt     |
+| **[MAP PLACEHOLDER]** Search result | Outlined pin   | Neutral        | 14pt     |
+| **[MAP PLACEHOLDER]** Hot place     | Sized circle   | Category color | 16–40pt |
 
 Selected state: white ring + drop shadow on any pin type.
 
@@ -573,17 +579,17 @@ neutral. Never use a confirmation for non-destructive actions.
 
 **Rule:** Animation aids understanding; it never shows off.
 
-| Interaction | Motion |
-|---|---|
-| Tab switch | Cross-fade (150ms); never slide — tabs are not hierarchical |
-| Push navigation | Standard slide right (300ms ease-out) |
-| Bottom sheet appear | Slide up + fade (250ms ease-out) |
-| Map camera fly | 400–500ms ease-in-out; not instant |
-| Pin appear on map | Scale from 0 → 1 with slight spring (spring stiffness = 200) |
-| Story progress bar | Linear, matches media duration |
-| Like button | Micro-bounce on tap (scale 1 → 1.3 → 1, 200ms) |
-| FAB expand | Reveal sub-options with staggered fade-up (80ms stagger between items) |
-| Stamp card load | Skeleton → fade in (not placeholder-pop) |
+| Interaction         | Motion                                                                 |
+| ------------------- | ---------------------------------------------------------------------- |
+| Tab switch          | Cross-fade (150ms); never slide — tabs are not hierarchical           |
+| Push navigation     | Standard slide right (300ms ease-out)                                  |
+| Bottom sheet appear | Slide up + fade (250ms ease-out)                                       |
+| Map camera fly      | 400–500ms ease-in-out; not instant                                    |
+| Pin appear on map   | Scale from 0 → 1 with slight spring (spring stiffness = 200)          |
+| Story progress bar  | Linear, matches media duration                                         |
+| Like button         | Micro-bounce on tap (scale 1 → 1.3 → 1, 200ms)                       |
+| FAB expand          | Reveal sub-options with staggered fade-up (80ms stagger between items) |
+| Stamp card load     | Skeleton → fade in (not placeholder-pop)                              |
 
 Do not animate list scroll, pagination loading, or simple visibility toggles unless there is a
 clear spatial relationship to communicate.
@@ -598,6 +604,7 @@ Every screen that fetches data needs three states:
 timeline). Spinner only for quick confirmations and creation actions.
 
 **Empty:** Specific message + illustration + CTA. Never show "No data." Examples:
+
 - Feed empty: "You're not following anyone yet. Find people to follow." → [Search people]
 - Timeline empty day: "Nothing logged this day." On today: "Check in to start your trace." → [Check in]
 - Profile stamps empty: "No stamps yet. Create your first." → [Check in]
@@ -626,12 +633,12 @@ first to check in!" — shown when `place_stats` returns 0 results for the curre
 
 These need a designer's decision before implementation:
 
-| Decision | Options | Recommendation |
-|---|---|---|
-| Brand color | Teal, forest green, deep olive, warm coral | Avoid pure blue and pure red (conflicts with map semantics) |
-| Map tile default | Standard vector, dark vector, satellite | Standard by default; user-switchable |
-| Stamp card aspect ratio | 1:1, 4:3, 3:4, variable | Fixed 4:3 portrait simplest; variable (like Instagram) most flexible |
-| Typography family | System (SF Pro / Roboto), custom | System is safest for first version; custom brand font later |
-| Stamp icon | Wax seal, postage stamp, star, custom | Custom icon strongly recommended — it's the core metaphor |
-| Tab bar style | Standard labels, icons-only, floating pill | Floating pill is distinctive; standard is safest for accessibility |
-| [MAP PLACEHOLDER] Hot place bubble style | Proportional circles, hexagons, numbered markers | Proportional circles are most map-native |
+| Decision                                 | Options                                          | Recommendation                                                       |
+| ---------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------- |
+| Brand color                              | Teal, forest green, deep olive, warm coral       | Avoid pure blue and pure red (conflicts with map semantics)          |
+| Map tile default                         | Standard vector, dark vector, satellite          | Standard by default; user-switchable                                 |
+| Stamp card aspect ratio                  | 1:1, 4:3, 3:4, variable                          | Fixed 4:3 portrait simplest; variable (like Instagram) most flexible |
+| Typography family                        | System (SF Pro / Roboto), custom                 | System is safest for first version; custom brand font later          |
+| Stamp icon                               | Wax seal, postage stamp, star, custom            | Custom icon strongly recommended — it's the core metaphor           |
+| Tab bar style                            | Standard labels, icons-only, floating pill       | Floating pill is distinctive; standard is safest for accessibility   |
+| [MAP PLACEHOLDER] Hot place bubble style | Proportional circles, hexagons, numbered markers | Proportional circles are most map-native                             |

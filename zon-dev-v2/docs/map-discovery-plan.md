@@ -1,4 +1,4 @@
-# ZON — Map Discovery Plan (Next Major Version)
+# ZON — Map Discovery Plan (Next Major Version) 
 
 > Written 2026-06-07. Simple plan for turning ZON's map into a social place-discovery layer
 > (Naver Map-style). Every pipeline, table, and abstraction is designed to make the
@@ -212,13 +212,13 @@ Tunable — expose the weights as DB config if needed later.
 
 ## 5. Migration path: external API → own DB
 
-| Stage | State | What backs place data |
-|---|---|---|
-| **Now** | No `places` table | Kakao/Google API calls, no persistence |
-| **Phase A–B** | `places` table exists, write-through active | Kakao/Google API + organic accumulation |
-| **Phase C–E** | `places` populated for active areas | Discovery layer uses own DB; API fills gaps |
-| **Own DB** | `places` has critical mass | `OwnPlaceRepository` primary; external = fallback only for unknowns |
-| **Full ownership** | Own editorial/curation | External APIs optional; we enrich with our own data |
+| Stage                    | State                                         | What backs place data                                                 |
+| ------------------------ | --------------------------------------------- | --------------------------------------------------------------------- |
+| **Now**            | No `places` table                           | Kakao/Google API calls, no persistence                                |
+| **Phase A–B**     | `places` table exists, write-through active | Kakao/Google API + organic accumulation                               |
+| **Phase C–E**     | `places` populated for active areas         | Discovery layer uses own DB; API fills gaps                           |
+| **Own DB**         | `places` has critical mass                  | `OwnPlaceRepository` primary; external = fallback only for unknowns |
+| **Full ownership** | Own editorial/curation                        | External APIs optional; we enrich with our own data                   |
 
 No feature code changes are needed at each stage boundary — only the repository implementation
 and the Riverpod provider swap.
