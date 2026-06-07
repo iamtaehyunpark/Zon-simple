@@ -4,9 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../../app.dart';
-import '../../../shared/theme/app_theme.dart';
 import '../../../core/photos/photo_service.dart';
 import '../../../shared/widgets/place_search_field.dart';
 import '../../../data/models/check_in.dart';
@@ -21,6 +21,7 @@ import '../../map/presentation/map_drawing.dart';
 import 'providers/timeline_provider.dart';
 
 const _kCheckinBlue = 0xFF2196F3;
+const _kNoteAmber = 0xFFF59E0B;
 
 enum _NodeKind { checkIn, stamp, note }
 
@@ -71,8 +72,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   DayBundle? _bundle;
   DayBundle? _drawn;
   bool _isGeneratingDiary = false;
-  Map<int, int> _monthlyActivity = {};
-  DateTime? _activityMonth;
 
   final _sheetController = DraggableScrollableController();
   final Map<String, GlobalKey> _itemKeys = {};
@@ -90,7 +89,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       _day = DateTime(n.year, n.month, n.day);
       // Provider is fresh — build() already enqueued loadDay(today) via microtask.
     }
-    _loadActivity(_day);
   }
 
   bool get _isToday {
@@ -105,19 +103,6 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       _selectedId = null;
     });
     ref.read(timelineNotifierProvider.notifier).loadDay(d);
-    _loadActivity(d);
-  }
-
-  Future<void> _loadActivity(DateTime date) async {
-    final m = DateTime(date.year, date.month);
-    if (_activityMonth?.year == m.year && _activityMonth?.month == m.month) return;
-    final res = await ref.read(checkInRepositoryProvider).monthlyVisitCounts(m);
-    if (mounted) {
-      setState(() {
-        _activityMonth = m;
-        _monthlyActivity = res;
-      });
-    }
   }
 
   void _reload() => ref.read(timelineNotifierProvider.notifier).loadDay(_day);
@@ -204,7 +189,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     // Trace = the day's located nodes (check-ins, auto anchors, stamps) joined
     // in time order. (Auto anchors sample movement, so this follows the path.)
     final coords = [for (final i in located) [i.lng!, i.lat!]];
-    await drawLine(map, coords, kBrandPurple.toARGB32(), idPrefix: 'tl-path');
+    await drawLine(map, coords, kBrandGreen.toARGB32(), idPrefix: 'tl-path');
 
     await drawPins(
       map,
@@ -238,7 +223,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
         for (final i in located.where((i) => i.isStamp))
           MapPin(id: i.id, kind: 'stamp', name: i.name, lat: i.lat!, lng: i.lng!),
       ],
-      color: kBrandPurple.toARGB32(),
+      color: kBrandGreen.toARGB32(),
     );
     await _drawSelection();
 
@@ -268,7 +253,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
               name: sel.name,
               lat: sel.lat!,
               lng: sel.lng!),
-      kBrandPurple.toARGB32(),
+      kBrandGreen.toARGB32(),
     );
   }
 
@@ -331,16 +316,8 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     });
   }
 
-  // Tap a node — highlight it (syncs the map), then navigate to detail for
-  // check-ins and stamps.
-  void _onTapNode(_TlItem item) {
-    _highlight(item.id);
-    if (item.kind == _NodeKind.checkIn) {
-      context.push('/check-in/${item.id}');
-    } else if (item.kind == _NodeKind.stamp) {
-      context.push('/stamp/${item.id}');
-    }
-  }
+  // Tap a node → just highlight it (same as tapping its pin on the map).
+  void _onTapNode(_TlItem item) => _highlight(item.id);
 
   // Long-press → act on it: stamp opens its page; check-in/note opens the
   // inline editor.
@@ -370,7 +347,50 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     _reload();
   }
 
+  Future<void> _addPhotosInline(_TlItem item) async {
+    final picked = await ImagePicker().pickMultiImage();
+    if (picked.isEmpty) return;
+    final service = PhotoService();
+    final results = await Future.wait([
+      for (final x in picked) service.uploadFile(File(x.path)),
+    ]);
+    final urls = [for (final u in results) if (u != null) u];
+    await ref.read(checkInRepositoryProvider).addCheckInPhotos(item.id, urls);
+    _reload(); // editor stays open and shows the new photos
+  }
 
+  // Swipe-left to delete a check-in or note. Check-ins confirm first (they
+  // may carry photos); notes delete straight away.
+  Future<void> _deleteItem(_TlItem item) async {
+    if (item.isNote) {
+      await ref.read(timelineNoteRepositoryProvider).delete(item.id);
+    } else if (item.kind == _NodeKind.checkIn) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete check-in?'),
+          content: Text('Remove "${item.name}" from your trace?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      await ref.read(checkInRepositoryProvider).deleteCheckIn(item.id);
+    } else {
+      return;
+    }
+    if (_selectedId == item.id) _selectedId = null;
+    if (_expandedId == item.id) _expandedId = null;
+    _reload();
+  }
 
   void _moreCheckIn(_TlItem item) => _showCheckInDetail(item.id);
 
@@ -685,771 +705,130 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
   static String _hhmm(DateTime dt) => DateFormat('HH:mm').format(dt);
 
+  // Long-press drag of a note → reposition it. Its time becomes the next
+  // node's time minus one minute (so it sorts just before that node).
+  void _onReorder(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _items.length) return;
+    final moved = _items[oldIndex];
+    if (moved.kind != _NodeKind.note) return; // only notes are movable
+    // onReorderItem already adjusts newIndex for the removed item.
+    final list = [..._items];
+    list.removeAt(oldIndex);
+    if (newIndex > list.length) newIndex = list.length;
+    list.insert(newIndex, moved);
 
-
-  // ── Week strip helpers ────────────────────────────────────────────────────
-  // Returns the Monday of the current week for _day.
-  DateTime get _weekStart {
-    final wd = _day.weekday; // Mon=1..Sun=7
-    return _day.subtract(Duration(days: wd - 1));
+    final next = newIndex + 1 < list.length ? list[newIndex + 1] : null;
+    final prev = newIndex - 1 >= 0 ? list[newIndex - 1] : null;
+    final DateTime newTime;
+    if (next != null) {
+      newTime = next.time.subtract(const Duration(minutes: 1));
+    } else if (prev != null) {
+      newTime = prev.time.add(const Duration(minutes: 1));
+    } else {
+      newTime = moved.time;
+    }
+    _persistNoteTime(moved.id, newTime);
   }
 
-  List<DateTime> get _weekDays {
-    final start = _weekStart;
-    return List.generate(7, (i) => start.add(Duration(days: i)));
+  Future<void> _persistNoteTime(String id, DateTime t) async {
+    await ref.read(timelineNoteRepositoryProvider).setTime(id, t);
+    _reload();
+  }
+
+  // Edit a note's time from the inline editor (drag reordering still works too).
+  Future<void> _changeNoteTime(_TlItem item) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(item.time),
+    );
+    if (picked == null) return;
+    final t = DateTime(
+        _day.year, _day.month, _day.day, picked.hour, picked.minute);
+    await _persistNoteTime(item.id, t);
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(timelineNotifierProvider);
-    final weekDays = _weekDays;
 
     return Scaffold(
-      backgroundColor: Z.surface0,
-      body: Column(
-        children: [
-          // ── Header: date nav + week strip ─────────────────────────
-          Container(
-            color: Z.surface1,
-            child: SafeArea(
-              bottom: false,
-              child: Column(
-                children: [
-                  // Date nav row
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-                    child: Row(
-                      children: [
-                        _NavBtn(
-                            icon: Icons.chevron_left,
-                            onTap: () => _shift(-1)),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: _pickDate,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _isToday
-                                      ? 'Today'
-                                      : DateFormat('MMM d').format(_day),
-                                  style: const TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w700,
-                                      color: Z.text),
-                                ),
-                                const SizedBox(width: 5),
-                                const Icon(Icons.expand_more,
-                                    size: 16, color: Z.textMuted),
-                              ],
-                            ),
-                          ),
-                        ),
-                        _NavBtn(
-                          icon: Icons.calendar_month,
-                          onTap: _pickDate,
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Week strip
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
-                    child: Row(
-                      children: weekDays.map((d) {
-                        final isSelected = d.day == _day.day &&
-                            d.month == _day.month &&
-                            d.year == _day.year;
-                        final isWeekend =
-                            d.weekday == DateTime.saturday ||
-                                d.weekday == DateTime.sunday;
-                        final dayLabel =
-                            DateFormat('E').format(d)[0]; // S/M/T/W/T/F/S
-                        final hasActivity = d.month == _activityMonth?.month &&
-                            d.year == _activityMonth?.year &&
-                            (_monthlyActivity[d.day] ?? 0) > 0;
-                        return Expanded(
-                          child: GestureDetector(
-                            onTap: () => _load(d),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 150),
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 7),
-                              decoration: BoxDecoration(
-                                color: isSelected ? Z.brand : null,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Column(
-                                children: [
-                                  Text(
-                                    dayLabel,
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w600,
-                                      color: isSelected
-                                          ? Colors.white.withValues(alpha: 0.8)
-                                          : isWeekend
-                                              ? Z.textFaint
-                                              : Z.textMuted,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${d.day}',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: isSelected
-                                          ? FontWeight.w700
-                                          : FontWeight.w400,
-                                      color: isSelected
-                                          ? Colors.white
-                                          : isWeekend
-                                              ? Z.textFaint
-                                              : Z.text,
-                                    ),
-                                  ),
-                                  // Activity dot
-                                  SizedBox(
-                                    height: 4,
-                                    child: !isSelected && hasActivity
-                                        ? Center(
-                                            child: Container(
-                                              width: 4,
-                                              height: 4,
-                                              decoration: BoxDecoration(
-                                                shape: BoxShape.circle,
-                                                color: Z.brand
-                                                    .withValues(alpha: 0.65),
-                                              ),
-                                            ),
-                                          )
-                                        : null,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ── Scrollable body ─────────────────────────────────────────
-          Expanded(
-            child: state.when(
-              loading: () => const LoadingView(),
-              error: (e, _) => ErrorView(message: errorMessage(e)),
-              data: (bundle) {
-                _bundle = bundle;
-                _items = _buildItems(bundle);
-                _diary = bundle.diary;
-                for (final i in _items) {
-                  _itemKeys.putIfAbsent(i.id, () => GlobalKey());
-                }
-                WidgetsBinding.instance
-                    .addPostFrameCallback((_) => _maybeRedraw(bundle));
-
-                return ListView(
-                  padding: const EdgeInsets.only(bottom: 32),
-                  children: [
-                    // ── Mini route map card ─────────────────────────
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Z.outline),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Column(
-                          children: [
-                            SizedBox(
-                              height: 188,
-                              child: MapWidget(
-                                key: const ValueKey('timeline-map'),
-                                viewport: CameraViewportState(
-                                  center: Point(
-                                      coordinates: Position(
-                                          126.9780, 37.5665)),
-                                  zoom: 12.0,
-                                ),
-                                onMapCreated: (controller) {
-                                  _map = controller;
-                                  controller.addInteraction(
-                                      TapInteraction.onMap(_onMapTap));
-                                  if (_bundle != null) _redraw(_bundle!);
-                                },
-                              ),
-                            ),
-                            Container(
-                              decoration: const BoxDecoration(
-                                  border: Border(
-                                      top: BorderSide(color: Z.outline))),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 8),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    DateFormat('MMM d').format(_day),
-                                    style: const TextStyle(
-                                        fontSize: 13, color: Z.textMuted),
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    '${_items.where((i) => i.isStamp).length} stamps',
-                                    style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: Z.brand),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // ── Timeline node list ──────────────────────────
-                    const SizedBox(height: 4),
-                    for (int i = 0; i < _items.length; i++)
-                      _TimelineNode(
-                        item: _items[i],
-                        isLast: i == _items.length - 1,
-                        isSelected: _selectedId == _items[i].id,
-                        isExpanded: _expandedId == _items[i].id,
-                        onTap: () => _onTapNode(_items[i]),
-                        onLongPress: () => _onLongPressNode(_items[i]),
-                        onMore: () => _moreCheckIn(_items[i]),
-                        onPromote: _items[i].kind == _NodeKind.checkIn &&
-                                !_items[i].isAuto
-                            ? () => context
-                                .push('/checkin?fromCheckIn=${_items[i].id}')
-                            : null,
-                        itemKey: _itemKeys[_items[i].id],
-                        onSaveText: (text) => _saveText(_items[i], text),
-                      ),
-
-                    // ── Add note row ────────────────────────────────
-                    _AddNoteRow(onSubmit: _submitNote),
-
-                    // ── Divider ─────────────────────────────────────
-                    const Padding(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Divider(color: Z.outline),
-                    ),
-
-                    // ── Diary card ──────────────────────────────────
-                    _DiaryCard(
-                      diary: _diary,
-                      generating: _isGeneratingDiary,
-                      onGenerate: _generateDiary,
-                      onEdit: _editDiary,
-                    ),
-                  ],
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Nav button helper ─────────────────────────────────────────────────────────
-class _NavBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _NavBtn({required this.icon, required this.onTap});
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: SizedBox(
-          width: 36,
-          height: 36,
-          child: Icon(icon, size: 22, color: Z.textMuted),
-        ),
-      );
-}
-
-// ── Timeline node — zon-cards.jsx TimelineNode ────────────────────────────────
-class _TimelineNode extends StatelessWidget {
-  final _TlItem item;
-  final bool isLast;
-  final bool isSelected;
-  final bool isExpanded;
-  final VoidCallback onTap;
-  final VoidCallback onLongPress;
-  final VoidCallback onMore;
-  final VoidCallback? onPromote;
-  final GlobalKey? itemKey;
-  final Future<void> Function(String) onSaveText;
-
-  const _TimelineNode({
-    required this.item,
-    required this.isLast,
-    required this.isSelected,
-    required this.isExpanded,
-    required this.onTap,
-    required this.onLongPress,
-    required this.onMore,
-    this.onPromote,
-    this.itemKey,
-    required this.onSaveText,
-  });
-
-  static const _kindMeta = {
-    'checkin': (
-      color: Z.checkin,
-      soft: Z.checkinSoft,
-      icon: Icons.location_on,
-      label: 'Check-in'
-    ),
-    'stamp': (
-      color: Z.brand,
-      soft: Z.brandSoft,
-      icon: Icons.workspace_premium,
-      label: 'Stamp'
-    ),
-    'note': (
-      color: Z.note,
-      soft: Z.noteSoft,
-      icon: Icons.edit_note,
-      label: 'Note'
-    ),
-    'auto': (
-      color: Z.auto,
-      soft: Color(0x1F9CA3AF),
-      icon: Icons.radio_button_unchecked,
-      label: 'Auto'
-    ),
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final kindKey = item.isAuto
-        ? 'auto'
-        : item.kind == _NodeKind.stamp
-            ? 'stamp'
-            : item.kind == _NodeKind.note
-                ? 'note'
-                : 'checkin';
-    final meta = _kindMeta[kindKey]!;
-    final isNote = item.kind == _NodeKind.note;
-
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Row(
-        key: itemKey,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Left rail — 52px wide
-          SizedBox(
-            width: 52,
-            child: Column(
-              children: [
-                const SizedBox(height: 14),
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: meta.soft,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: meta.color, width: 2),
-                  ),
-                  child: Icon(meta.icon, size: 14, color: meta.color),
-                ),
-                if (!isLast)
-                  Container(
-                    width: 2,
-                    height: 40,
-                    color: Z.outline,
-                    margin: const EdgeInsets.only(top: 4),
-                  ),
-              ],
-            ),
-          ),
-          // Content
-          Expanded(
-            child: Padding(
-              padding:
-                  const EdgeInsets.fromLTRB(0, 12, 16, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Time + KindChip
-                  Row(
-                    children: [
-                      Text(DateFormat('H:mm').format(item.time),
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: Z.textMuted,
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 8),
-                      _KindChip(kindKey, meta.color, meta.soft, meta.label),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  // Place name
-                  if (!isNote && item.name.isNotEmpty)
-                    Text(item.name,
-                        style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Z.text)),
-                  // Text / note body
-                  if (item.text != null && item.text!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(item.text!,
-                        style: TextStyle(
-                            fontSize: 14,
-                            color:
-                                isNote ? Z.note : Z.textMuted,
-                            height: 1.55,
-                            fontStyle: isNote
-                                ? FontStyle.italic
-                                : FontStyle.normal)),
-                  ],
-                  // Photo thumbs
-                  if (item.photoUrls.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: item.photoUrls
-                          .take(3)
-                          .map((url) => Container(
-                                width: 60,
-                                height: 60,
-                                margin:
-                                    const EdgeInsets.only(right: 6),
-                                decoration: BoxDecoration(
-                                    borderRadius:
-                                        BorderRadius.circular(8),
-                                    color: Z.surface2),
-                                clipBehavior: Clip.antiAlias,
-                                child: url.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        imageUrl: url,
-                                        fit: BoxFit.cover)
-                                    : null,
-                              ))
-                          .toList(),
-                    ),
-                  ],
-                  // Promote CTA (check-in only, not auto, not promoted)
-                  if (item.kind == _NodeKind.checkIn &&
-                      !item.isAuto &&
-                      onPromote != null) ...[
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: onPromote,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                            color: Z.brandSoft,
-                            borderRadius:
-                                BorderRadius.circular(9999)),
-                        child: const Text('Promote to stamp →',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Z.brand)),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── KindChip ──────────────────────────────────────────────────────────────────
-class _KindChip extends StatelessWidget {
-  final String kind;
-  final Color color;
-  final Color soft;
-  final String label;
-  const _KindChip(this.kind, this.color, this.soft, this.label);
-  @override
-  Widget build(BuildContext context) => Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
-        decoration: BoxDecoration(color: soft, borderRadius: BorderRadius.circular(9999)),
-        child: Text(
-          label.toUpperCase(),
-          style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: color,
-              letterSpacing: 0.3),
-        ),
-      );
-}
-
-// ── Add note row ──────────────────────────────────────────────────────────────
-class _AddNoteRow extends StatefulWidget {
-  final Future<void> Function(String) onSubmit;
-  const _AddNoteRow({required this.onSubmit});
-  @override
-  State<_AddNoteRow> createState() => _AddNoteRowState();
-}
-
-class _AddNoteRowState extends State<_AddNoteRow> {
-  bool _active = false;
-  final _ctrl = TextEditingController();
-  @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(52, 4, 16, 8),
-      child: !_active
-          ? GestureDetector(
-              onTap: () => setState(() => _active = true),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Z.outline2, style: BorderStyle.solid, width: 1.5),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.add, size: 18, color: Z.textMuted),
-                    SizedBox(width: 8),
-                    Text('Add a note',
-                        style: TextStyle(fontSize: 14, color: Z.textMuted)),
-                  ],
-                ),
-              ),
-            )
-          : Container(
-              decoration: BoxDecoration(
-                color: Z.surface1,
-                border: Border.all(color: Z.brand, width: 1.5),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-              child: Column(
-                children: [
-                  TextField(
-                    controller: _ctrl,
-                    autofocus: true,
-                    maxLines: null,
-                    minLines: 3,
-                    style: const TextStyle(fontSize: 14, color: Z.text, height: 1.5),
-                    decoration: const InputDecoration(
-                      hintText: "What's on your mind?",
-                      hintStyle: TextStyle(color: Z.textFaint),
-                      border: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      GestureDetector(
-                        onTap: () {
-                          _ctrl.clear();
-                          setState(() => _active = false);
-                        },
-                        child: Container(
-                          height: 32,
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: BoxDecoration(
-                              border: Border.all(color: Z.outline2),
-                              borderRadius: BorderRadius.circular(9999)),
-                          alignment: Alignment.center,
-                          child: const Text('Cancel',
-                              style: TextStyle(
-                                  fontSize: 13, color: Z.textMuted)),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: () async {
-                          final text = _ctrl.text.trim();
-                          if (text.isEmpty) return;
-                          _ctrl.clear();
-                          setState(() => _active = false);
-                          await widget.onSubmit(text);
-                        },
-                        child: Container(
-                          height: 32,
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          decoration: BoxDecoration(
-                              color: Z.brand,
-                              borderRadius: BorderRadius.circular(9999)),
-                          alignment: Alignment.center,
-                          child: const Text('Save',
-                              style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-    );
-  }
-}
-
-// ── Diary card ────────────────────────────────────────────────────────────────
-class _DiaryCard extends StatelessWidget {
-  final String diary;
-  final bool generating;
-  final VoidCallback onGenerate;
-  final VoidCallback onEdit;
-  const _DiaryCard({
-    required this.diary,
-    required this.generating,
-    required this.onGenerate,
-    required this.onEdit,
-  });
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: Z.surface1,
-          border: Border.all(color: Z.outline),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: AppBar(
+        centerTitle: true,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Header row
-            Container(
-              decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Z.outline))),
-              padding: const EdgeInsets.fromLTRB(16, 14, 14, 12),
-              child: Row(
-                children: [
-                  const Icon(Icons.menu_book, size: 20, color: Z.brand),
-                  const SizedBox(width: 8),
-                  const Text('Diary',
-                      style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: Z.text)),
-                  const Spacer(),
-                  if (diary.isNotEmpty) ...[
-                    GestureDetector(
-                      onTap: onEdit,
-                      child: Container(
-                        height: 30,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                            border: Border.all(color: Z.outline2),
-                            borderRadius: BorderRadius.circular(9999)),
-                        alignment: Alignment.center,
-                        child: const Text('Edit',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Z.textMuted)),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                  ],
-                  GestureDetector(
-                    onTap: diary.isNotEmpty || generating ? null : onGenerate,
-                    child: AnimatedOpacity(
-                      opacity: generating ? 0.7 : 1.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: Container(
-                        height: 30,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                            color: diary.isNotEmpty ? Z.surface2 : Z.brand,
-                            borderRadius: BorderRadius.circular(9999)),
-                        alignment: Alignment.center,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.auto_awesome,
-                                size: 14,
-                                color: diary.isNotEmpty
-                                    ? Z.textMuted
-                                    : Colors.white),
-                            const SizedBox(width: 5),
-                            Text(
-                              generating
-                                  ? 'Writing…'
-                                  : diary.isNotEmpty
-                                      ? 'Generated'
-                                      : 'Generate',
-                              style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: diary.isNotEmpty
-                                      ? Z.textMuted
-                                      : Colors.white),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+            IconButton(
+                icon: const Icon(Icons.chevron_left),
+                onPressed: () => _shift(-1)),
+            TextButton(
+              onPressed: _pickDate,
+              child: Text(
+                _isToday ? 'Today' : DateFormat('EEE, MMM d').format(_day),
+                style: const TextStyle(fontWeight: FontWeight.w600),
               ),
             ),
-            // Body
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-              child: generating
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [100, 88, 72, 55]
-                          .map((w) => Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
-                                child: Container(
-                                  height: 14,
-                                  width: MediaQuery.of(context).size.width *
-                                      w /
-                                      100,
-                                  decoration: BoxDecoration(
-                                      color: Z.surface2,
-                                      borderRadius:
-                                          BorderRadius.circular(7)),
-                                ),
-                              ))
-                          .toList(),
-                    )
-                  : diary.isNotEmpty
-                      ? Text(diary,
-                          style: const TextStyle(
-                              fontSize: 14,
-                              color: Z.text,
-                              height: 1.7,
-                              fontStyle: FontStyle.italic))
-                      : const Text(
-                          'How was your day? Tap Generate to write your diary with AI.',
-                          style: TextStyle(
-                              fontSize: 14,
-                              color: Z.textFaint,
-                              height: 1.6,
-                              fontStyle: FontStyle.italic)),
+            IconButton(
+              icon: const Icon(Icons.chevron_right),
+              onPressed: _isToday ? null : () => _shift(1),
             ),
           ],
         ),
+        actions: [
+          IconButton(
+              icon: const Icon(Icons.calendar_month), onPressed: _pickDate),
+        ],
+      ),
+      body: state.when(
+        loading: () => const LoadingView(),
+        error: (e, _) => ErrorView(message: errorMessage(e)),
+        data: (bundle) {
+          _bundle = bundle;
+          _items = _buildItems(bundle);
+          _diary = bundle.diary;
+          for (final i in _items) {
+            _itemKeys.putIfAbsent(i.id, () => GlobalKey());
+          }
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => _maybeRedraw(bundle));
+          return Stack(
+            children: [
+              MapWidget(
+                key: const ValueKey('timeline-map'),
+                viewport: CameraViewportState(
+                  center: Point(coordinates: Position(126.9780, 37.5665)),
+                  zoom: 12.0,
+                ),
+                onMapCreated: (controller) {
+                  _map = controller;
+                  controller.addInteraction(TapInteraction.onMap(_onMapTap));
+                  if (_bundle != null) _redraw(_bundle!);
+                },
+              ),
+              _ListPanel(
+                items: _items,
+                itemKeys: _itemKeys,
+                selectedId: _selectedId,
+                expandedId: _expandedId,
+                diary: _diary,
+                day: _day,
+                isToday: _isToday,
+                controller: _sheetController,
+                onTapItem: _onTapNode,
+                onLongPressItem: _onLongPressNode,
+                onSaveText: _saveText,
+                onChangeNoteTime: _changeNoteTime,
+                onAddPhotos: _addPhotosInline,
+                onMore: _moreCheckIn,
+                onDelete: _deleteItem,
+                onAddNote: _submitNote,
+                onEditDiary: _editDiary,
+                onGenerateDiary: _generateDiary,
+                generatingDiary: _isGeneratingDiary,
+                onReorder: _onReorder,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1464,6 +843,708 @@ class _CheckInEdit {
   final bool isPublic;
   const _CheckInEdit(
       this.place, this.note, this.removedPhotoIds, this.newPaths, this.isPublic);
+}
+
+// ── The hovering, draggable list panel ──────────────────────────
+class _ListPanel extends StatelessWidget {
+  final List<_TlItem> items;
+  final Map<String, GlobalKey> itemKeys;
+  final String? selectedId;
+  final String? expandedId;
+  final String diary;
+  final DateTime day;
+  final bool isToday;
+  final DraggableScrollableController controller;
+  final void Function(_TlItem) onTapItem;
+  final void Function(_TlItem) onLongPressItem;
+  final void Function(_TlItem, String) onSaveText;
+  final void Function(_TlItem) onChangeNoteTime;
+  final void Function(_TlItem) onAddPhotos;
+  final void Function(_TlItem) onMore;
+  final Future<void> Function(_TlItem) onDelete;
+  final Future<void> Function(String) onAddNote;
+  final VoidCallback onEditDiary;
+  final VoidCallback onGenerateDiary;
+  final bool generatingDiary;
+  final void Function(int oldIndex, int newIndex) onReorder;
+
+  const _ListPanel({
+    required this.items,
+    required this.itemKeys,
+    required this.selectedId,
+    required this.expandedId,
+    required this.diary,
+    required this.day,
+    required this.isToday,
+    required this.controller,
+    required this.onTapItem,
+    required this.onLongPressItem,
+    required this.onSaveText,
+    required this.onChangeNoteTime,
+    required this.onAddPhotos,
+    required this.onMore,
+    required this.onDelete,
+    required this.onAddNote,
+    required this.onEditDiary,
+    required this.onGenerateDiary,
+    required this.generatingDiary,
+    required this.onReorder,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return DraggableScrollableSheet(
+      controller: controller,
+      initialChildSize: 0.35,
+      minChildSize: 0.12,
+      maxChildSize: 0.85,
+      snap: true,
+      snapSizes: const [0.12, 0.35, 0.85],
+      builder: (ctx, scrollController) {
+        return Container(
+          decoration: BoxDecoration(
+            color: scheme.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 12,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              // ── Drag handle / header. Drags the sheet; not a tap target. ──
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onVerticalDragUpdate: (d) {
+                  if (!controller.isAttached) return;
+                  final h = MediaQuery.of(context).size.height;
+                  final next =
+                      (controller.size - d.primaryDelta! / h).clamp(0.12, 0.85);
+                  controller.jumpTo(next);
+                },
+                child: Column(
+                  children: [
+                    const SizedBox(height: 8),
+                    Container(
+                      width: 40,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: scheme.outlineVariant,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${items.length} place${items.length == 1 ? '' : 's'}',
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const Spacer(),
+                          Text(DateFormat('MMM d').format(day),
+                              style: const TextStyle(color: Colors.grey)),
+                        ],
+                      ),
+                    ),
+                    const Divider(height: 1),
+                  ],
+                ),
+              ),
+              // ── Scrollable nodes + diary ───────────────────
+              // Notes are long-press draggable (ReorderableDelayedDragStartListener);
+              // check-ins/stamps are fixed in time and not draggable.
+              Expanded(
+                child: CustomScrollView(
+                  controller: scrollController,
+                  slivers: [
+                    if (items.isEmpty)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24),
+                          child: EmptyView(
+                            icon: Icons.map_outlined,
+                            message: 'Nothing logged this day',
+                            subtitle: isToday
+                                ? 'Check in to start your trace.'
+                                : null,
+                            action: isToday
+                                ? FilledButton.icon(
+                                    onPressed: () =>
+                                        context.push('/checkin?mode=checkin'),
+                                    icon: const Icon(
+                                        Icons.add_location_alt_outlined),
+                                    label: const Text('Check in'),
+                                  )
+                                : null,
+                          ),
+                        ),
+                      ),
+                    SliverReorderableList(
+                      itemCount: items.length,
+                      onReorderItem: onReorder,
+                      itemBuilder: (ctx, i) {
+                        final it = items[i];
+                        final editable =
+                            it.kind == _NodeKind.checkIn || it.isNote;
+                        final editing = it.id == expandedId;
+                        Widget head = _TimelineNode(
+                          item: it,
+                          isFirst: i == 0,
+                          isLast: i == items.length - 1,
+                          selected: it.id == selectedId,
+                          // Tap highlights; long-press edits / opens.
+                          onTap: () => onTapItem(it),
+                          onLongPress: () => onLongPressItem(it),
+                          // While editing a check-in, the original photo slide
+                          // grows an Add button at its end (no second slide).
+                          onAddPhoto: (it.kind == _NodeKind.checkIn && editing)
+                              ? () => onAddPhotos(it)
+                              : null,
+                          // Notes reorder via an explicit drag handle (long-press
+                          // is taken by editing).
+                          trailing: it.isNote
+                              ? ReorderableDragStartListener(
+                                  index: i,
+                                  child: const Padding(
+                                    padding: EdgeInsets.only(left: 4),
+                                    child: Icon(Icons.drag_handle,
+                                        size: 20, color: Colors.grey),
+                                  ),
+                                )
+                              : null,
+                        );
+                        // Swipe left to delete a check-in / note.
+                        if (editable) {
+                          head = Dismissible(
+                            key: ValueKey('dismiss_${it.id}'),
+                            direction: DismissDirection.endToStart,
+                            background: Container(
+                              color: Colors.red,
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 24),
+                              child:
+                                  const Icon(Icons.delete, color: Colors.white),
+                            ),
+                            confirmDismiss: (_) async {
+                              // We remove the row via reload, not by letting
+                              // Dismissible drop it from the reorderable list.
+                              await onDelete(it);
+                              return false;
+                            },
+                            child: head,
+                          );
+                        }
+                        return KeyedSubtree(
+                          key: ValueKey(it.id),
+                          child: KeyedSubtree(
+                            key: itemKeys[it.id]!,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                head,
+                                if (editable && editing)
+                                  _InlineNodeEditor(
+                                    item: it,
+                                    onSave: (t) => onSaveText(it, t),
+                                    onMore: it.isNote ? null : () => onMore(it),
+                                    onChangeTime: it.isNote
+                                        ? () => onChangeNoteTime(it)
+                                        : null,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    SliverToBoxAdapter(
+                      child: Column(
+                        children: [
+                          const Divider(height: 1),
+                          _AddNoteTile(onSubmit: onAddNote),
+                        ],
+                      ),
+                    ),
+                    SliverToBoxAdapter(
+                        child: _DiaryCard(
+                          diary: diary,
+                          onEdit: onEditDiary,
+                          onGenerate: onGenerateDiary,
+                          generating: generatingDiary,
+                        )),
+                    const SliverToBoxAdapter(child: SizedBox(height: 32)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _TimelineNode extends StatelessWidget {
+  final _TlItem item;
+  final bool isFirst;
+  final bool isLast;
+  final bool selected;
+  final VoidCallback onTap;
+  final VoidCallback? onLongPress;
+  // Non-null only while this check-in is being edited → the photo slide shows
+  // an Add tile at its end.
+  final VoidCallback? onAddPhoto;
+  // Optional trailing widget in the header row (e.g. a note's drag handle).
+  final Widget? trailing;
+  const _TimelineNode({
+    required this.item,
+    required this.isFirst,
+    required this.isLast,
+    required this.selected,
+    required this.onTap,
+    this.onLongPress,
+    this.onAddPhoto,
+    this.trailing,
+  });
+
+  Color _color(ColorScheme scheme) {
+    if (item.isAuto) return Colors.grey;
+    return switch (item.kind) {
+      _NodeKind.stamp => scheme.primary,
+      _NodeKind.checkIn => const Color(_kCheckinBlue),
+      _NodeKind.note => const Color(_kNoteAmber),
+    };
+  }
+
+  IconData get _icon => item.isAuto
+      ? Icons.gps_fixed
+      : switch (item.kind) {
+          _NodeKind.stamp => Icons.auto_awesome,
+          _NodeKind.checkIn => Icons.pin_drop,
+          _NodeKind.note => Icons.sticky_note_2_outlined,
+        };
+
+  String get _label => item.isAuto
+      ? 'Auto'
+      : switch (item.kind) {
+          _NodeKind.stamp => 'Stamp',
+          _NodeKind.checkIn => 'Check-in',
+          _NodeKind.note => 'Note',
+        };
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = _color(scheme);
+    final hasText = item.text != null && item.text!.trim().isNotEmpty;
+
+    return Material(
+      color: selected
+          ? scheme.primary.withValues(alpha: 0.10)
+          : Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: IntrinsicHeight(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Node rail.
+                SizedBox(
+                  width: 28,
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          width: 2,
+                          color: isFirst
+                              ? Colors.transparent
+                              : scheme.outlineVariant,
+                        ),
+                      ),
+                      Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: scheme.surface, width: 3),
+                        ),
+                      ),
+                      Expanded(
+                        child: Container(
+                          width: 2,
+                          color: isLast
+                              ? Colors.transparent
+                              : scheme.outlineVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(_icon, size: 16, color: color),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                item.isNote ? 'Note' : item.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  color: item.isAuto ? Colors.grey : null,
+                                ),
+                              ),
+                            ),
+                            _KindChip(label: _label, color: color),
+                            if (trailing != null) trailing!,
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Text(DateFormat('h:mm a').format(item.time),
+                                style: const TextStyle(
+                                    color: Colors.grey, fontSize: 12)),
+                            if (item.isStamp) ...[
+                              const SizedBox(width: 6),
+                              Icon(item.isPublic ? Icons.public : Icons.lock,
+                                  size: 12, color: Colors.grey),
+                            ],
+                          ],
+                        ),
+                        if (hasText) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.text!,
+                            maxLines: item.isNote ? 4 : 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 13, color: scheme.onSurfaceVariant),
+                          ),
+                        ],
+                        if (item.photoUrls.isNotEmpty || onAddPhoto != null) ...[
+                          const SizedBox(height: 8),
+                          if (onAddPhoto == null)
+                            PhotoThumbRow(urls: item.photoUrls, size: 64)
+                          else
+                            SizedBox(
+                              height: 64,
+                              child: ListView(
+                                scrollDirection: Axis.horizontal,
+                                children: [
+                                  for (final url in item.photoUrls)
+                                    Padding(
+                                      padding: const EdgeInsets.only(right: 6),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: CachedNetworkImage(
+                                            imageUrl: url,
+                                            width: 64,
+                                            height: 64,
+                                            fit: BoxFit.cover),
+                                      ),
+                                    ),
+                                  GestureDetector(
+                                    onTap: onAddPhoto,
+                                    child: Container(
+                                      width: 64,
+                                      height: 64,
+                                      decoration: BoxDecoration(
+                                        border: Border.all(
+                                            color: Colors.grey.shade400),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(
+                                          Icons.add_a_photo_outlined,
+                                          color: Colors.grey),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Inline editor shown under a tapped check-in / note node — quick note text
+/// plus (for check-ins) a photo row with the Add button at the end.
+class _InlineNodeEditor extends StatefulWidget {
+  final _TlItem item;
+  final void Function(String text) onSave;
+  final VoidCallback? onMore; // check-in only (full sheet)
+  final VoidCallback? onChangeTime; // note only
+  const _InlineNodeEditor({
+    required this.item,
+    required this.onSave,
+    this.onMore,
+    this.onChangeTime,
+  });
+
+  @override
+  State<_InlineNodeEditor> createState() => _InlineNodeEditorState();
+}
+
+class _InlineNodeEditorState extends State<_InlineNodeEditor> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: widget.item.text ?? '');
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(50, 0, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            minLines: 1,
+            maxLines: 4,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => widget.onSave(_ctrl.text.trim()),
+            decoration: InputDecoration(
+              isDense: true,
+              hintText: widget.item.isNote ? 'Edit note…' : 'Add a note…',
+              border: const OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (widget.onChangeTime != null) ...[
+                const Icon(Icons.schedule, size: 16, color: Colors.grey),
+                const SizedBox(width: 4),
+                Text(DateFormat('h:mm a').format(widget.item.time),
+                    style:
+                        const TextStyle(color: Colors.grey, fontSize: 12)),
+                TextButton(
+                    onPressed: widget.onChangeTime,
+                    child: const Text('Change time')),
+              ],
+              if (widget.onMore != null)
+                TextButton(onPressed: widget.onMore, child: const Text('More')),
+              const Spacer(),
+              FilledButton(
+                onPressed: () => widget.onSave(_ctrl.text.trim()),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KindChip extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _KindChip({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(label,
+          style: TextStyle(
+              fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+    );
+  }
+}
+
+class _DiaryCard extends StatelessWidget {
+  final String diary;
+  final VoidCallback onEdit;
+  final VoidCallback onGenerate;
+  final bool generating;
+  const _DiaryCard({
+    required this.diary,
+    required this.onEdit,
+    required this.onGenerate,
+    required this.generating,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = diary.trim().isEmpty;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      child: Card(
+        margin: EdgeInsets.zero,
+        child: InkWell(
+          onTap: onEdit,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.menu_book_outlined, size: 18),
+                    const SizedBox(width: 8),
+                    const Text('Diary',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    const Spacer(),
+                    // AI generate button
+                    Tooltip(
+                      message: 'Generate with AI',
+                      child: SizedBox(
+                        width: 32,
+                        height: 32,
+                        child: generating
+                            ? const Padding(
+                                padding: EdgeInsets.all(7),
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2),
+                              )
+                            : IconButton(
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.auto_awesome,
+                                    size: 18),
+                                color: Colors.grey[600],
+                                onPressed: onGenerate,
+                              ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(empty ? Icons.edit_outlined : Icons.edit,
+                        size: 18, color: Colors.grey),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  empty ? 'Write about your day…' : diary,
+                  style: TextStyle(
+                    color: empty ? Colors.grey : null,
+                    fontStyle: empty ? FontStyle.italic : FontStyle.normal,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Modal: add/edit a timeline note ─────────────────────────────
+/// List-footer row for adding a note. Collapsed it's a simple "Add a note"
+/// tile; tapping expands it into an autofocused text field so you can type
+/// right away — no modal. Saving creates the note and collapses again.
+class _AddNoteTile extends StatefulWidget {
+  final Future<void> Function(String) onSubmit;
+  const _AddNoteTile({required this.onSubmit});
+
+  @override
+  State<_AddNoteTile> createState() => _AddNoteTileState();
+}
+
+class _AddNoteTileState extends State<_AddNoteTile> {
+  final TextEditingController _ctrl = TextEditingController();
+  bool _open = false;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final text = _ctrl.text.trim();
+    if (text.isEmpty) {
+      setState(() => _open = false);
+      return;
+    }
+    await widget.onSubmit(text);
+    _ctrl.clear();
+    if (mounted) setState(() => _open = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    if (!_open) {
+      return ListTile(
+        leading: Icon(Icons.add, color: scheme.primary),
+        title: const Text('Add a note'),
+        onTap: () => setState(() => _open = true),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _ctrl,
+            autofocus: true,
+            minLines: 1,
+            maxLines: 4,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => _save(),
+            decoration: const InputDecoration(
+              isDense: true,
+              hintText: 'Anything you want to remember…',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              TextButton(
+                onPressed: () {
+                  _ctrl.clear();
+                  setState(() => _open = false);
+                },
+                child: const Text('Cancel'),
+              ),
+              const Spacer(),
+              FilledButton(onPressed: _save, child: const Text('Save')),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Modal: edit a check-in (place, note, photos) ────────────────

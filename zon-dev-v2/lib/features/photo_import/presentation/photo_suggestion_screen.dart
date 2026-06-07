@@ -280,7 +280,7 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
                                     ),
                                     if (isSelected)
                                       Container(
-                                        color: kBrandGreen.withValues(alpha: 0.5),
+                                        color: kBrandPurple.withValues(alpha: 0.5),
                                         child: const Icon(Icons.check_circle,
                                             color: Colors.white, size: 32),
                                       ),
