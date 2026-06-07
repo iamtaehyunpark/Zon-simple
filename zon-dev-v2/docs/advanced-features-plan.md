@@ -1,7 +1,7 @@
 # ZON — Advanced Features Plan ("Perfecting the MVP")
 
 > Living document. Tracks the multi-phase build-out of the advanced feature set on top
-> of the working MVP. Update the **Status** column as work lands. Started 2026-06-04.
+> of the working MVP. Update the **Status** column as work lands. Started 2026-06-04. Last updated 2026-06-07.
 
 ## Goal
 
@@ -250,6 +250,54 @@ Legend: ☐ todo · ◐ in progress · ☑ done
 - ☑ `CLAUDE.md` fully rewritten (v3.0) to reflect three-layer model, social graph, all routes, current data models, migration log
 - ☑ `docs/advanced-features-plan.md` updated (Phases 8–13)
 - ☑ `docs/dependencies.md` filled out
+
+---
+
+---
+
+## Phase 14 — Advanced MVP Features ✅ (2026-06-06/07)
+
+### 14a — Live Location Sharing (Snapchat-style)
+- ☑ Migration 029: `profiles.is_ghost_mode`, `user_locations` table (user_id PK, lat/lng/accuracy/heading/updated_at), `location_hidden_from`; Realtime enabled; friend-gated RLS (accepted friendship + not ghost + not hidden)
+- ☑ `FriendLocation` model: `isStale` (≥8h), `timeLabel` ("Just now" / "Xm ago" / "Xh ago")
+- ☑ `LocationSharingRepository`: `upsertMyLocation`, `streamFriendLocations` (Realtime channel + StreamController), `getGhostMode`/`setGhostMode`, `getHiddenFromIds`/`hideFromFriend`/`showToFriend`
+- ☑ `MapScreen` rewritten: friend avatar bubbles via `pixelForCoordinate` + Stack overlay (200ms timer), `_maybeBroadcast` throttle (≥30s or ≥50m), ghost mode indicator, `_FriendLocationSheet`
+- ☑ `LocationVisibilityScreen` (`/location-visibility`): per-friend SwitchListTile visibility toggles
+- ☑ Geolocator aliased as `geo` to avoid conflict with Mapbox geotypes; `mapbox_maps_flutter` imported with `hide Size`
+
+### 14b — AI Diary Generation
+- ☑ `supabase/functions/generate-diary/index.ts`: Deno.serve, JWT auth, Gemini 3.1 flash lite via `@google/generative-ai`, multimodal (up to 5 images as `inlineData` base64), maxOutputTokens 600, full try/catch returning error message
+- ☑ `PhotoService.resizeForLlm(url)`: Dio download + `FlutterImageCompress.compressWithList` to ≤512px q75 → base64; **in-memory only, never stored**
+- ☑ Diary bundle scope: stamps + manual check-ins as full events; auto check-ins → note text only (if non-empty); sorted by time
+- ☑ `DiaryRepository.generateDiary(date, events)`: calls Edge Function; `invoke` throws on error (no `.error` check needed)
+- ☑ Generates into `_EditDiarySheet` for user review/edit before saving
+
+### 14c — Timeline UX Improvements
+- ☑ Note timestamp defaults to current wall-clock time on `_day`, bumped to after last check-in/stamp if that would be earlier
+- ☑ Tap image → `FullScreenImageViewer.show(context, urls, index)`: `PageView` + `InteractiveViewer` pinch-zoom, immersive mode
+- ☑ `PhotoThumbRow` thumbnails open `FullScreenImageViewer` on tap
+- ☑ Manual check-in merge: later node's photos re-pointed + note appended (newline-joined) to earlier node; later node deleted; `mergeCheckIns(keepId, intoId)` in `CheckInRepository` uses `select('id, note')` to capture both columns
+- ☑ Stamp delete → `feedNotifierProvider.removeStamp(id)` optimistic local filter before `context.pop()`
+- ☑ Merge: optimistic `_items.removeWhere(i.id == keep.id)` before reload to prevent 404 on deleted node
+
+### 14d — Photo Check-in Improvements
+- ☑ Photo import clustering: sequential time-sorted assets merged when distance < threshold AND no existing check-in between them (visit-break detection)
+- ☑ `PhotoCheckInInspectionScreen`: swipeable `PageView` review layer between photo selection and upload; edit location/text/photos per node via `PlaceSearchField`; merge adjacent nodes; parallel upload + `createCheckIn` on confirm; progress overlay
+- ☑ FAB menu gains "Photo check-in" tile → `/photo-suggestions`
+- ☑ `PhotoSuggestionScreen`: resolves places in parallel, clusters sequentially, navigates to `PhotoCheckInInspectionScreen`; buttons relabeled "Review N photo(s)"
+
+### 14e — Coordinate-Anchored Place Search
+- ☑ `PlaceSearchField` shared widget: coordinate fixed at construction; `OverlayEntry` dropdown via `CompositedTransformTarget`/`Follower`; on focus → `nearby(lat, lng)`; on type (400ms debounce) → `search(query, lat, lng)`; top item always "use coordinate" (auto-resolved or typed custom name)
+- ☑ Wired into: `CheckInEditorBody`, `_EditCheckInSheet` (timeline), `EditStampScreen`, `PhotoCheckInInspectionScreen`
+
+### 14f — GPS Auto-anchor Reliability Fixes
+- ☑ `_sessionId` counter in `GpsNotifier`: incremented on `startTracking`, checked before and after async gaps in `_anchorPath` — prevents phantom anchors when session restarts mid-flight
+- ☑ Lifecycle fix: only `paused`/`detached` states stop tracking; `hidden`/`inactive` keep tracking (fixes transient overlay dismissals killing the session)
+- ☑ `createCheckIn` result folded with `debugPrint` so silent DB failures surface in logs
+
+### 14g — Timeline Persistence
+- ☑ `TimelineNotifier` changed to `@Riverpod(keepAlive: true)` — survives shell navigation; `build()` runs once (loads today on first construction only)
+- ☑ `TimelineScreen.initState` restores `_day` from `ref.read(timelineNotifierProvider).valueOrNull?.date` — no refetch, no date reset when switching tabs
 
 ---
 

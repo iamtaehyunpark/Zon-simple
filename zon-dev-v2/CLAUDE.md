@@ -1,7 +1,7 @@
 # ZON — Claude Code Project Context (v3.0)
 
 > **Read this file before every session. Do not deviate from the rules below.**
-> Updated 2026-06-06 to reflect the current shipped state of the app.
+> Updated 2026-06-07 to reflect the current shipped state of the app.
 
 ---
 
@@ -42,7 +42,6 @@ GPS/EXIF location collected → check-in suggested/created
 - On-device signing / proof certificates
 - Consensus place registration
 - Automatic companion detection (BLE-based)
-- Real-time location sharing (Snapchat-map style) — schema groundwork exists (friendships table), feature not yet built
 - Route navigation (Mapbox Navigation)
 - Premium subscription / B2B campaign tools
 
@@ -99,7 +98,8 @@ All routes defined in `lib/app.dart`:
 | `/activity` | `ActivityScreen` | Notifications + friend/follow request rows |
 | `/follow-requests` | `FollowRequestsScreen` | Approve/deny pending follows |
 | `/friend-requests` | `FriendRequestsScreen` | Approve/deny pending friend requests |
-| `/photo-suggestions` | `PhotoSuggestionScreen` | Today's geotagged photos → check-ins |
+| `/photo-suggestions` | `PhotoSuggestionScreen` | Today's geotagged photos → clustering → inspection |
+| `/location-visibility` | `LocationVisibilityScreen` | Per-friend live location sharing toggles |
 
 ---
 
@@ -109,35 +109,44 @@ All routes defined in `lib/app.dart`:
 lib/
 ├── app.dart                     ← MaterialApp + GoRouter (ALL routes here)
 ├── main.dart
+├── firebase_options.dart
 ├── core/
 │   ├── auth/                    ← auth_provider.dart (currentUserProvider)
 │   ├── errors/                  ← app_exception.dart (AppException, NetworkError, AuthError)
 │   ├── location/
+│   │   ├── gps_service.dart
+│   │   ├── location_batcher.dart
 │   │   └── providers/
-│   │       └── gps_provider.dart  ← GpsNotifier (session path, auto-anchor)
+│   │       └── gps_provider.dart  ← GpsNotifier (session path, auto-anchor, _sessionId guard)
 │   ├── notifications/           ← notification_service.dart
-│   ├── photos/                  ← photo_service.dart (upload, EXIF)
+│   ├── photos/                  ← photo_service.dart (upload, EXIF, resizeForLlm)
 │   ├── places/                  ← place_service_provider.dart (Kakao/Google router)
 │   └── supabase/                ← supabase_provider.dart
 ├── data/
 │   ├── models/
 │   │   ├── check_in.dart        ← CheckIn, CheckInDraft, CheckInSource enum
 │   │   ├── enums.dart           ← StampVisibility {private, public}
+│   │   ├── friend_location.dart ← FriendLocation (isStale ≥8h, timeLabel helper)
 │   │   ├── raw_location_event.dart
 │   │   ├── stamp.dart           ← Stamp, StampDraft
 │   │   └── user_profile.dart    ← UserProfile (friendCount, followerCount, isPrivate)
 │   └── repositories/
-│       ├── base_repository.dart
-│       ├── check_in_repository.dart   ← CheckInRepository + CheckInStory class
+│       ├── base_repository.dart              ← isoDate(), getFollowingIds() shared helpers
+│       ├── check_in_repository.dart          ← CheckInRepository + CheckInStory + mergeCheckIns
 │       ├── comment_repository.dart
+│       ├── diary_repository.dart             ← getDiary, saveDiary, generateDiary (Edge Fn)
+│       ├── location_repository.dart
+│       ├── location_sharing_repository.dart  ← ghost mode, friend locations, hidden-from list
 │       ├── notification_repository.dart
-│       ├── profile_repository.dart    ← FollowState, FriendState enums here
-│       └── stamp_repository.dart
+│       ├── privacy_repository.dart
+│       ├── profile_repository.dart           ← FollowState, FriendState enums here
+│       ├── stamp_repository.dart
+│       └── timeline_note_repository.dart
 ├── features/
 │   ├── auth/presentation/       ← login_screen.dart
 │   ├── checkin/presentation/
 │   │   ├── check_in_detail_screen.dart  ← /check-in/:id
-│   │   ├── check_in_editor.dart         ← CheckInEditorBody (place+note+photos+story toggle)
+│   │   ├── check_in_editor.dart         ← CheckInEditorBody (uses PlaceSearchField)
 │   │   ├── checkin_entry.dart           ← Entry router (place search → editor → stamp)
 │   │   ├── photo_strip.dart
 │   │   ├── stamp_editor.dart
@@ -147,15 +156,16 @@ lib/
 │   ├── feed/presentation/
 │   │   ├── feed_screen.dart             ← FeedScreen + StampCard + _StoriesRail + _StoryView
 │   │   ├── stamp_detail_screen.dart     ← Full detail + comments
-│   │   ├── edit_stamp_screen.dart
+│   │   ├── edit_stamp_screen.dart       ← uses PlaceSearchField
 │   │   ├── saved_stamps_screen.dart
 │   │   └── providers/
-│   │       └── feed_provider.dart       ← FeedNotifier, feedStoriesProvider
+│   │       └── feed_provider.dart       ← FeedNotifier, feedStoriesProvider, removeStamp
 │   ├── map/presentation/
-│   │   ├── map_screen.dart             ← MapScreen + MapFilter enum + bottom sheets
+│   │   ├── map_screen.dart             ← MapScreen + friend avatar bubbles + ghost mode
 │   │   └── map_drawing.dart            ← drawPins, upsertLine, removeLine
 │   ├── photo_import/presentation/
-│   │   ├── photo_suggestion_screen.dart
+│   │   ├── photo_checkin_inspection_screen.dart  ← swipeable review, merge, confirm upload
+│   │   ├── photo_suggestion_screen.dart          ← clustering → navigate to inspection screen
 │   │   └── providers/
 │   │       └── photo_suggestion_provider.dart
 │   ├── profile/presentation/
@@ -171,15 +181,25 @@ lib/
 │   │       └── profile_provider.dart   ← ProfileNotifier, followStateProvider,
 │   │                                      friendStateProvider, followRequestsProvider,
 │   │                                      friendRequestsProvider
+│   ├── settings/presentation/
+│   │   └── location_visibility_screen.dart  ← per-friend location sharing toggles
 │   └── timeline/presentation/
-│       └── timeline_screen.dart        ← _ListPanel (drag/swipe/inline edit), _TimelineMap
+│       ├── providers/
+│       │   └── timeline_provider.dart  ← TimelineNotifier (keepAlive), DayBundle
+│       └── timeline_screen.dart        ← _ListPanel (drag/swipe/inline edit), AI diary
 └── shared/
     ├── theme/app_theme.dart
     ├── utils/format.dart               ← compactCount, errorMessage
     └── widgets/
         ├── app_states.dart             ← LoadingView, EmptyView, ErrorView
-        └── photo_thumb_row.dart
+        ├── full_screen_image_viewer.dart  ← FullScreenImageViewer.show (PageView + pinch-zoom)
+        ├── photo_thumb_row.dart
+        └── place_search_field.dart     ← coordinate-anchored dropdown (Overlay)
 ```
+
+Edge Functions (`supabase/functions/`):
+- `ingest-location`, `ingest-photo-exif`, `suggest-stamp`, `match-place`, `geocode-nudge` — pre-existing
+- `generate-diary/index.ts` — Gemini 3.1 flash lite, multimodal, JWT-gated; called by `DiaryRepository.generateDiary`
 
 ---
 
@@ -288,6 +308,18 @@ enum FriendState { none, requestedByMe, requestedByThem, friends }
 CheckInStory { userId, username, avatarUrl, checkIns: List<CheckIn> }
 ```
 
+### FriendLocation (friend_location.dart)
+```dart
+// A friend's last-known position from user_locations (Realtime-streamed).
+FriendLocation {
+  userId, username, avatarUrl,
+  lat, lng, accuracy, heading,
+  updatedAt,
+  bool isStale,    // true when updatedAt is ≥8h ago
+  String timeLabel // "Just now" / "Xm ago" / "Xh ago"
+}
+```
+
 ---
 
 ## 9. Social Graph
@@ -303,7 +335,7 @@ Two overlapping relationship types:
 ### Friendships (symmetric)
 - Table: `friendships (user_a, user_b, status {pending|accepted}, requested_by)` — canonical ordering `user_a < user_b`.
 - On acceptance: `auto_follow_on_friendship` trigger inserts both `follows` rows.
-- Gates: future real-time location sharing, companying/tagging features.
+- Gates: live location sharing (Snap Map–style, implemented in `LocationSharingRepository`), future companying/tagging features.
 - Profile UI: "Add Friend" (primary) + "Follow" (secondary), Facebook-style.
 - Friend requests surface in Activity tab above follow requests.
 
@@ -330,6 +362,9 @@ Two overlapping relationship types:
 | Auto anchors | `my-auto-source` | Grey (tiny r=2.5) | Auto check-ins — today |
 | Following stamps | `followed-stamps-source` | Orange | Following users' public stamps — **filter window** |
 | Following stories | `followed-checkins-source` | Pink | Following users' public check-ins — always last 24h |
+| Friend bubbles | *(Stack overlay, not GeoJSON)* | Avatar | Accepted friends' live positions (Realtime-streamed) |
+
+**Friend location bubbles** — rendered as a Flutter `Stack` over the `MapWidget`, not as map layers. `pixelForCoordinate` converts each friend's `(lat, lng)` to screen coordinates; a 200ms timer refreshes positions as the camera moves. Stale (≥8h) positions are hidden. My own position is broadcast via `LocationSharingRepository.upsertMyLocation` (throttled ≥30s or ≥50m). Ghost mode (`is_ghost_mode` on `profiles`) and per-friend blocking (`location_hidden_from` table) suppress visibility.
 
 **Filter** (`MapFilter` enum): `today | week | month | year | all | custom` — applies to following stamps only. "Custom" opens Flutter's `showDateRangePicker`.
 
@@ -352,9 +387,10 @@ Migrations live in `supabase/migrations/`. All have been applied to the remote p
 | 023 | Private accounts: profiles.is_private, follows.status, enforce_follow_status trigger, can_view_user(), stamps RLS privacy gate |
 | 024 | Lock down trigger functions from REST |
 | 025 | check_ins.visibility + partial index + public check-ins RLS |
-| 026 | friendships table + friend_count + auto_follow_on_friendship + notify_on_friend_request triggers |
-| 027 (unused) | *(skipped in numbering)* |
-| 028 | photos RLS unified: own + can_view_user-gated stamp + check-in photos |
+| 026 *(MCP-applied, no local file)* | friendships table + friend_count + auto_follow_on_friendship + notify_on_friend_request triggers |
+| 027 | *(skipped in numbering)* |
+| 028 *(MCP-applied, no local file)* | photos RLS unified: own + can_view_user-gated stamp + check-in photos |
+| 029 | Live location: `profiles.is_ghost_mode`, `user_locations` (user_id PK, lat, lng, accuracy, heading, updated_at), `location_hidden_from`; Realtime on `user_locations`; RLS: own full CRUD, friend SELECT gated by accepted friendship + not ghost mode + not hidden |
 
 ---
 
@@ -435,8 +471,12 @@ Bell badge in Feed counts unread notifications + pending follow requests + pendi
 | Feed unit? | Stamp (public, ordered by `created_at` when posted) |
 | Stories unit? | Public check-in (last 24h, ordered by visitedAt) |
 | Map: own content? | Today's stamps + check-ins + live session path |
-| Map: following content? | Stamps in filter window (orange) + public check-ins last 24h (pink) |
-| Follow vs Friend? | Follow = asymmetric content graph. Friend = symmetric, auto-follows both ways, gated for future location sharing |
+| Map: following content? | Stamps in filter window (orange) + public check-ins last 24h (pink) + friend location bubbles (Stack overlay) |
+| Follow vs Friend? | Follow = asymmetric content graph. Friend = symmetric, auto-follows both ways, gates live location sharing |
+| Live location sharing? | Friends only; ghost mode toggle + per-friend block via `location_hidden_from`; 8h stale cutoff; 30s/50m broadcast throttle |
+| AI diary generation? | `generate-diary` Edge Function (Gemini 3.1 flash lite); photos resized in-memory via `PhotoService.resizeForLlm` — never stored |
+| Place search in editors? | `PlaceSearchField`: coordinate fixed at node-creation time; Overlay dropdown; top option always "use coordinate" |
+| Timeline keeps date? | `TimelineNotifier` is `keepAlive` — survives navigation; `initState` restores `_day` from `valueOrNull?.date` |
 | Private account gate? | `can_view_user(owner)` — reused in stamps/check_ins/photos RLS |
 | Photos RLS? | Own photos OR photos on can_view_user-permitted stamp OR check-in |
 | Where are all routes? | `lib/app.dart` |
