@@ -9,17 +9,9 @@ import '../../../core/photos/photo_service.dart';
 import '../../../core/places/place_service_provider.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/repositories/check_in_repository.dart';
+import 'photo_checkin_inspection_screen.dart';
 
 // ignore_for_file: use_build_context_synchronously
-
-/// Photos clustered at one spot during import → one check-in.
-class _PhotoGroup {
-  final double lat;
-  final double lng;
-  DateTime takenAt;
-  final List<String> urls = [];
-  _PhotoGroup(this.lat, this.lng, this.takenAt);
-}
 
 class PhotoSuggestionScreen extends ConsumerStatefulWidget {
   const PhotoSuggestionScreen({super.key});
@@ -34,8 +26,7 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
   List<AssetEntity> _photos = [];
   final Set<String> _selected = {};
   bool _loading = true;
-  bool _uploading = false;
-  int _uploadedCount = 0;
+  bool _analyzing = false; // building groups + resolving places
 
   @override
   void initState() {
@@ -66,40 +57,25 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
 
   Future<void> _importSelected() async {
     if (_selected.isEmpty) return;
-    setState(() { _uploading = true; _uploadedCount = 0; });
+    setState(() => _analyzing = true);
 
-    // Sort selected assets chronologically before grouping.
+    // 1. Sort chronologically.
     final assets = _photos.where((p) => _selected.contains(p.id)).toList()
       ..sort((a, b) => a.createDateTime.compareTo(b.createDateTime));
 
-    final repo = ref.read(checkInRepositoryProvider);
-
-    // Fetch existing check-ins so we can detect "breaks" between sequential
-    // photos (if a check-in already exists between two photo times, they belong
-    // to different visits even if geographically close).
-    final existingRes = await repo.getMyCheckIns(limit: 500);
+    // 2. Fetch existing check-ins to detect visit breaks.
+    final existingRes =
+        await ref.read(checkInRepositoryProvider).getMyCheckIns(limit: 500);
     final existing = existingRes.getOrElse((_) => <CheckIn>[]);
 
-    // Build groups sequentially: a photo joins the current group only if
-    // (a) it is within threshold distance of the group's representative point
-    // AND (b) no existing check-in sits between the previous photo's time and
-    // this photo's time.
-    final groups = <_PhotoGroup>[];
+    // 3. Cluster sequentially (same logic as before, but no upload yet).
+    final groups = <InspectionGroup>[];
     DateTime? prevTime;
 
     for (final asset in assets) {
       final latLng = await asset.latlngAsync();
       if (latLng == null ||
-          (latLng.latitude == 0.0 && latLng.longitude == 0.0)) {
-        if (mounted) setState(() => _uploadedCount++);
-        continue;
-      }
-      final file = await asset.originFile;
-      final url = file == null ? null : await _photoService.uploadFile(file);
-      if (url == null) {
-        if (mounted) setState(() => _uploadedCount++);
-        continue;
-      }
+          (latLng.latitude == 0.0 && latLng.longitude == 0.0)) { continue; }
 
       final photoTime = asset.createDateTime;
       final last = groups.isEmpty ? null : groups.last;
@@ -114,32 +90,46 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
       }
 
       if (merge) {
-        last!.urls.add(url);
+        last!.assets.add(asset);
         if (photoTime.isBefore(last.takenAt)) last.takenAt = photoTime;
       } else {
-        groups.add(_PhotoGroup(latLng.latitude, latLng.longitude, photoTime)
-          ..urls.add(url));
+        groups.add(InspectionGroup(
+          assets: [asset],
+          lat: latLng.latitude,
+          lng: latLng.longitude,
+          takenAt: photoTime,
+          placeName: 'Photo location',
+        ));
       }
 
       prevTime = photoTime;
-      if (mounted) setState(() => _uploadedCount++);
     }
 
-    for (final g in groups) {
-      final name = await _resolvePlace(g.lat, g.lng);
-      await repo.createCheckIn(
-        CheckInDraft(
-          placeName: name,
-          lat: g.lat,
-          lng: g.lng,
-          source: CheckInSource.photo,
-        ),
-        photoUrls: g.urls,
-        visitedAt: g.takenAt,
+    // 4. Resolve place names in parallel.
+    await Future.wait([
+      for (final g in groups)
+        _resolvePlace(g.lat, g.lng).then((name) => g.placeName = name),
+    ]);
+
+    if (!mounted) return;
+    setState(() => _analyzing = false);
+
+    if (groups.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No valid geotagged photos selected')),
       );
+      return;
     }
 
-    if (mounted) {
+    // 5. Hand off to inspection screen; upload + create happens there.
+    final confirmed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => PhotoCheckInInspectionScreen(groups: groups),
+      ),
+    );
+
+    if (confirmed == true && mounted) {
       final n = groups.length;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$n check-in${n == 1 ? '' : 's'} added')),
@@ -169,8 +159,8 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
         actions: [
           if (_selected.isNotEmpty)
             TextButton(
-              onPressed: _uploading ? null : _importSelected,
-              child: Text('Add ${_selected.length}'),
+              onPressed: _analyzing ? null : _importSelected,
+              child: Text('Review ${_selected.length}'),
             ),
         ],
       ),
@@ -185,17 +175,15 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
                 ],
               ),
             )
-          : _uploading
-              ? Center(
+          : _analyzing
+              ? const Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const CircularProgressIndicator(),
-                      const SizedBox(height: 16),
-                      Text(
-                        'Uploading $_uploadedCount / ${_selected.length}...',
-                        style: const TextStyle(fontSize: 16),
-                      ),
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Analyzing photos…',
+                          style: TextStyle(fontSize: 16)),
                     ],
                   ),
                 )
@@ -333,9 +321,9 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
                               width: double.infinity,
                               height: 52,
                               child: FilledButton(
-                                onPressed: _importSelected,
+                                onPressed: _analyzing ? null : _importSelected,
                                 child: Text(
-                                    'Add ${_selected.length} photos to my map'),
+                                    'Review ${_selected.length} photo${_selected.length == 1 ? '' : 's'}'),
                               ),
                             ),
                           ),
