@@ -33,7 +33,7 @@ class DayBundle {
       route.isEmpty && checkIns.isEmpty && stamps.isEmpty && notes.isEmpty;
 }
 
-@riverpod
+@Riverpod(keepAlive: true)
 class TimelineNotifier extends _$TimelineNotifier {
   @override
   AsyncValue<DayBundle> build() {

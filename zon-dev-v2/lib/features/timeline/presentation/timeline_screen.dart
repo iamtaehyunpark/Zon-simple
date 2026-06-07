@@ -79,8 +79,16 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   @override
   void initState() {
     super.initState();
-    final n = DateTime.now();
-    _day = DateTime(n.year, n.month, n.day);
+    // Restore the last-selected day from the keepAlive provider so navigating
+    // away and back doesn't reset to today or trigger a refetch.
+    final existing = ref.read(timelineNotifierProvider).valueOrNull;
+    if (existing != null) {
+      _day = existing.date;
+    } else {
+      final n = DateTime.now();
+      _day = DateTime(n.year, n.month, n.day);
+      // Provider is fresh — build() already enqueued loadDay(today) via microtask.
+    }
   }
 
   bool get _isToday {
