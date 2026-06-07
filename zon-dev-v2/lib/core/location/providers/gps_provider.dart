@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:uuid/uuid.dart';
@@ -17,8 +18,7 @@ GpsService gpsService(GpsServiceRef ref) => GpsService();
 
 /// App-wide foreground location tracker (keepAlive): one subscription records
 /// the route while the app is open, and when the session ends drops a passive
-/// "auto" check-in at the end of the tracked path (linking the trace across
-/// launches), skipped when it lands too close to the last one.
+/// "auto" check-in at the last known position.
 @Riverpod(keepAlive: true)
 class GpsNotifier extends _$GpsNotifier {
   StreamSubscription<Position>? _sub;
@@ -26,11 +26,15 @@ class GpsNotifier extends _$GpsNotifier {
   /// In-memory path (lng,lat) of this foreground session — the live map line.
   final List<List<double>> sessionPath = [];
 
-  // Latest fix this session, and the location of the last auto anchor we
-  // dropped (kept in memory across sessions so re-opens in place don't spam).
   double? _lastLat;
   double? _lastLng;
   static const _uuid = Uuid();
+
+  // Monotonically-increasing session counter. Incremented each time a new
+  // subscription is opened. _anchorPath captures it at stop-time and aborts
+  // if it has changed by the time the DB write would happen — prevents phantom
+  // anchors when the app resumes before _anchorPath finishes.
+  int _sessionId = 0;
 
   // Skip a new auto anchor only if today already has a check-in this close.
   static const double _kMinAnchorGapM = 80;
@@ -52,9 +56,12 @@ class GpsNotifier extends _$GpsNotifier {
       state = AsyncError('Location permission denied', StackTrace.current);
       return;
     }
-    if (_sub != null) return; // guard against re-entrancy across the await
+    if (_sub != null) return; // guard re-entrancy across the await
 
-    // Fresh session: the map shows only the path since this open.
+    // Increment session ID here — any _anchorPath from a previous stopTracking
+    // call that is still in-flight will now see a stale ID and abort.
+    _sessionId++;
+
     sessionPath.clear();
     final batcher = ref.read(locationBatcherProvider);
     _sub = service.startTracking().listen(
@@ -77,12 +84,19 @@ class GpsNotifier extends _$GpsNotifier {
     );
   }
 
-  /// Drop a passive auto check-in at the end of the tracked path. Skipped only
-  /// if *today* already has a check-in within [_kMinAnchorGapM] — so re-opening
-  /// in place mid-day doesn't spam, but a new day always gets a fresh anchor
-  /// even when you haven't moved (the dedup window is per-day, DB-backed so it
-  /// survives app restarts).
-  Future<void> _anchorPath() async {
+  Future<void> stopTracking() async {
+    final sub = _sub;
+    if (sub == null) return;
+    _sub = null;
+    // Capture the session ID at stop-time. If startTracking() is called before
+    // _anchorPath completes (rapid foreground/background), the ID will have
+    // incremented and _anchorPath will abort without writing.
+    final sessionAtStop = _sessionId;
+    await sub.cancel();
+    await _anchorPath(sessionAtStop);
+  }
+
+  Future<void> _anchorPath(int sessionAtStop) async {
     final lat = _lastLat, lng = _lastLng;
     if (lat == null || lng == null) return;
 
@@ -91,6 +105,11 @@ class GpsNotifier extends _$GpsNotifier {
     final today = DateTime(now.year, now.month, now.day);
     final res = await repo.getForDay(today);
     final todays = res.fold((_) => const <CheckIn>[], (l) => l);
+
+    // If a new session started while we were awaiting, abort — we'd be
+    // anchoring in the middle of a live session, not at its end.
+    if (_sessionId != sessionAtStop) return;
+
     final nearbyToday = todays.any((c) =>
         Geolocator.distanceBetween(c.lat, c.lng, lat, lng) < _kMinAnchorGapM);
     if (nearbyToday) return;
@@ -102,7 +121,10 @@ class GpsNotifier extends _$GpsNotifier {
       if (results.isNotEmpty) name = results.first.name;
     } catch (_) {/* keep fallback */}
 
-    await repo.createCheckIn(
+    // Final session check after the place lookup (also async).
+    if (_sessionId != sessionAtStop) return;
+
+    final result = await repo.createCheckIn(
       CheckInDraft(
         placeName: name,
         lat: lat,
@@ -110,13 +132,9 @@ class GpsNotifier extends _$GpsNotifier {
         source: CheckInSource.auto,
       ),
     );
-  }
-
-  Future<void> stopTracking() async {
-    final sub = _sub;
-    if (sub == null) return;
-    _sub = null;
-    await sub.cancel();
-    await _anchorPath();
+    result.fold(
+      (e) => debugPrint('[auto check-in] failed: $e'),
+      (_) {},
+    );
   }
 }

@@ -227,11 +227,11 @@ class _ZonAppState extends ConsumerState<ZonApp> with WidgetsBindingObserver {
       case AppLifecycleState.resumed:
         _syncTracking();
       case AppLifecycleState.paused:
-      case AppLifecycleState.hidden:
       case AppLifecycleState.detached:
         ref.read(gpsNotifierProvider.notifier).stopTracking();
+      case AppLifecycleState.hidden:
       case AppLifecycleState.inactive:
-        break; // transient (e.g. Control Center) — keep tracking
+        break; // transient (system alerts, notification banners) — keep tracking
     }
   }
 
