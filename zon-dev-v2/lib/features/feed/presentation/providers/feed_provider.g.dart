@@ -25,7 +25,7 @@ final feedStoriesProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef FeedStoriesRef = AutoDisposeFutureProviderRef<List<CheckInStory>>;
-String _$feedNotifierHash() => r'2bb6b24d358a3a8f30c9707a995fe2d5b31c9755';
+String _$feedNotifierHash() => r'9996bf320b49356dd0b65f97817d57ec55e1bbf1';
 
 /// See also [FeedNotifier].
 @ProviderFor(FeedNotifier)
