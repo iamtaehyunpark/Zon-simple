@@ -59,6 +59,15 @@ class FeedNotifier extends _$FeedNotifier {
 
   Future<void> refresh() => _load();
 
+  /// Optimistically remove a stamp from local state without a round-trip.
+  /// Call immediately after a successful deleteStamp so the feed updates
+  /// before the user even pops back to it.
+  void removeStamp(String stampId) {
+    state = state.whenData(
+      (stamps) => stamps.where((s) => s.id != stampId).toList(),
+    );
+  }
+
   Future<void> toggleLike(String stampId) async {
     final repo = ref.read(stampRepositoryProvider);
     await repo.toggleLike(stampId);

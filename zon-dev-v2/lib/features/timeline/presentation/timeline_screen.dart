@@ -513,7 +513,12 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     result.fold(
       (e) => ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('Merge failed: $e'))),
-      (_) => _reload(),
+      (_) {
+        // Remove the absorbed node immediately so it can't be tapped while
+        // the async reload is in-flight (tapping a deleted ID causes a 404).
+        setState(() => _items.removeWhere((i) => i.id == keep.id));
+        _reload();
+      },
     );
   }
 

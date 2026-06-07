@@ -253,7 +253,7 @@ class CheckInRepository with BaseRepository {
       // 2. Append note
       final rows = await client
           .from('check_ins')
-          .select('note')
+          .select('id, note')
           .inFilter('id', [keepId, intoId]);
       final noteFor = {for (final r in rows) r['id'] as String: r['note'] as String?};
       final intoNote = noteFor[intoId]?.trim() ?? '';

@@ -13,6 +13,7 @@ import '../../../data/models/stamp.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/models/enums.dart';
 import '../../../shared/widgets/app_states.dart';
+import 'providers/feed_provider.dart';
 import '../../../shared/widgets/photo_thumb_row.dart';
 import '../../../shared/utils/format.dart';
 import '../../checkin/presentation/user_tag_field.dart' show showUserPicker;
@@ -156,6 +157,8 @@ class _StampDetailBody extends ConsumerWidget {
                       await ref
                           .read(stampRepositoryProvider)
                           .deleteStamp(stampId);
+                      // Immediately remove from feed so it's gone when we pop back.
+                      ref.read(feedNotifierProvider.notifier).removeStamp(stampId);
                       if (context.mounted) context.pop();
                     }
                   }
