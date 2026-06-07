@@ -45,6 +45,7 @@ dependencies:
   dio: ^5.4.3
 
   # Media
+  image_picker: ^1.1.2
   flutter_image_compress: ^2.2.0
   cached_network_image: ^3.3.1
 

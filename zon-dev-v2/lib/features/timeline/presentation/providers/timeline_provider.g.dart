@@ -6,12 +6,12 @@ part of 'timeline_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$timelineNotifierHash() => r'6d3168bc89086d91c24df669a3defbd1bb78dce8';
+String _$timelineNotifierHash() => r'461994ba2ecbabb220a2e9950656253c31701459';
 
 /// See also [TimelineNotifier].
 @ProviderFor(TimelineNotifier)
-final timelineNotifierProvider = AutoDisposeNotifierProvider<TimelineNotifier,
-    AsyncValue<List<DayData>>>.internal(
+final timelineNotifierProvider =
+    NotifierProvider<TimelineNotifier, AsyncValue<DayBundle>>.internal(
   TimelineNotifier.new,
   name: r'timelineNotifierProvider',
   debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
@@ -21,6 +21,6 @@ final timelineNotifierProvider = AutoDisposeNotifierProvider<TimelineNotifier,
   allTransitiveDependencies: null,
 );
 
-typedef _$TimelineNotifier = AutoDisposeNotifier<AsyncValue<List<DayData>>>;
+typedef _$TimelineNotifier = Notifier<AsyncValue<DayBundle>>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

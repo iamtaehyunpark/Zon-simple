@@ -1,53 +1,52 @@
-# ZON — Claude Code Project Context (v2.0)
+# ZON — Claude Code Project Context (v3.0)
 
 > **Read this file before every session. Do not deviate from the rules below.**
-> This is v2.0 — the pivot version. AI model pipeline has been removed from MVP scope.
+> Updated 2026-06-07 to reflect the current shipped state of the app.
 
 ---
 
 ## 1. What is ZON
 
-ZON is a **place-based diary SNS**. It automatically collects location data from multiple sources (GPS while app is open, photo EXIF, significant-change cell tower detection) and lets users turn meaningful moments into **Stamps** — rich cards with photos, text, and sensory tags that can be kept private or shared on a social feed.
+ZON is a **place-based diary SNS**. It passively collects location data while the app is open (foreground GPS) and from photo EXIF, then lets users turn meaningful moments into **Stamps** — rich cards with photos, vibe tags, and captions that can be kept private or shared to a social feed.
+
+**Three-layer trace model (source of truth):**
+
+| Layer | Table | User-facing? | Visibility |
+|---|---|---|---|
+| **Breadcrumbs** | `raw_location_events` | No — powers route line on map/timeline | Always system-private |
+| **Check-in** | `check_ins` | Yes — discrete visit pins on map/timeline | Private by default; owner can set `public` to share as a 24h story in followers' feed |
+| **Stamp** | `stamps` | Yes — promoted post (caption, vibe tags, likes/comments/saves) | Private by default; owner sets `public` to appear in feed |
+
+**Invariants:**
+- `stamp ⊂ check-in`: every stamp has exactly one parent `check_in_id` (1:1)
+- You **check in first**, then optionally **promote** one check-in into a stamp
+- Photos attach to `check_ins`; on promotion they carry over to the stamp (re-pointed, not re-uploaded)
+- Promoting a check-in opens the stamp editor pre-filled — no instant promote
 
 **Core loop:**
 ```
-Location data collected passively
-    → System suggests "add a Stamp here?"
-    → User creates Stamp (photo + text + tags)
-    → Stamp stays private by default
-    → User optionally makes it public → appears in feed
+GPS/EXIF location collected → check-in suggested/created
+  → Photos attached
+  → Check-in can be shared as a 24h public "story"
+  → Optionally promoted to Stamp (add caption, vibe tags, make public)
+  → Stamp appears in followers' feed
 ```
-
-**Two-layer data model:**
-- `RawLocationEvent` — system layer, not directly visible to users, powers the map route and Stamp suggestions
-- `Stamp` — user layer, the actual content object, private by default
 
 ---
 
-## 2. What Changed from v1 (Important)
+## 2. What Is NOT in This MVP
 
-**REMOVED from MVP scope (do not implement):**
-- TensorFlow Lite / ONNX Runtime
-- All AI vision models (Depth Anything, SuperPoint, LightGlue, MixVPR)
-- Liveness detection pipeline
-- Verification tier system (Tier 1/2/3)
-- Badge system based on verification
+**REMOVED from MVP — do not implement:**
+- TensorFlow Lite / ONNX Runtime / any AI vision models
+- Liveness detection, verification tier system (Tier 1/2/3), badges
 - On-device signing / proof certificates
-- Consensus place registration (n-round cross-validation)
+- Consensus place registration
+- Automatic companion detection (BLE-based)
+- Route navigation (Mapbox Navigation)
+- Premium subscription / B2B campaign tools
 
-**These are valid future features. When asked to implement them, say:**
-> "This is a future version feature (post-MVP vision model layer). Adding a TODO and skipping for now."
-
-**ADDED / CHANGED:**
-- Always-on GPS tracking while app is foregrounded (no background continuous tracking)
-- Photo EXIF parsing via `photo_manager`
-- Significant-change location updates (background cell tower detection)
-- `RawLocationEvent` table replaces the `Visit` concept
-- Stamp is private by default, user explicitly makes public
-- Feed shows Stamp units (public only)
-- Map shows RawLocationEvent route lines + Stamp pins + unlinked photo icons
-- Companion detection via GPS proximity (MVP: manual tag suggestion; Phase 2: auto BLE)
-- Google Places API for external place matching (store `external_place_id` on every Stamp)
+When asked to implement these, say:
+> "This is a future version feature. Adding a TODO and skipping for now."
 
 ---
 
@@ -55,363 +54,378 @@ Location data collected passively
 
 | Layer | Choice | Notes |
 |---|---|---|
-| App | Flutter (Dart) | iOS first, Android Phase 2 |
-| State Management | Riverpod | `@riverpod` code generation |
-| Navigation | go_router | Declarative routing only |
-| Backend | Supabase | PostgreSQL + Auth + Storage + Realtime + Edge Functions |
-| Maps | Mapbox Flutter SDK | Full-screen overlay style |
-| Location | geolocator + geofence_service | iOS "While Using" permission only |
-| Background location | iOS CLLocationManager (significant-change) | NOT "Always Allow" |
-| Photo access | photo_manager | iOS Photos Framework, EXIF parsing |
-| Geocoding | Mapbox Geocoding API | Coordinates → place name. Call sparingly. |
-| Place search | Google Places API | External place ID matching |
-| HTTP | Dio | With auth interceptors |
-| Local storage | Hive | Cached route events, draft Stamps |
-| Push notifications | firebase_messaging | FCM for significant-change nudges |
-| Image | flutter_image_compress + cached_network_image | |
+| App | Flutter (Dart) | iOS first |
+| State | Riverpod | `@riverpod` codegen — run `dart run build_runner build` after model/provider changes |
+| Navigation | go_router | All routes in `lib/app.dart`. Declarative only. |
+| Backend | Supabase | PostgreSQL + Auth + Storage + Edge Functions |
+| Auth | Supabase Auth + `flutter_web_auth_2` | OAuth (Apple/Google) via native ASWebAuthenticationSession; `detectSessionInUri: false` in `Supabase.initialize`; manual `getOAuthSignInUrl` → `getSessionFromUrl` |
+| Maps | Mapbox (`mapbox_maps_flutter`) | `GeoJsonSource`, `CircleLayer`, `LineLayer`. `upsertLine` for smooth live path. |
+| Location | geolocator | Foreground "while in use" only. `distanceBetween` for dedup. |
+| Photo | photo_manager | EXIF parsing. `PhotoService.uploadFile` for storage. |
+| Place search | Kakao Local API (Korea) + Google Places (worldwide) | Routed by `placeServiceFor(lat,lng)` in `lib/core/places/`. |
+| Local storage | Hive | GPS event batch queue. |
+| Notifications | `firebase_messaging` + `flutter_local_notifications` | FCM for remote; local for photo suggestions. Remote push blocked on Apple paid enrollment. |
+| Image | `flutter_image_compress` + `cached_network_image` | |
+| HTTP | Dio | Auth interceptors. |
 
-**Never introduce new dependencies without updating `pubspec.yaml` and `docs/dependencies.md`.**
-
----
-
-## 4. Project Folder Structure
-
-```
-zon/
-├── CLAUDE.md
-├── pubspec.yaml
-├── .env                          ← Never commit
-├── .env.example
-├── docs/
-│   ├── schema.sql                ← Supabase DB schema (source of truth)
-│   ├── api.md                    ← Edge Function API reference
-│   ├── permissions.md            ← iOS/Android permission rationale
-│   └── dependencies.md
-├── supabase/
-│   ├── migrations/               ← Numbered SQL files
-│   └── functions/
-│       ├── ingest-location/      ← Batch RawLocationEvent ingestion
-│       ├── suggest-stamp/        ← Stamp suggestion from events
-│       ├── geocode-nudge/        ← Geocode + send notification
-│       └── match-place/          ← Google Places API matching
-├── lib/
-│   ├── main.dart
-│   ├── app.dart                  ← MaterialApp + go_router
-│   ├── core/
-│   │   ├── location/
-│   │   │   ├── gps_service.dart           ← Foreground GPS tracking
-│   │   │   ├── significant_change.dart    ← Background cell tower detection
-│   │   │   └── location_models.dart
-│   │   ├── photos/
-│   │   │   ├── photo_service.dart         ← photo_manager + EXIF parsing
-│   │   │   └── photo_models.dart
-│   │   ├── notifications/
-│   │   │   └── notification_service.dart  ← FCM + local notifications
-│   │   ├── auth/
-│   │   │   └── auth_service.dart          ← Supabase auth
-│   │   └── errors/
-│   │       └── app_exception.dart
-│   ├── data/
-│   │   ├── models/
-│   │   │   ├── raw_location_event.dart    ← Freezed
-│   │   │   ├── stamp.dart                 ← Freezed
-│   │   │   ├── photo.dart                 ← Freezed
-│   │   │   ├── user_profile.dart          ← Freezed
-│   │   │   └── enums.dart                 ← LocationSource, Visibility, etc.
-│   │   ├── repositories/                  ← Abstract interfaces
-│   │   └── datasources/
-│   │       ├── remote/                    ← Supabase calls
-│   │       └── local/                     ← Hive cache
-│   ├── features/
-│   │   ├── feed/
-│   │   │   └── presentation/
-│   │   │       ├── feed_screen.dart
-│   │   │       └── stamp_card.dart
-│   │   ├── map/
-│   │   │   └── presentation/
-│   │   │       ├── map_screen.dart         ← Full-screen Mapbox
-│   │   │       ├── route_layer.dart        ← RawLocationEvent path rendering
-│   │   │       ├── stamp_pin_layer.dart    ← Stamp pins on map
-│   │   │       └── photo_icon_layer.dart   ← Unlinked photo icons
-│   │   ├── checkin/                        ← Central CTA flow
-│   │   │   └── presentation/
-│   │   │       ├── checkin_entry.dart      ← Place selection
-│   │   │       ├── stamp_editor.dart       ← Photo + text + tags
-│   │   │       └── stamp_complete.dart     ← Save + visibility choice
-│   │   ├── photo_import/
-│   │   │   └── presentation/
-│   │   │       ├── photo_suggestion.dart   ← "Add this photo to map?"
-│   │   │       └── bulk_import.dart        ← Batch EXIF import
-│   │   ├── timeline/
-│   │   │   └── presentation/
-│   │   │       ├── timeline_screen.dart
-│   │   │       ├── calendar_view.dart
-│   │   │       ├── map_view.dart
-│   │   │       └── list_view.dart
-│   │   └── profile/
-│   │       └── presentation/
-│   │           ├── profile_screen.dart
-│   │           └── stamp_grid.dart
-│   └── shared/
-│       ├── widgets/
-│       ├── theme/                          ← Design tokens (TBD)
-│       └── utils/
-└── test/
-    ├── unit/
-    ├── widget/
-    └── integration/
-```
+**Never add dependencies without updating `pubspec.yaml` and `docs/dependencies.md`.**
 
 ---
 
-## 5. Architecture Rules
+## 4. Current Route Map
 
-### 5.1 Feature Structure (Clean Architecture)
+All routes defined in `lib/app.dart`:
+
+| Path | Screen | Notes |
+|---|---|---|
+| `/login` | `LoginScreen` | OAuth entry |
+| `/feed` | `FeedScreen` | Stamp feed + stories rail (shell) |
+| `/map` | `MapScreen` | Live map (shell) |
+| `/timeline` | `TimelineScreen` | Single-day trace (shell) |
+| `/profile` | `ProfileScreen` (own) | (shell) |
+| `/checkin` | `CheckinEntry` | Creation flow; query params: `mode=stamp\|checkin`, `lat`, `lng`, `fromCheckIn=<id>` |
+| `/check-in/:id` | `CheckInDetailScreen` | View a check-in (photos, note, promote CTA) |
+| `/stamp/:id` | `StampDetailScreen` | Full stamp detail + comments |
+| `/stamp/:id/edit` | `EditStampScreen` | |
+| `/profile/:id` | `ProfileScreen` (other) | |
+| `/profile/:id/friends` | `UserListScreen(friends:true)` | |
+| `/profile/:id/followers` | `UserListScreen(followers:true)` | |
+| `/profile/:id/following` | `UserListScreen(followers:false)` | |
+| `/settings` | `SettingsScreen` | Edit profile, privacy account toggle, delete account |
+| `/check-ins` | `CheckInListScreen` | Own check-in list with photo thumbnails |
+| `/saved` | `SavedStampsScreen` | Bookmarked stamps |
+| `/search` | `UserSearchScreen` | Find people |
+| `/activity` | `ActivityScreen` | Notifications + friend/follow request rows |
+| `/follow-requests` | `FollowRequestsScreen` | Approve/deny pending follows |
+| `/friend-requests` | `FriendRequestsScreen` | Approve/deny pending friend requests |
+| `/photo-suggestions` | `PhotoSuggestionScreen` | Today's geotagged photos → clustering → inspection |
+| `/location-visibility` | `LocationVisibilityScreen` | Per-friend live location sharing toggles |
+
+---
+
+## 5. Folder Structure (Current)
+
 ```
-feature/
+lib/
+├── app.dart                     ← MaterialApp + GoRouter (ALL routes here)
+├── main.dart
+├── firebase_options.dart
+├── core/
+│   ├── auth/                    ← auth_provider.dart (currentUserProvider)
+│   ├── errors/                  ← app_exception.dart (AppException, NetworkError, AuthError)
+│   ├── location/
+│   │   ├── gps_service.dart
+│   │   ├── location_batcher.dart
+│   │   └── providers/
+│   │       └── gps_provider.dart  ← GpsNotifier (session path, auto-anchor, _sessionId guard)
+│   ├── notifications/           ← notification_service.dart
+│   ├── photos/                  ← photo_service.dart (upload, EXIF, resizeForLlm)
+│   ├── places/                  ← place_service_provider.dart (Kakao/Google router)
+│   └── supabase/                ← supabase_provider.dart
 ├── data/
-│   ├── datasources/  ← Supabase / Hive
-│   ├── models/       ← JSON serialization
-│   └── repositories/ ← Implements domain interface
-├── domain/
-│   ├── entities/     ← Pure Dart
-│   ├── repositories/ ← Abstract interface
-│   └── usecases/     ← Single-responsibility
-└── presentation/
-    ├── providers/    ← Riverpod state
-    └── screens/      ← UI only
+│   ├── models/
+│   │   ├── check_in.dart        ← CheckIn, CheckInDraft, CheckInSource enum
+│   │   ├── enums.dart           ← StampVisibility {private, public}
+│   │   ├── friend_location.dart ← FriendLocation (isStale ≥8h, timeLabel helper)
+│   │   ├── raw_location_event.dart
+│   │   ├── stamp.dart           ← Stamp, StampDraft
+│   │   └── user_profile.dart    ← UserProfile (friendCount, followerCount, isPrivate)
+│   └── repositories/
+│       ├── base_repository.dart              ← isoDate(), getFollowingIds() shared helpers
+│       ├── check_in_repository.dart          ← CheckInRepository + CheckInStory + mergeCheckIns
+│       ├── comment_repository.dart
+│       ├── diary_repository.dart             ← getDiary, saveDiary, generateDiary (Edge Fn)
+│       ├── location_repository.dart
+│       ├── location_sharing_repository.dart  ← ghost mode, friend locations, hidden-from list
+│       ├── notification_repository.dart
+│       ├── privacy_repository.dart
+│       ├── profile_repository.dart           ← FollowState, FriendState enums here
+│       ├── stamp_repository.dart
+│       └── timeline_note_repository.dart
+├── features/
+│   ├── auth/presentation/       ← login_screen.dart
+│   ├── checkin/presentation/
+│   │   ├── check_in_detail_screen.dart  ← /check-in/:id
+│   │   ├── check_in_editor.dart         ← CheckInEditorBody (uses PlaceSearchField)
+│   │   ├── checkin_entry.dart           ← Entry router (place search → editor → stamp)
+│   │   ├── photo_strip.dart
+│   │   ├── stamp_editor.dart
+│   │   ├── user_tag_field.dart          ← showUserPicker
+│   │   └── providers/
+│   │       └── checkin_provider.dart    ← CheckinNotifier
+│   ├── feed/presentation/
+│   │   ├── feed_screen.dart             ← FeedScreen + StampCard + _StoriesRail + _StoryView
+│   │   ├── stamp_detail_screen.dart     ← Full detail + comments
+│   │   ├── edit_stamp_screen.dart       ← uses PlaceSearchField
+│   │   ├── saved_stamps_screen.dart
+│   │   └── providers/
+│   │       └── feed_provider.dart       ← FeedNotifier, feedStoriesProvider, removeStamp
+│   ├── map/presentation/
+│   │   ├── map_screen.dart             ← MapScreen + friend avatar bubbles + ghost mode
+│   │   └── map_drawing.dart            ← drawPins, upsertLine, removeLine
+│   ├── photo_import/presentation/
+│   │   ├── photo_checkin_inspection_screen.dart  ← swipeable review, merge, confirm upload
+│   │   ├── photo_suggestion_screen.dart          ← clustering → navigate to inspection screen
+│   │   └── providers/
+│   │       └── photo_suggestion_provider.dart
+│   ├── profile/presentation/
+│   │   ├── activity_screen.dart        ← Notifications + friend/follow request rows
+│   │   ├── check_in_list_screen.dart   ← Card list with photo thumbnails
+│   │   ├── follow_requests_screen.dart
+│   │   ├── friend_requests_screen.dart
+│   │   ├── profile_screen.dart         ← _SocialButtons (Add Friend + Follow)
+│   │   ├── settings_screen.dart        ← Private account toggle
+│   │   ├── user_list_screen.dart       ← friends/followers/following (friends:bool param)
+│   │   ├── user_search_screen.dart
+│   │   └── providers/
+│   │       └── profile_provider.dart   ← ProfileNotifier, followStateProvider,
+│   │                                      friendStateProvider, followRequestsProvider,
+│   │                                      friendRequestsProvider
+│   ├── settings/presentation/
+│   │   └── location_visibility_screen.dart  ← per-friend location sharing toggles
+│   └── timeline/presentation/
+│       ├── providers/
+│       │   └── timeline_provider.dart  ← TimelineNotifier (keepAlive), DayBundle
+│       └── timeline_screen.dart        ← _ListPanel (drag/swipe/inline edit), AI diary
+└── shared/
+    ├── theme/app_theme.dart
+    ├── utils/format.dart               ← compactCount, errorMessage
+    └── widgets/
+        ├── app_states.dart             ← LoadingView, EmptyView, ErrorView
+        ├── full_screen_image_viewer.dart  ← FullScreenImageViewer.show (PageView + pinch-zoom)
+        ├── photo_thumb_row.dart
+        └── place_search_field.dart     ← coordinate-anchored dropdown (Overlay)
 ```
 
-### 5.2 State Management
-- All state through Riverpod. No `setState()` except local ephemeral UI.
-- `AsyncNotifierProvider` for Supabase data.
-- `NotifierProvider` for synchronous state.
+Edge Functions (`supabase/functions/`):
+- `ingest-location`, `ingest-photo-exif`, `suggest-stamp`, `match-place`, `geocode-nudge` — pre-existing
+- `generate-diary/index.ts` — Gemini 3.1 flash lite, multimodal, JWT-gated; called by `DiaryRepository.generateDiary`
 
-### 5.3 Navigation
-- All routes in `lib/app.dart` via `go_router`.
-- Named routes only. Pass IDs between routes, not full objects.
+---
 
-### 5.4 Error Handling
+## 6. Architecture Rules
+
+### 6.1 Feature Structure
+Flat-ish in practice. Shared code in `lib/shared/`; feature code in `lib/features/<feature>/presentation/`. Repositories in `lib/data/repositories/`. No separate domain/usecase layer (YAGNI at this scale).
+
+### 6.2 State Management
+- All persistent state through Riverpod (`@riverpod` codegen).
+- `setState()` only for local ephemeral widget state (animation, form controllers).
+- After adding/changing `@riverpod` providers or `@freezed` models: **run `dart run build_runner build --delete-conflicting-outputs`**.
+
+### 6.3 Navigation
+- Named routes in `lib/app.dart` only. Pass IDs (never full objects) between routes.
+- `context.push()` for drill-down; `context.go()` for tab-level navigation.
+
+### 6.4 Error Handling
 - Repositories return `Either<AppException, T>` via `fpdart`.
+- UI: `.fold((e) => ..., (data) => ...)` or `.getOrElse`.
 - Never swallow exceptions silently.
 
 ---
 
-## 6. Location & Photo Rules
+## 7. Location & Photo Rules
 
-### 6.1 GPS (Foreground Only)
-```dart
-// ONLY collect GPS when app is in foreground
-// Use geolocator with LocationPermission.whileInUse
-// Start tracking in AppLifecycleState.resumed
-// Stop tracking in AppLifecycleState.paused
+### GPS (Foreground Only)
+- Collect while app is foregrounded; stop on `AppLifecycleState.paused`.
+- `GpsNotifier` keeps `sessionPath` (cleared on each new session start).
+- Auto-anchor: when session ends, if no check-in within 80m exists for today → create auto check-in. DB-backed dedup (queries today's check-ins), resets naturally at midnight.
 
-// Collect every 30 seconds OR when movement > 50m
-// Batch upload to Supabase every 5 minutes
-// Store locally in Hive when offline
-```
+### Significant-Change (Background)
+- iOS only: `CLLocationManager.startMonitoringSignificantLocationChanges()`.
+- Purpose: trigger nudge notification only. NOT continuous tracking.
+- Remote push blocked on Apple paid enrollment (no APNs key). Local notifications work.
 
-### 6.2 Significant-Change (Background)
-```dart
-// iOS: CLLocationManager.startMonitoringSignificantLocationChanges()
-// Android: FusedLocationProviderClient with PRIORITY_LOW_POWER
-// Purpose: ONLY for triggering check-in nudge notifications
-// NOT for continuous route tracking
-// Accuracy: 500m–several km (acceptable for notification triggers)
-```
+### Photo EXIF
+- `PhotoService.getNewPhotosToday()` scans for today's geotagged photos.
+- Parse EXIF on device — never send image bytes to server for parsing.
+- Detected photos → dismissible banner on Feed → `PhotoSuggestionScreen` → creates **check-ins** (source=photo).
 
-### 6.3 Photo EXIF Parsing
-```dart
-// Request photo_manager permission on first launch
-// Listen for new photos added to library
-// Parse EXIF: lat, lng, taken_at
-// Filter: only photos WITH location data
-// Do NOT send image bytes to server for EXIF parsing
-//   → parse entirely on device, send only coordinates + timestamp
-// Batch process: wait 30 minutes after photo is taken before suggesting
-```
-
-### 6.4 Privacy Rules
-- Raw GPS route data is ALWAYS private (never shown to other users)
-- Stamps are private by default
-- Only public Stamps appear in friend feeds or friend maps
-- Users can delete all location history at any time
-- No real-time location sharing between users in MVP
+### Privacy
+- `raw_location_events`: always system-private, never exposed to other users.
+- `check_ins`: private by default. Owner can set `visibility='public'` → surfaces as a 24h story in followers' feed.
+- `stamps`: private by default. Owner sets `public` for feed visibility.
+- Private accounts: followers must be approved. `can_view_user(owner_uuid)` is the universal RLS gate.
 
 ---
 
-## 7. Data Model Reference
+## 8. Data Models
 
-### RawLocationEvent
+### CheckIn (check_ins table)
 ```dart
-@freezed
-class RawLocationEvent with _$RawLocationEvent {
-  const factory RawLocationEvent({
-    required String id,
-    required String userId,
-    required double lat,
-    required double lng,
-    required double accuracyM,
-    required LocationSource source,    // gps | exif | cellTower
-    required DateTime capturedAt,
-    String? photoId,                   // if from photo EXIF
-    String? stampId,                   // if linked to a Stamp
-    String? geocodedName,              // filled lazily for notifications
-  }) = _RawLocationEvent;
+CheckIn {
+  id, userId, placeName, normalizedPlaceName,
+  lat, lng, externalPlaceId, externalSource,
+  note,                          // short text
+  source,                        // CheckInSource {manual, photo, auto}
+  visibility,                    // StampVisibility {private, public}
+  taggedUserIds,                 // List<String>
+  photoUrls,                     // populated on fetch, not stored on row
+  photoCount,
+  stampId,                       // set if promoted
+  visitedAt, createdAt, updatedAt
 }
-
-enum LocationSource { gps, exif, cellTower }
 ```
 
-### Stamp
+### Stamp (stamps table)
 ```dart
-@freezed
-class Stamp with _$Stamp {
-  const factory Stamp({
-    required String id,
-    required String userId,
-    required String placeName,
-    required double lat,
-    required double lng,
-    required StampVisibility visibility,   // private (default) | public
-    required DateTime visitedAt,
-    String? normalizedPlaceName,
-    String? externalPlaceId,              // Google Place ID — always store if available
-    String? externalSource,               // 'google_places', 'kakao'
-    String? coverPhotoUrl,
-    String? caption,
-    @Default([]) List<String> sensoryTags,
-    @Default([]) List<String> taggedUserIds,
-    @Default([]) List<String> photoUrls,
-    @Default(0) int likeCount,
-    @Default(0) int commentCount,
-    @Default(false) bool isLiked,
-    @Default(false) bool isSaved,
-    DateTime? createdAt,
-    DateTime? updatedAt,
-  }) = _Stamp;
+Stamp {
+  id, userId, placeName, normalizedPlaceName,
+  lat, lng, externalPlaceId, externalSource,
+  checkInId,                     // parent check-in (1:1)
+  visibility,                    // StampVisibility
+  coverPhotoUrl, caption,
+  sensoryTags, taggedUserIds,
+  photoUrls, photoCount,
+  likeCount, commentCount,
+  isLiked, isSaved,
+  username, avatarUrl,           // populated from v_feed_stamps view join
+  visitedAt, createdAt, updatedAt
 }
-
-enum StampVisibility { private, public }
 ```
 
-### Key Rule: Always Store external_place_id
+### UserProfile (profiles table)
 ```dart
-// When creating a Stamp:
-// 1. Check if existing Stamp within 100m radius
-// 2. If no existing Stamp → call Google Places API to find nearest place
-// 3. Store external_place_id even if user doesn't see it
-// 4. This enables future place DB migration without data loss
-//
-// Rate limit: only call Places API if no Stamp within 100m
-// Budget: ~$0.017 per call → ~60K calls per $1
+UserProfile {
+  id, username, displayName, avatarUrl, bio,
+  stampCount,
+  friendCount,                   // accepted friendships
+  followerCount, followingCount,
+  isPrivate,                     // private account flag
+  createdAt
+}
+```
+
+### Social enums (profile_repository.dart)
+```dart
+enum FollowState { none, requested, following }
+enum FriendState { none, requestedByMe, requestedByThem, friends }
+```
+
+### CheckInStory (check_in_repository.dart)
+```dart
+// One author's recent public check-ins, grouped for feed stories rail.
+CheckInStory { userId, username, avatarUrl, checkIns: List<CheckIn> }
+```
+
+### FriendLocation (friend_location.dart)
+```dart
+// A friend's last-known position from user_locations (Realtime-streamed).
+FriendLocation {
+  userId, username, avatarUrl,
+  lat, lng, accuracy, heading,
+  updatedAt,
+  bool isStale,    // true when updatedAt is ≥8h ago
+  String timeLabel // "Just now" / "Xm ago" / "Xh ago"
+}
 ```
 
 ---
 
-## 8. MVP Scope
+## 9. Social Graph
 
-### In MVP (M1–M3):
-- Active check-in flow (place selection → photo/text/tags → Stamp)
-- Photo-based Stamp creation (EXIF parsing → match nearby Stamp → suggest add)
-- Significant-change notifications (background detection → nudge → check-in)
-- Full-screen Mapbox map with:
-  - GPS route lines (foreground tracking)
-  - Stamp pins (all user's own Stamps)
-  - Unlinked photo icons (photos not added to any Stamp)
-  - Date filter
-- Timeline (calendar + map + list views)
-- Feed (public Stamps only, friends + recommendations)
-- Social basics: follow/friend system, manual companion tag on Stamp
-- Nearby friend tag suggestion at check-in time (GPS-based)
-- Profile with public Stamp grid + visit stats
-- Google Places API matching + external_place_id storage
-- Push notifications (significant-change nudge, photo add suggestion, evening summary)
-- Private by default, per-Stamp visibility toggle
+Two overlapping relationship types:
 
-### NOT in MVP (do not implement):
-- Automatic companion detection (BLE-based) → Phase 2
-- Companion route sharing / journey summary cards → Phase 2
-- External share cards → Phase 2
-- Own place database → Phase 2 (accumulates from user data)
-- Route navigation (Mapbox Navigation) → Phase 3
-- Premium subscription → Phase 3
-- Vision model verification (Tier system, liveness detection) → future version
-- Badge system based on verification → future version
-- B2B campaign tools → future version
+### Follows (asymmetric)
+- Table: `follows (follower_id, following_id, status {pending|accepted})`
+- Private accounts: follow triggers `status='pending'` (server-enforced by `enforce_follow_status` trigger). Target approves/denies.
+- Gates: feed stamps, stories, map following layer, profile visibility for private accounts.
+- `can_view_user(owner uuid)` SECURITY DEFINER function: true when owner=self, OR owner not private, OR accepted follow exists.
 
----
+### Friendships (symmetric)
+- Table: `friendships (user_a, user_b, status {pending|accepted}, requested_by)` — canonical ordering `user_a < user_b`.
+- On acceptance: `auto_follow_on_friendship` trigger inserts both `follows` rows.
+- Gates: live location sharing (Snap Map–style, implemented in `LocationSharingRepository`), future companying/tagging features.
+- Profile UI: "Add Friend" (primary) + "Follow" (secondary), Facebook-style.
+- Friend requests surface in Activity tab above follow requests.
 
-## 9. Notification Rules
-
-```
-Significant-change nudge:
-  → Max 2 per hour
-  → 30-minute cooldown after last notification
-  → Message: "Looks like you're near [geocoded_name]. Want to add a Stamp?"
-
-Photo add suggestion:
-  → Triggered 30 minutes after new photo with EXIF location detected
-  → Batch: group multiple photos from same location into one notification
-  → Max 3 per day
-  → Message: "You took [N] photos near [place]. Add them to your map?"
-
-Evening summary:
-  → Daily at 8pm (user-configurable)
-  → Only if user has new RawLocationEvents that day without Stamps
-  → Message: "You visited [place1], [place2] today. Want to remember it?"
-
-Companion suggestion:
-  → Triggered at check-in time only
-  → If friend's last known location within 300m AND within last 30 minutes
-  → Message inline in check-in flow: "Friend X seems to be nearby. Add as companion?"
+### Privacy gate
+```sql
+-- can_view_user(p_owner uuid) returns boolean
+-- used in stamps RLS, check_ins RLS, photos RLS
+-- true when: owner=self OR owner not private OR accepted follow from viewer to owner
 ```
 
 ---
 
-## 10. Mapbox Layer Order
+## 10. Map Layers
 
-```
-Bottom → Top:
-1. Mapbox base map style
-2. Route line layer (RawLocationEvents connected by time)
-3. Unlinked photo icon layer (small thumbnails)
-4. Stamp pin layer (larger pins, public=colored, private=muted)
-5. Friend Stamp layer (Phase 2 — only public Stamps)
-6. UI overlay (search bar top, bottom sheet)
-```
+**Timeline map** — historical; shows the full day's route + check-in pins + stamp pins for the selected day.
+
+**Live map (MapScreen)** — session-focused + social:
+
+| Layer | Source ID | Color | Content |
+|---|---|---|---|
+| Live route | `live-route-*` | Green | Current session GPS path (`upsertLine` — no flicker) |
+| My stamps | `my-stamps-source` | Green | Own stamps — today |
+| My check-ins | `my-checkins-source` | Blue | Own manual check-ins — today |
+| Auto anchors | `my-auto-source` | Grey (tiny r=2.5) | Auto check-ins — today |
+| Following stamps | `followed-stamps-source` | Orange | Following users' public stamps — **filter window** |
+| Following stories | `followed-checkins-source` | Pink | Following users' public check-ins — always last 24h |
+| Friend bubbles | *(Stack overlay, not GeoJSON)* | Avatar | Accepted friends' live positions (Realtime-streamed) |
+
+**Friend location bubbles** — rendered as a Flutter `Stack` over the `MapWidget`, not as map layers. `pixelForCoordinate` converts each friend's `(lat, lng)` to screen coordinates; a 200ms timer refreshes positions as the camera moves. Stale (≥8h) positions are hidden. My own position is broadcast via `LocationSharingRepository.upsertMyLocation` (throttled ≥30s or ≥50m). Ghost mode (`is_ghost_mode` on `profiles`) and per-friend blocking (`location_hidden_from` table) suppress visibility.
+
+**Filter** (`MapFilter` enum): `today | week | month | year | all | custom` — applies to following stamps only. "Custom" opens Flutter's `showDateRangePicker`.
+
+Tap on any pin → bottom sheet with place preview + navigation action.
 
 ---
 
-## 11. Coding Conventions
+## 11. Database Migrations Applied
+
+Migrations live in `supabase/migrations/`. All have been applied to the remote project.
+
+| Migration | Key content |
+|---|---|
+| 001–009 | Initial schema: profiles, stamps, photos, follows, stamp_likes/saves, comments, notifications, raw_location_events |
+| 010 | check_ins table, geo trigger, RLS, indexes; stamps.check_in_id; photos.check_in_id; check_ins_for_day RPC |
+| 011 | shared_check_ins_for_day RPC (social map); map_sharing |
+| 012 | Activity notifications triggers (like/comment/follow/tag/mention) |
+| 013 | Security hardening (search_path, EXECUTE revokes) |
+| 014–022 | Timeline refinements, GPS auto-anchor, promote-to-stamp flow, feed ordering |
+| 023 | Private accounts: profiles.is_private, follows.status, enforce_follow_status trigger, can_view_user(), stamps RLS privacy gate |
+| 024 | Lock down trigger functions from REST |
+| 025 | check_ins.visibility + partial index + public check-ins RLS |
+| 026 *(MCP-applied, no local file)* | friendships table + friend_count + auto_follow_on_friendship + notify_on_friend_request triggers |
+| 027 | *(skipped in numbering)* |
+| 028 *(MCP-applied, no local file)* | photos RLS unified: own + can_view_user-gated stamp + check-in photos |
+| 029 | Live location: `profiles.is_ghost_mode`, `user_locations` (user_id PK, lat, lng, accuracy, heading, updated_at), `location_hidden_from`; Realtime on `user_locations`; RLS: own full CRUD, friend SELECT gated by accepted friendship + not ghost mode + not hidden |
+
+---
+
+## 12. Coding Conventions
 
 ### Dart / Flutter
 ```dart
 // ✅ Freezed for all data models
 // ✅ Either<AppException, T> for all repo methods
-// ✅ AsyncNotifierProvider for async state
-// ✅ Named routes via go_router
-// ✅ TODO(phase2): / TODO(future): for deferred features
+// ✅ @riverpod codegen for providers
+// ✅ Named routes via go_router (lib/app.dart)
+// ✅ build_runner after model/provider changes
 
 // ❌ No business logic in widgets
 // ❌ No direct Supabase calls in widgets
 // ❌ No setState() for persistent state
-// ❌ No "Always Allow" location permission request
-// ❌ No continuous background GPS (significant-change only)
+// ❌ No "Always Allow" location permission
+// ❌ No continuous background GPS
+// ❌ No dev-mock / kDevMockUserId — real Supabase session only
+// ❌ Never expose .env secrets
 ```
 
+### DB conventions
+- All DB functions: `set search_path = ''` + fully schema-qualified identifiers
+- RLS `auth.uid()` calls: always wrapped as `(select auth.uid())` for performance
+- After DDL: run `get_advisors` and address findings
+
 ### File Naming
-- Files: `snake_case.dart`
-- Classes: `PascalCase`
-- Variables/methods: `camelCase`
-- Riverpod providers: `camelCaseProvider`
+- Files: `snake_case.dart` · Classes: `PascalCase` · Variables: `camelCase` · Providers: `camelCaseProvider`
 
 ---
 
-## 12. iOS Permissions Required
+## 13. iOS Permissions
 
 ```xml
-<!-- Info.plist -->
 <key>NSLocationWhenInUseUsageDescription</key>
 <string>ZON uses your location while you're using the app to track your route and suggest check-ins.</string>
 
@@ -420,44 +434,54 @@ Bottom → Top:
 
 <key>NSPhotoLibraryUsageDescription</key>
 <string>ZON reads your photo locations to automatically add them to your personal map and timeline.</string>
-
-<key>NSUserNotificationsUsageDescription</key>
-<string>ZON sends reminders to add a Stamp when you visit somewhere new.</string>
 ```
 
-**Note:** Request `whileInUse` first. Only escalate to `always` if user explicitly enables significant-change notifications. Explain why in the UI before requesting.
+Request `whileInUse` first; escalate to `always` only if user enables background nudges.
 
 ---
 
-## 13. Phase Tracking
+## 14. Notification Types
 
-Current phase: **M0 (Pre-development)**
+Stored in `notifications` table. Triggers fire on DB events (SECURITY DEFINER).
 
-- [ ] M0 W1: Project setup, Supabase schema, Mapbox prototype
-- [ ] M0 W2: Location permissions, EXIF parsing, significant-change test
-- [ ] M0 W3: State management skeleton, 5-tab navigation, Stamp creation UI
-- [ ] M0 W4: Google Places API, route line rendering, integration test
-- [ ] M1: Active check-in + GPS route + Stamp CRUD
-- [ ] M2: Photo EXIF import + significant-change + timeline + map layers
-- [ ] M3: Feed + social basics + notifications + App Store launch
-- [ ] M4–M6: Phase 2 features
-- [ ] M7+: Phase 3 + future vision model layer
+| type | Trigger | Text shown |
+|---|---|---|
+| `like` | stamp_likes INSERT | "@X liked your stamp" |
+| `comment` | comments INSERT | "@X commented on your stamp" |
+| `follow` | follows INSERT (accepted) | "@X started following you" |
+| `follow_accepted` | follows UPDATE pending→accepted | "@X accepted your follow request" |
+| `tag` | check_ins/stamps taggedUserIds | "@X tagged you in a stamp" |
+| `mention` | manual RPC call | "@X mentioned you" |
+| `friend_request` | friendships INSERT pending | "@X sent you a friend request" |
+| `friend_accepted` | friendships UPDATE pending→accepted | "@X accepted your friend request" |
+
+Bell badge in Feed counts unread notifications + pending follow requests + pending friend requests.
 
 ---
 
-## 14. Quick Reference
+## 15. Quick Reference
 
 | Question | Answer |
 |---|---|
-| Where does Supabase code go? | `data/datasources/remote/` |
-| Where does location logic go? | `lib/core/location/` |
-| Where does photo logic go? | `lib/core/photos/` |
-| What is a RawLocationEvent? | Raw GPS/EXIF/cell coordinate — system internal, not shown to user directly |
-| What is a Stamp? | User-created place record — private by default, optionally public |
-| Feed unit? | Stamp (public only) |
-| Map unit? | RawLocationEvent (route) + Stamp (pins) + Photo (unlinked icons) |
-| Can I track location in background? | Significant-change ONLY. No continuous background GPS. |
-| Can I send photos to server? | Send URLs only. Parse EXIF on device. Never upload for AI processing in MVP. |
-| Default Stamp visibility? | private — always |
-| Where is the DB schema? | `docs/schema.sql` |
-| Should I implement the vision model pipeline? | NO — future version only |
+| Three layers? | raw_location_events (route line) / check_ins (pins) / stamps (posts) |
+| stamp ⊂ check-in? | Yes. Every stamp has a parent check_in_id. |
+| Default visibility? | Both check-ins and stamps are private by default |
+| Public check-in → ? | Appears as a 24h story in followers' feed rail |
+| Promote check-in → stamp | Navigate to `/checkin?fromCheckIn=<id>` — opens stamp editor pre-filled |
+| Feed unit? | Stamp (public, ordered by `created_at` when posted) |
+| Stories unit? | Public check-in (last 24h, ordered by visitedAt) |
+| Map: own content? | Today's stamps + check-ins + live session path |
+| Map: following content? | Stamps in filter window (orange) + public check-ins last 24h (pink) + friend location bubbles (Stack overlay) |
+| Follow vs Friend? | Follow = asymmetric content graph. Friend = symmetric, auto-follows both ways, gates live location sharing |
+| Live location sharing? | Friends only; ghost mode toggle + per-friend block via `location_hidden_from`; 8h stale cutoff; 30s/50m broadcast throttle |
+| AI diary generation? | `generate-diary` Edge Function (Gemini 3.1 flash lite); photos resized in-memory via `PhotoService.resizeForLlm` — never stored |
+| Place search in editors? | `PlaceSearchField`: coordinate fixed at node-creation time; Overlay dropdown; top option always "use coordinate" |
+| Timeline keeps date? | `TimelineNotifier` is `keepAlive` — survives navigation; `initState` restores `_day` from `valueOrNull?.date` |
+| Private account gate? | `can_view_user(owner)` — reused in stamps/check_ins/photos RLS |
+| Photos RLS? | Own photos OR photos on can_view_user-permitted stamp OR check-in |
+| Where are all routes? | `lib/app.dart` |
+| Where are social enums? | `FollowState`/`FriendState` in `lib/data/repositories/profile_repository.dart` |
+| Run after model changes? | `dart run build_runner build --delete-conflicting-outputs` |
+| Analyze clean? | `flutter analyze` → 0 issues (only SPM warnings from plugins, expected) |
+| Push notifications status? | Remote push BLOCKED on Apple paid enrollment. Local notifications work. |
+| Should I add the vision model? | NO — post-MVP only |

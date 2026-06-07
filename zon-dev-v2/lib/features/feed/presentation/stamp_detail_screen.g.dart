@@ -288,5 +288,267 @@ class _StampCommentsProviderElement
   @override
   String get stampId => (origin as StampCommentsProvider).stampId;
 }
+
+String _$stampPhotosHash() => r'a8728d2e1a9cca4ec6ee1e0a3fd3ca2c20239f2b';
+
+/// See also [stampPhotos].
+@ProviderFor(stampPhotos)
+const stampPhotosProvider = StampPhotosFamily();
+
+/// See also [stampPhotos].
+class StampPhotosFamily extends Family<AsyncValue<List<String>>> {
+  /// See also [stampPhotos].
+  const StampPhotosFamily();
+
+  /// See also [stampPhotos].
+  StampPhotosProvider call(
+    String stampId,
+  ) {
+    return StampPhotosProvider(
+      stampId,
+    );
+  }
+
+  @override
+  StampPhotosProvider getProviderOverride(
+    covariant StampPhotosProvider provider,
+  ) {
+    return call(
+      provider.stampId,
+    );
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'stampPhotosProvider';
+}
+
+/// See also [stampPhotos].
+class StampPhotosProvider extends AutoDisposeFutureProvider<List<String>> {
+  /// See also [stampPhotos].
+  StampPhotosProvider(
+    String stampId,
+  ) : this._internal(
+          (ref) => stampPhotos(
+            ref as StampPhotosRef,
+            stampId,
+          ),
+          from: stampPhotosProvider,
+          name: r'stampPhotosProvider',
+          debugGetCreateSourceHash:
+              const bool.fromEnvironment('dart.vm.product')
+                  ? null
+                  : _$stampPhotosHash,
+          dependencies: StampPhotosFamily._dependencies,
+          allTransitiveDependencies:
+              StampPhotosFamily._allTransitiveDependencies,
+          stampId: stampId,
+        );
+
+  StampPhotosProvider._internal(
+    super._createNotifier, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.stampId,
+  }) : super.internal();
+
+  final String stampId;
+
+  @override
+  Override overrideWith(
+    FutureOr<List<String>> Function(StampPhotosRef provider) create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: StampPhotosProvider._internal(
+        (ref) => create(ref as StampPhotosRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        stampId: stampId,
+      ),
+    );
+  }
+
+  @override
+  AutoDisposeFutureProviderElement<List<String>> createElement() {
+    return _StampPhotosProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is StampPhotosProvider && other.stampId == stampId;
+  }
+
+  @override
+  int get hashCode {
+    var hash = _SystemHash.combine(0, runtimeType.hashCode);
+    hash = _SystemHash.combine(hash, stampId.hashCode);
+
+    return _SystemHash.finish(hash);
+  }
+}
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+mixin StampPhotosRef on AutoDisposeFutureProviderRef<List<String>> {
+  /// The parameter `stampId` of this provider.
+  String get stampId;
+}
+
+class _StampPhotosProviderElement
+    extends AutoDisposeFutureProviderElement<List<String>> with StampPhotosRef {
+  _StampPhotosProviderElement(super.provider);
+
+  @override
+  String get stampId => (origin as StampPhotosProvider).stampId;
+}
+
+String _$stampTaggedUsersHash() => r'a553d608bdfec98e1cf19f5a5577212c5fc6d773';
+
+/// See also [stampTaggedUsers].
+@ProviderFor(stampTaggedUsers)
+const stampTaggedUsersProvider = StampTaggedUsersFamily();
+
+/// See also [stampTaggedUsers].
+class StampTaggedUsersFamily extends Family<AsyncValue<List<UserProfile>>> {
+  /// See also [stampTaggedUsers].
+  const StampTaggedUsersFamily();
+
+  /// See also [stampTaggedUsers].
+  StampTaggedUsersProvider call(
+    String stampId,
+  ) {
+    return StampTaggedUsersProvider(
+      stampId,
+    );
+  }
+
+  @override
+  StampTaggedUsersProvider getProviderOverride(
+    covariant StampTaggedUsersProvider provider,
+  ) {
+    return call(
+      provider.stampId,
+    );
+  }
+
+  static const Iterable<ProviderOrFamily>? _dependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
+
+  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
+
+  @override
+  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
+      _allTransitiveDependencies;
+
+  @override
+  String? get name => r'stampTaggedUsersProvider';
+}
+
+/// See also [stampTaggedUsers].
+class StampTaggedUsersProvider
+    extends AutoDisposeFutureProvider<List<UserProfile>> {
+  /// See also [stampTaggedUsers].
+  StampTaggedUsersProvider(
+    String stampId,
+  ) : this._internal(
+          (ref) => stampTaggedUsers(
+            ref as StampTaggedUsersRef,
+            stampId,
+          ),
+          from: stampTaggedUsersProvider,
+          name: r'stampTaggedUsersProvider',
+          debugGetCreateSourceHash:
+              const bool.fromEnvironment('dart.vm.product')
+                  ? null
+                  : _$stampTaggedUsersHash,
+          dependencies: StampTaggedUsersFamily._dependencies,
+          allTransitiveDependencies:
+              StampTaggedUsersFamily._allTransitiveDependencies,
+          stampId: stampId,
+        );
+
+  StampTaggedUsersProvider._internal(
+    super._createNotifier, {
+    required super.name,
+    required super.dependencies,
+    required super.allTransitiveDependencies,
+    required super.debugGetCreateSourceHash,
+    required super.from,
+    required this.stampId,
+  }) : super.internal();
+
+  final String stampId;
+
+  @override
+  Override overrideWith(
+    FutureOr<List<UserProfile>> Function(StampTaggedUsersRef provider) create,
+  ) {
+    return ProviderOverride(
+      origin: this,
+      override: StampTaggedUsersProvider._internal(
+        (ref) => create(ref as StampTaggedUsersRef),
+        from: from,
+        name: null,
+        dependencies: null,
+        allTransitiveDependencies: null,
+        debugGetCreateSourceHash: null,
+        stampId: stampId,
+      ),
+    );
+  }
+
+  @override
+  AutoDisposeFutureProviderElement<List<UserProfile>> createElement() {
+    return _StampTaggedUsersProviderElement(this);
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is StampTaggedUsersProvider && other.stampId == stampId;
+  }
+
+  @override
+  int get hashCode {
+    var hash = _SystemHash.combine(0, runtimeType.hashCode);
+    hash = _SystemHash.combine(hash, stampId.hashCode);
+
+    return _SystemHash.finish(hash);
+  }
+}
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+mixin StampTaggedUsersRef on AutoDisposeFutureProviderRef<List<UserProfile>> {
+  /// The parameter `stampId` of this provider.
+  String get stampId;
+}
+
+class _StampTaggedUsersProviderElement
+    extends AutoDisposeFutureProviderElement<List<UserProfile>>
+    with StampTaggedUsersRef {
+  _StampTaggedUsersProviderElement(super.provider);
+
+  @override
+  String get stampId => (origin as StampTaggedUsersProvider).stampId;
+}
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/enums.dart';
+import 'photo_strip.dart';
+import 'user_tag_field.dart';
 
 class StampEditorBody extends ConsumerStatefulWidget {
   final StampDraft draft;
@@ -83,6 +86,45 @@ class _StampEditorBodyState extends ConsumerState<StampEditorBody> {
                   onChanged: (v) => _update(_draft.copyWith(caption: v)),
                 ),
                 const SizedBox(height: 16),
+                Text('Photos', style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                if (_draft.existingPhotoUrls.isNotEmpty) ...[
+                  SizedBox(
+                    height: 80,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        for (final url in _draft.existingPhotoUrls)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: CachedNetworkImage(
+                                  imageUrl: url,
+                                  width: 80,
+                                  height: 80,
+                                  fit: BoxFit.cover),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Carried over from your check-in',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: Colors.grey)),
+                  const SizedBox(height: 8),
+                ],
+                PhotoStrip(
+                  paths: _draft.selectedPhotoPaths,
+                  onChanged: (p) => _update(_draft.copyWith(
+                    selectedPhotoPaths: p,
+                    coverPhotoPath: p.isNotEmpty ? p.first : null,
+                  )),
+                ),
+                const SizedBox(height: 16),
                 Text('Vibe', style: Theme.of(context).textTheme.titleSmall),
                 const SizedBox(height: 8),
                 Wrap(
@@ -130,6 +172,15 @@ class _StampEditorBodyState extends ConsumerState<StampEditorBody> {
                       .textTheme
                       .bodySmall
                       ?.copyWith(color: Colors.grey),
+                ),
+                const SizedBox(height: 16),
+                Text('Tag people',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 8),
+                UserTagField(
+                  taggedUserIds: _draft.taggedUserIds,
+                  onChanged: (ids) =>
+                      _update(_draft.copyWith(taggedUserIds: ids)),
                 ),
               ],
             ),

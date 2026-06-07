@@ -3,7 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/notifications/notification_service.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/repositories/notification_repository.dart';
+import '../../../data/repositories/check_in_repository.dart';
+import '../../profile/presentation/providers/profile_provider.dart';
+import '../../../shared/widgets/app_states.dart';
+import '../../../shared/utils/format.dart';
+import '../../photo_import/presentation/providers/photo_suggestion_provider.dart';
 import 'providers/feed_provider.dart';
 
 class FeedScreen extends ConsumerWidget {
@@ -12,49 +19,61 @@ class FeedScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feedState = ref.watch(feedNotifierProvider);
+    final followReqCount =
+        (ref.watch(followRequestsProvider).valueOrNull ?? const []).length;
+    final friendReqCount =
+        (ref.watch(friendRequestsProvider).valueOrNull ?? const []).length;
+    final unread =
+        (ref.watch(unreadNotificationCountProvider).valueOrNull ?? 0) +
+            followReqCount +
+            friendReqCount;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('ZON', style: TextStyle(fontWeight: FontWeight.w900)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
+            icon: const Icon(Icons.search),
+            tooltip: 'Search people',
+            onPressed: () => context.push('/search'),
+          ),
+          IconButton(
+            tooltip: 'Activity',
+            icon: Badge(
+              isLabelVisible: unread > 0,
+              label: Text('$unread'),
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            onPressed: () async {
+              await context.push('/activity');
+              ref.invalidate(unreadNotificationCountProvider);
+              ref.invalidate(followRequestsProvider);
+              ref.invalidate(friendRequestsProvider);
+            },
           ),
         ],
       ),
-      body: feedState.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, size: 48),
-              const SizedBox(height: 8),
-              Text(e.toString()),
-              TextButton(
-                onPressed: () =>
-                    ref.read(feedNotifierProvider.notifier).refresh(),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
+      body: Column(
+        children: [
+          const _PhotoSuggestionBanner(),
+          const _StoriesRail(),
+          Expanded(
+            child: feedState.when(
+        loading: () => const LoadingView(),
+        error: (e, _) => ErrorView(
+          message: errorMessage(e),
+          onRetry: () => ref.read(feedNotifierProvider.notifier).refresh(),
         ),
         data: (stamps) {
           if (stamps.isEmpty) {
-            return const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.explore_outlined, size: 64, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No stamps yet', style: TextStyle(fontSize: 18)),
-                  SizedBox(height: 8),
-                  Text(
-                    'Follow people or create your first stamp!',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
+            return EmptyView(
+              icon: Icons.explore_outlined,
+              message: 'No stamps yet',
+              subtitle: 'Follow people or create your first stamp!',
+              action: FilledButton.icon(
+                onPressed: () => context.push('/checkin?mode=stamp'),
+                icon: const Icon(Icons.add),
+                label: const Text('Create a stamp'),
               ),
             );
           }
@@ -72,6 +91,9 @@ class FeedScreen extends ConsumerWidget {
             ),
           );
         },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -202,6 +224,25 @@ class StampCard extends ConsumerWidget {
                         count: stamp.commentCount,
                         onTap: () => context.push('/stamp/${stamp.id}'),
                       ),
+                      const Spacer(),
+                      InkWell(
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => ref
+                            .read(feedNotifierProvider.notifier)
+                            .toggleSave(stamp.id),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            stamp.isSaved
+                                ? Icons.bookmark
+                                : Icons.bookmark_border,
+                            size: 20,
+                            color: stamp.isSaved
+                                ? Theme.of(context).colorScheme.primary
+                                : Colors.grey[600],
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -238,7 +279,265 @@ class _ActionBtn extends StatelessWidget {
           children: [
             Icon(icon, size: 20, color: color),
             const SizedBox(width: 4),
-            Text('$count', style: const TextStyle(fontSize: 13)),
+            Text(compactCount(count), style: const TextStyle(fontSize: 13)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Horizontal "stories" rail of recent public check-ins from people you follow
+/// (and your own). Hidden when there are none. Tap an avatar to view that
+/// author's recent public check-ins. (Concept like IG stories; styling TBD.)
+class _StoriesRail extends ConsumerWidget {
+  const _StoriesRail();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stories = ref.watch(feedStoriesProvider).valueOrNull ?? const [];
+    if (stories.isEmpty) return const SizedBox.shrink();
+    return Container(
+      height: 96,
+      decoration: BoxDecoration(
+        border: Border(
+            bottom: BorderSide(color: Theme.of(context).dividerColor)),
+      ),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        itemCount: stories.length,
+        itemBuilder: (ctx, i) {
+          final s = stories[i];
+          return GestureDetector(
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (_) => _StoryView(story: s),
+            ),
+            child: SizedBox(
+              width: 72,
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [Color(0xFF1D9E75), Color(0xFF2196F3)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: CircleAvatar(
+                      radius: 28,
+                      backgroundColor: Theme.of(context).colorScheme.surface,
+                      child: CircleAvatar(
+                        radius: 26,
+                        backgroundImage: s.avatarUrl != null
+                            ? CachedNetworkImageProvider(s.avatarUrl!)
+                            : null,
+                        child: s.avatarUrl == null
+                            ? const Icon(Icons.person)
+                            : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '@${s.username}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Basic viewer for one author's recent public check-ins (tap right/left to
+/// page). Concept-level only — visual design will be refined separately.
+class _StoryView extends StatefulWidget {
+  final CheckInStory story;
+  const _StoryView({required this.story});
+
+  @override
+  State<_StoryView> createState() => _StoryViewState();
+}
+
+class _StoryViewState extends State<_StoryView> {
+  int _i = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final items = widget.story.checkIns;
+    final c = items[_i];
+    final photo = c.photoUrls.isNotEmpty ? c.photoUrls.first : null;
+    return Dialog.fullscreen(
+      backgroundColor: Colors.black,
+      child: GestureDetector(
+        onTapUp: (d) {
+          final mid = MediaQuery.of(context).size.width / 2;
+          final next = d.globalPosition.dx > mid ? _i + 1 : _i - 1;
+          if (next < 0) return;
+          if (next >= items.length) {
+            Navigator.pop(context);
+            return;
+          }
+          setState(() => _i = next);
+        },
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (photo != null)
+              CachedNetworkImage(imageUrl: photo, fit: BoxFit.cover)
+            else
+              const ColoredBox(color: Colors.black),
+            // Progress segments.
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 8,
+              left: 8,
+              right: 8,
+              child: Row(
+                children: [
+                  for (int k = 0; k < items.length; k++)
+                    Expanded(
+                      child: Container(
+                        height: 3,
+                        margin: const EdgeInsets.symmetric(horizontal: 2),
+                        color: k <= _i ? Colors.white : Colors.white38,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 20,
+              left: 12,
+              right: 12,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundImage: widget.story.avatarUrl != null
+                        ? CachedNetworkImageProvider(widget.story.avatarUrl!)
+                        : null,
+                    child: widget.story.avatarUrl == null
+                        ? const Icon(Icons.person, size: 16)
+                        : null,
+                  ),
+                  const SizedBox(width: 8),
+                  Text('@${widget.story.username}',
+                      style: const TextStyle(
+                          color: Colors.white, fontWeight: FontWeight.w600)),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: MediaQuery.of(context).padding.bottom + 24,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.pin_drop, color: Colors.white, size: 18),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(c.placeName,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(DateFormat('MMM d, h:mm a').format(c.visitedAt),
+                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                  if (c.note != null && c.note!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(c.note!,
+                        style: const TextStyle(color: Colors.white)),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Dismissible banner that surfaces today's geotagged photos as check-in
+/// suggestions, and fires a one-shot local notification when they appear.
+class _PhotoSuggestionBanner extends ConsumerStatefulWidget {
+  const _PhotoSuggestionBanner();
+
+  @override
+  ConsumerState<_PhotoSuggestionBanner> createState() =>
+      _PhotoSuggestionBannerState();
+}
+
+class _PhotoSuggestionBannerState
+    extends ConsumerState<_PhotoSuggestionBanner> {
+  bool _dismissed = false;
+  bool _notified = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final photos =
+        ref.watch(todayPhotoSuggestionsProvider).valueOrNull ?? const [];
+
+    if (photos.isNotEmpty && !_notified) {
+      _notified = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        NotificationService().sendLocalNotification(
+          title: 'New places today',
+          body: '${photos.length} photo${photos.length == 1 ? '' : 's'} '
+              'from today — add as check-ins?',
+          payload: '/photo-suggestions',
+        );
+      });
+    }
+
+    if (_dismissed || photos.isEmpty) return const SizedBox.shrink();
+
+    return Material(
+      color: Theme.of(context).colorScheme.primaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 4, 8),
+        child: Row(
+          children: [
+            const Icon(Icons.photo_camera_outlined, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '${photos.length} new place${photos.length == 1 ? '' : 's'} '
+                "from today's photos",
+                style: const TextStyle(fontSize: 13),
+              ),
+            ),
+            TextButton(
+              onPressed: () => context.push('/photo-suggestions'),
+              child: const Text('Review'),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, size: 18),
+              onPressed: () => setState(() => _dismissed = true),
+            ),
           ],
         ),
       ),

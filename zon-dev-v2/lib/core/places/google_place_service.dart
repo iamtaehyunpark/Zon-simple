@@ -17,8 +17,6 @@ class GooglePlaceService implements PlaceService {
           baseUrl: 'https://maps.googleapis.com/maps/api/place/',
         ));
 
-  @override
-  PlaceProvider get provider => PlaceProvider.google;
 
   @override
   Future<List<PlaceResult>> nearby(double lat, double lng) async {

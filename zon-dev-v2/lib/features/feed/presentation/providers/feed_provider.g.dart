@@ -6,7 +6,26 @@ part of 'feed_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$feedNotifierHash() => r'02815e502cf126ef564f03bde9239ce5670aed3d';
+String _$feedStoriesHash() => r'eca3af787dff250a49592a275b380795a9980589';
+
+/// Recent public check-ins grouped per author for the feed "stories" rail.
+///
+/// Copied from [feedStories].
+@ProviderFor(feedStories)
+final feedStoriesProvider =
+    AutoDisposeFutureProvider<List<CheckInStory>>.internal(
+  feedStories,
+  name: r'feedStoriesProvider',
+  debugGetCreateSourceHash:
+      const bool.fromEnvironment('dart.vm.product') ? null : _$feedStoriesHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+@Deprecated('Will be removed in 3.0. Use Ref instead')
+// ignore: unused_element
+typedef FeedStoriesRef = AutoDisposeFutureProviderRef<List<CheckInStory>>;
+String _$feedNotifierHash() => r'9996bf320b49356dd0b65f97817d57ec55e1bbf1';
 
 /// See also [FeedNotifier].
 @ProviderFor(FeedNotifier)

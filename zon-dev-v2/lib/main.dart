@@ -34,7 +34,6 @@ Future<void> main() async {
   // Initialize Hive
   try {
     await Hive.initFlutter();
-    await Hive.openBox('dev_settings');
   } catch (e) {
     debugPrint('Error initializing Hive: $e');
   }

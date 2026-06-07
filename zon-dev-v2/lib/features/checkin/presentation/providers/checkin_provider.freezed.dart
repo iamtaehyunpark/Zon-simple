@@ -177,7 +177,9 @@ class __$$ExternalPlaceImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$ExternalPlaceImpl implements _ExternalPlace {
+class _$ExternalPlaceImpl
+    with DiagnosticableTreeMixin
+    implements _ExternalPlace {
   const _$ExternalPlaceImpl(
       {required this.externalPlaceId,
       required this.externalSource,
@@ -203,8 +205,22 @@ class _$ExternalPlaceImpl implements _ExternalPlace {
   final String? category;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'ExternalPlace(externalPlaceId: $externalPlaceId, externalSource: $externalSource, name: $name, lat: $lat, lng: $lng, address: $address, category: $category)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'ExternalPlace'))
+      ..add(DiagnosticsProperty('externalPlaceId', externalPlaceId))
+      ..add(DiagnosticsProperty('externalSource', externalSource))
+      ..add(DiagnosticsProperty('name', name))
+      ..add(DiagnosticsProperty('lat', lat))
+      ..add(DiagnosticsProperty('lng', lng))
+      ..add(DiagnosticsProperty('address', address))
+      ..add(DiagnosticsProperty('category', category));
   }
 
   @override
@@ -279,10 +295,11 @@ mixin _$CheckinState {
     required TResult Function(double lat, double lng, List<Stamp> nearbyStamps,
             ExternalPlace? suggestedPlace, List<ExternalPlace> placeSuggestions)
         placeSelected,
-    required TResult Function(StampDraft draft, List<Stamp> nearbyStamps)
-        editing,
+    required TResult Function(CheckInDraft draft) editingCheckIn,
+    required TResult Function(StampDraft draft) editingStamp,
     required TResult Function() saving,
-    required TResult Function(Stamp stamp) complete,
+    required TResult Function(CheckIn checkIn) completeCheckIn,
+    required TResult Function(String stampId) completeStamp,
     required TResult Function(String message) error,
   }) =>
       throw _privateConstructorUsedError;
@@ -297,9 +314,11 @@ mixin _$CheckinState {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult? Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult? Function(CheckInDraft draft)? editingCheckIn,
+    TResult? Function(StampDraft draft)? editingStamp,
     TResult? Function()? saving,
-    TResult? Function(Stamp stamp)? complete,
+    TResult? Function(CheckIn checkIn)? completeCheckIn,
+    TResult? Function(String stampId)? completeStamp,
     TResult? Function(String message)? error,
   }) =>
       throw _privateConstructorUsedError;
@@ -314,9 +333,11 @@ mixin _$CheckinState {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult Function(CheckInDraft draft)? editingCheckIn,
+    TResult Function(StampDraft draft)? editingStamp,
     TResult Function()? saving,
-    TResult Function(Stamp stamp)? complete,
+    TResult Function(CheckIn checkIn)? completeCheckIn,
+    TResult Function(String stampId)? completeStamp,
     TResult Function(String message)? error,
     required TResult orElse(),
   }) =>
@@ -326,9 +347,11 @@ mixin _$CheckinState {
     required TResult Function(_Idle value) idle,
     required TResult Function(_Locating value) locating,
     required TResult Function(_PlaceSelected value) placeSelected,
-    required TResult Function(_Editing value) editing,
+    required TResult Function(_EditingCheckIn value) editingCheckIn,
+    required TResult Function(_EditingStamp value) editingStamp,
     required TResult Function(_Saving value) saving,
-    required TResult Function(_Complete value) complete,
+    required TResult Function(_CompleteCheckIn value) completeCheckIn,
+    required TResult Function(_CompleteStamp value) completeStamp,
     required TResult Function(_Error value) error,
   }) =>
       throw _privateConstructorUsedError;
@@ -337,9 +360,11 @@ mixin _$CheckinState {
     TResult? Function(_Idle value)? idle,
     TResult? Function(_Locating value)? locating,
     TResult? Function(_PlaceSelected value)? placeSelected,
-    TResult? Function(_Editing value)? editing,
+    TResult? Function(_EditingCheckIn value)? editingCheckIn,
+    TResult? Function(_EditingStamp value)? editingStamp,
     TResult? Function(_Saving value)? saving,
-    TResult? Function(_Complete value)? complete,
+    TResult? Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult? Function(_CompleteStamp value)? completeStamp,
     TResult? Function(_Error value)? error,
   }) =>
       throw _privateConstructorUsedError;
@@ -348,9 +373,11 @@ mixin _$CheckinState {
     TResult Function(_Idle value)? idle,
     TResult Function(_Locating value)? locating,
     TResult Function(_PlaceSelected value)? placeSelected,
-    TResult Function(_Editing value)? editing,
+    TResult Function(_EditingCheckIn value)? editingCheckIn,
+    TResult Function(_EditingStamp value)? editingStamp,
     TResult Function(_Saving value)? saving,
-    TResult Function(_Complete value)? complete,
+    TResult Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult Function(_CompleteStamp value)? completeStamp,
     TResult Function(_Error value)? error,
     required TResult orElse(),
   }) =>
@@ -398,12 +425,18 @@ class __$$IdleImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$IdleImpl implements _Idle {
+class _$IdleImpl with DiagnosticableTreeMixin implements _Idle {
   const _$IdleImpl();
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.idle()';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties..add(DiagnosticsProperty('type', 'CheckinState.idle'));
   }
 
   @override
@@ -423,10 +456,11 @@ class _$IdleImpl implements _Idle {
     required TResult Function(double lat, double lng, List<Stamp> nearbyStamps,
             ExternalPlace? suggestedPlace, List<ExternalPlace> placeSuggestions)
         placeSelected,
-    required TResult Function(StampDraft draft, List<Stamp> nearbyStamps)
-        editing,
+    required TResult Function(CheckInDraft draft) editingCheckIn,
+    required TResult Function(StampDraft draft) editingStamp,
     required TResult Function() saving,
-    required TResult Function(Stamp stamp) complete,
+    required TResult Function(CheckIn checkIn) completeCheckIn,
+    required TResult Function(String stampId) completeStamp,
     required TResult Function(String message) error,
   }) {
     return idle();
@@ -444,9 +478,11 @@ class _$IdleImpl implements _Idle {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult? Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult? Function(CheckInDraft draft)? editingCheckIn,
+    TResult? Function(StampDraft draft)? editingStamp,
     TResult? Function()? saving,
-    TResult? Function(Stamp stamp)? complete,
+    TResult? Function(CheckIn checkIn)? completeCheckIn,
+    TResult? Function(String stampId)? completeStamp,
     TResult? Function(String message)? error,
   }) {
     return idle?.call();
@@ -464,9 +500,11 @@ class _$IdleImpl implements _Idle {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult Function(CheckInDraft draft)? editingCheckIn,
+    TResult Function(StampDraft draft)? editingStamp,
     TResult Function()? saving,
-    TResult Function(Stamp stamp)? complete,
+    TResult Function(CheckIn checkIn)? completeCheckIn,
+    TResult Function(String stampId)? completeStamp,
     TResult Function(String message)? error,
     required TResult orElse(),
   }) {
@@ -482,9 +520,11 @@ class _$IdleImpl implements _Idle {
     required TResult Function(_Idle value) idle,
     required TResult Function(_Locating value) locating,
     required TResult Function(_PlaceSelected value) placeSelected,
-    required TResult Function(_Editing value) editing,
+    required TResult Function(_EditingCheckIn value) editingCheckIn,
+    required TResult Function(_EditingStamp value) editingStamp,
     required TResult Function(_Saving value) saving,
-    required TResult Function(_Complete value) complete,
+    required TResult Function(_CompleteCheckIn value) completeCheckIn,
+    required TResult Function(_CompleteStamp value) completeStamp,
     required TResult Function(_Error value) error,
   }) {
     return idle(this);
@@ -496,9 +536,11 @@ class _$IdleImpl implements _Idle {
     TResult? Function(_Idle value)? idle,
     TResult? Function(_Locating value)? locating,
     TResult? Function(_PlaceSelected value)? placeSelected,
-    TResult? Function(_Editing value)? editing,
+    TResult? Function(_EditingCheckIn value)? editingCheckIn,
+    TResult? Function(_EditingStamp value)? editingStamp,
     TResult? Function(_Saving value)? saving,
-    TResult? Function(_Complete value)? complete,
+    TResult? Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult? Function(_CompleteStamp value)? completeStamp,
     TResult? Function(_Error value)? error,
   }) {
     return idle?.call(this);
@@ -510,9 +552,11 @@ class _$IdleImpl implements _Idle {
     TResult Function(_Idle value)? idle,
     TResult Function(_Locating value)? locating,
     TResult Function(_PlaceSelected value)? placeSelected,
-    TResult Function(_Editing value)? editing,
+    TResult Function(_EditingCheckIn value)? editingCheckIn,
+    TResult Function(_EditingStamp value)? editingStamp,
     TResult Function(_Saving value)? saving,
-    TResult Function(_Complete value)? complete,
+    TResult Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult Function(_CompleteStamp value)? completeStamp,
     TResult Function(_Error value)? error,
     required TResult orElse(),
   }) {
@@ -548,12 +592,18 @@ class __$$LocatingImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$LocatingImpl implements _Locating {
+class _$LocatingImpl with DiagnosticableTreeMixin implements _Locating {
   const _$LocatingImpl();
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.locating()';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties..add(DiagnosticsProperty('type', 'CheckinState.locating'));
   }
 
   @override
@@ -573,10 +623,11 @@ class _$LocatingImpl implements _Locating {
     required TResult Function(double lat, double lng, List<Stamp> nearbyStamps,
             ExternalPlace? suggestedPlace, List<ExternalPlace> placeSuggestions)
         placeSelected,
-    required TResult Function(StampDraft draft, List<Stamp> nearbyStamps)
-        editing,
+    required TResult Function(CheckInDraft draft) editingCheckIn,
+    required TResult Function(StampDraft draft) editingStamp,
     required TResult Function() saving,
-    required TResult Function(Stamp stamp) complete,
+    required TResult Function(CheckIn checkIn) completeCheckIn,
+    required TResult Function(String stampId) completeStamp,
     required TResult Function(String message) error,
   }) {
     return locating();
@@ -594,9 +645,11 @@ class _$LocatingImpl implements _Locating {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult? Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult? Function(CheckInDraft draft)? editingCheckIn,
+    TResult? Function(StampDraft draft)? editingStamp,
     TResult? Function()? saving,
-    TResult? Function(Stamp stamp)? complete,
+    TResult? Function(CheckIn checkIn)? completeCheckIn,
+    TResult? Function(String stampId)? completeStamp,
     TResult? Function(String message)? error,
   }) {
     return locating?.call();
@@ -614,9 +667,11 @@ class _$LocatingImpl implements _Locating {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult Function(CheckInDraft draft)? editingCheckIn,
+    TResult Function(StampDraft draft)? editingStamp,
     TResult Function()? saving,
-    TResult Function(Stamp stamp)? complete,
+    TResult Function(CheckIn checkIn)? completeCheckIn,
+    TResult Function(String stampId)? completeStamp,
     TResult Function(String message)? error,
     required TResult orElse(),
   }) {
@@ -632,9 +687,11 @@ class _$LocatingImpl implements _Locating {
     required TResult Function(_Idle value) idle,
     required TResult Function(_Locating value) locating,
     required TResult Function(_PlaceSelected value) placeSelected,
-    required TResult Function(_Editing value) editing,
+    required TResult Function(_EditingCheckIn value) editingCheckIn,
+    required TResult Function(_EditingStamp value) editingStamp,
     required TResult Function(_Saving value) saving,
-    required TResult Function(_Complete value) complete,
+    required TResult Function(_CompleteCheckIn value) completeCheckIn,
+    required TResult Function(_CompleteStamp value) completeStamp,
     required TResult Function(_Error value) error,
   }) {
     return locating(this);
@@ -646,9 +703,11 @@ class _$LocatingImpl implements _Locating {
     TResult? Function(_Idle value)? idle,
     TResult? Function(_Locating value)? locating,
     TResult? Function(_PlaceSelected value)? placeSelected,
-    TResult? Function(_Editing value)? editing,
+    TResult? Function(_EditingCheckIn value)? editingCheckIn,
+    TResult? Function(_EditingStamp value)? editingStamp,
     TResult? Function(_Saving value)? saving,
-    TResult? Function(_Complete value)? complete,
+    TResult? Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult? Function(_CompleteStamp value)? completeStamp,
     TResult? Function(_Error value)? error,
   }) {
     return locating?.call(this);
@@ -660,9 +719,11 @@ class _$LocatingImpl implements _Locating {
     TResult Function(_Idle value)? idle,
     TResult Function(_Locating value)? locating,
     TResult Function(_PlaceSelected value)? placeSelected,
-    TResult Function(_Editing value)? editing,
+    TResult Function(_EditingCheckIn value)? editingCheckIn,
+    TResult Function(_EditingStamp value)? editingStamp,
     TResult Function(_Saving value)? saving,
-    TResult Function(_Complete value)? complete,
+    TResult Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult Function(_CompleteStamp value)? completeStamp,
     TResult Function(_Error value)? error,
     required TResult orElse(),
   }) {
@@ -753,7 +814,9 @@ class __$$PlaceSelectedImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$PlaceSelectedImpl implements _PlaceSelected {
+class _$PlaceSelectedImpl
+    with DiagnosticableTreeMixin
+    implements _PlaceSelected {
   const _$PlaceSelectedImpl(
       {required this.lat,
       required this.lng,
@@ -788,8 +851,20 @@ class _$PlaceSelectedImpl implements _PlaceSelected {
   }
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.placeSelected(lat: $lat, lng: $lng, nearbyStamps: $nearbyStamps, suggestedPlace: $suggestedPlace, placeSuggestions: $placeSuggestions)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'CheckinState.placeSelected'))
+      ..add(DiagnosticsProperty('lat', lat))
+      ..add(DiagnosticsProperty('lng', lng))
+      ..add(DiagnosticsProperty('nearbyStamps', nearbyStamps))
+      ..add(DiagnosticsProperty('suggestedPlace', suggestedPlace))
+      ..add(DiagnosticsProperty('placeSuggestions', placeSuggestions));
   }
 
   @override
@@ -832,10 +907,11 @@ class _$PlaceSelectedImpl implements _PlaceSelected {
     required TResult Function(double lat, double lng, List<Stamp> nearbyStamps,
             ExternalPlace? suggestedPlace, List<ExternalPlace> placeSuggestions)
         placeSelected,
-    required TResult Function(StampDraft draft, List<Stamp> nearbyStamps)
-        editing,
+    required TResult Function(CheckInDraft draft) editingCheckIn,
+    required TResult Function(StampDraft draft) editingStamp,
     required TResult Function() saving,
-    required TResult Function(Stamp stamp) complete,
+    required TResult Function(CheckIn checkIn) completeCheckIn,
+    required TResult Function(String stampId) completeStamp,
     required TResult Function(String message) error,
   }) {
     return placeSelected(
@@ -854,9 +930,11 @@ class _$PlaceSelectedImpl implements _PlaceSelected {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult? Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult? Function(CheckInDraft draft)? editingCheckIn,
+    TResult? Function(StampDraft draft)? editingStamp,
     TResult? Function()? saving,
-    TResult? Function(Stamp stamp)? complete,
+    TResult? Function(CheckIn checkIn)? completeCheckIn,
+    TResult? Function(String stampId)? completeStamp,
     TResult? Function(String message)? error,
   }) {
     return placeSelected?.call(
@@ -875,9 +953,11 @@ class _$PlaceSelectedImpl implements _PlaceSelected {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult Function(CheckInDraft draft)? editingCheckIn,
+    TResult Function(StampDraft draft)? editingStamp,
     TResult Function()? saving,
-    TResult Function(Stamp stamp)? complete,
+    TResult Function(CheckIn checkIn)? completeCheckIn,
+    TResult Function(String stampId)? completeStamp,
     TResult Function(String message)? error,
     required TResult orElse(),
   }) {
@@ -894,9 +974,11 @@ class _$PlaceSelectedImpl implements _PlaceSelected {
     required TResult Function(_Idle value) idle,
     required TResult Function(_Locating value) locating,
     required TResult Function(_PlaceSelected value) placeSelected,
-    required TResult Function(_Editing value) editing,
+    required TResult Function(_EditingCheckIn value) editingCheckIn,
+    required TResult Function(_EditingStamp value) editingStamp,
     required TResult Function(_Saving value) saving,
-    required TResult Function(_Complete value) complete,
+    required TResult Function(_CompleteCheckIn value) completeCheckIn,
+    required TResult Function(_CompleteStamp value) completeStamp,
     required TResult Function(_Error value) error,
   }) {
     return placeSelected(this);
@@ -908,9 +990,11 @@ class _$PlaceSelectedImpl implements _PlaceSelected {
     TResult? Function(_Idle value)? idle,
     TResult? Function(_Locating value)? locating,
     TResult? Function(_PlaceSelected value)? placeSelected,
-    TResult? Function(_Editing value)? editing,
+    TResult? Function(_EditingCheckIn value)? editingCheckIn,
+    TResult? Function(_EditingStamp value)? editingStamp,
     TResult? Function(_Saving value)? saving,
-    TResult? Function(_Complete value)? complete,
+    TResult? Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult? Function(_CompleteStamp value)? completeStamp,
     TResult? Function(_Error value)? error,
   }) {
     return placeSelected?.call(this);
@@ -922,9 +1006,11 @@ class _$PlaceSelectedImpl implements _PlaceSelected {
     TResult Function(_Idle value)? idle,
     TResult Function(_Locating value)? locating,
     TResult Function(_PlaceSelected value)? placeSelected,
-    TResult Function(_Editing value)? editing,
+    TResult Function(_EditingCheckIn value)? editingCheckIn,
+    TResult Function(_EditingStamp value)? editingStamp,
     TResult Function(_Saving value)? saving,
-    TResult Function(_Complete value)? complete,
+    TResult Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult Function(_CompleteStamp value)? completeStamp,
     TResult Function(_Error value)? error,
     required TResult orElse(),
   }) {
@@ -957,22 +1043,22 @@ abstract class _PlaceSelected implements CheckinState {
 }
 
 /// @nodoc
-abstract class _$$EditingImplCopyWith<$Res> {
-  factory _$$EditingImplCopyWith(
-          _$EditingImpl value, $Res Function(_$EditingImpl) then) =
-      __$$EditingImplCopyWithImpl<$Res>;
+abstract class _$$EditingCheckInImplCopyWith<$Res> {
+  factory _$$EditingCheckInImplCopyWith(_$EditingCheckInImpl value,
+          $Res Function(_$EditingCheckInImpl) then) =
+      __$$EditingCheckInImplCopyWithImpl<$Res>;
   @useResult
-  $Res call({StampDraft draft, List<Stamp> nearbyStamps});
+  $Res call({CheckInDraft draft});
 
-  $StampDraftCopyWith<$Res> get draft;
+  $CheckInDraftCopyWith<$Res> get draft;
 }
 
 /// @nodoc
-class __$$EditingImplCopyWithImpl<$Res>
-    extends _$CheckinStateCopyWithImpl<$Res, _$EditingImpl>
-    implements _$$EditingImplCopyWith<$Res> {
-  __$$EditingImplCopyWithImpl(
-      _$EditingImpl _value, $Res Function(_$EditingImpl) _then)
+class __$$EditingCheckInImplCopyWithImpl<$Res>
+    extends _$CheckinStateCopyWithImpl<$Res, _$EditingCheckInImpl>
+    implements _$$EditingCheckInImplCopyWith<$Res> {
+  __$$EditingCheckInImplCopyWithImpl(
+      _$EditingCheckInImpl _value, $Res Function(_$EditingCheckInImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of CheckinState
@@ -981,17 +1067,232 @@ class __$$EditingImplCopyWithImpl<$Res>
   @override
   $Res call({
     Object? draft = null,
-    Object? nearbyStamps = null,
   }) {
-    return _then(_$EditingImpl(
+    return _then(_$EditingCheckInImpl(
+      draft: null == draft
+          ? _value.draft
+          : draft // ignore: cast_nullable_to_non_nullable
+              as CheckInDraft,
+    ));
+  }
+
+  /// Create a copy of CheckinState
+  /// with the given fields replaced by the non-null parameter values.
+  @override
+  @pragma('vm:prefer-inline')
+  $CheckInDraftCopyWith<$Res> get draft {
+    return $CheckInDraftCopyWith<$Res>(_value.draft, (value) {
+      return _then(_value.copyWith(draft: value));
+    });
+  }
+}
+
+/// @nodoc
+
+class _$EditingCheckInImpl
+    with DiagnosticableTreeMixin
+    implements _EditingCheckIn {
+  const _$EditingCheckInImpl({required this.draft});
+
+  @override
+  final CheckInDraft draft;
+
+  @override
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
+    return 'CheckinState.editingCheckIn(draft: $draft)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'CheckinState.editingCheckIn'))
+      ..add(DiagnosticsProperty('draft', draft));
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$EditingCheckInImpl &&
+            (identical(other.draft, draft) || other.draft == draft));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, draft);
+
+  /// Create a copy of CheckinState
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$EditingCheckInImplCopyWith<_$EditingCheckInImpl> get copyWith =>
+      __$$EditingCheckInImplCopyWithImpl<_$EditingCheckInImpl>(
+          this, _$identity);
+
+  @override
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function() idle,
+    required TResult Function() locating,
+    required TResult Function(double lat, double lng, List<Stamp> nearbyStamps,
+            ExternalPlace? suggestedPlace, List<ExternalPlace> placeSuggestions)
+        placeSelected,
+    required TResult Function(CheckInDraft draft) editingCheckIn,
+    required TResult Function(StampDraft draft) editingStamp,
+    required TResult Function() saving,
+    required TResult Function(CheckIn checkIn) completeCheckIn,
+    required TResult Function(String stampId) completeStamp,
+    required TResult Function(String message) error,
+  }) {
+    return editingCheckIn(draft);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function()? idle,
+    TResult? Function()? locating,
+    TResult? Function(
+            double lat,
+            double lng,
+            List<Stamp> nearbyStamps,
+            ExternalPlace? suggestedPlace,
+            List<ExternalPlace> placeSuggestions)?
+        placeSelected,
+    TResult? Function(CheckInDraft draft)? editingCheckIn,
+    TResult? Function(StampDraft draft)? editingStamp,
+    TResult? Function()? saving,
+    TResult? Function(CheckIn checkIn)? completeCheckIn,
+    TResult? Function(String stampId)? completeStamp,
+    TResult? Function(String message)? error,
+  }) {
+    return editingCheckIn?.call(draft);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function()? idle,
+    TResult Function()? locating,
+    TResult Function(
+            double lat,
+            double lng,
+            List<Stamp> nearbyStamps,
+            ExternalPlace? suggestedPlace,
+            List<ExternalPlace> placeSuggestions)?
+        placeSelected,
+    TResult Function(CheckInDraft draft)? editingCheckIn,
+    TResult Function(StampDraft draft)? editingStamp,
+    TResult Function()? saving,
+    TResult Function(CheckIn checkIn)? completeCheckIn,
+    TResult Function(String stampId)? completeStamp,
+    TResult Function(String message)? error,
+    required TResult orElse(),
+  }) {
+    if (editingCheckIn != null) {
+      return editingCheckIn(draft);
+    }
+    return orElse();
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(_Idle value) idle,
+    required TResult Function(_Locating value) locating,
+    required TResult Function(_PlaceSelected value) placeSelected,
+    required TResult Function(_EditingCheckIn value) editingCheckIn,
+    required TResult Function(_EditingStamp value) editingStamp,
+    required TResult Function(_Saving value) saving,
+    required TResult Function(_CompleteCheckIn value) completeCheckIn,
+    required TResult Function(_CompleteStamp value) completeStamp,
+    required TResult Function(_Error value) error,
+  }) {
+    return editingCheckIn(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(_Idle value)? idle,
+    TResult? Function(_Locating value)? locating,
+    TResult? Function(_PlaceSelected value)? placeSelected,
+    TResult? Function(_EditingCheckIn value)? editingCheckIn,
+    TResult? Function(_EditingStamp value)? editingStamp,
+    TResult? Function(_Saving value)? saving,
+    TResult? Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult? Function(_CompleteStamp value)? completeStamp,
+    TResult? Function(_Error value)? error,
+  }) {
+    return editingCheckIn?.call(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(_Idle value)? idle,
+    TResult Function(_Locating value)? locating,
+    TResult Function(_PlaceSelected value)? placeSelected,
+    TResult Function(_EditingCheckIn value)? editingCheckIn,
+    TResult Function(_EditingStamp value)? editingStamp,
+    TResult Function(_Saving value)? saving,
+    TResult Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult Function(_CompleteStamp value)? completeStamp,
+    TResult Function(_Error value)? error,
+    required TResult orElse(),
+  }) {
+    if (editingCheckIn != null) {
+      return editingCheckIn(this);
+    }
+    return orElse();
+  }
+}
+
+abstract class _EditingCheckIn implements CheckinState {
+  const factory _EditingCheckIn({required final CheckInDraft draft}) =
+      _$EditingCheckInImpl;
+
+  CheckInDraft get draft;
+
+  /// Create a copy of CheckinState
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  _$$EditingCheckInImplCopyWith<_$EditingCheckInImpl> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class _$$EditingStampImplCopyWith<$Res> {
+  factory _$$EditingStampImplCopyWith(
+          _$EditingStampImpl value, $Res Function(_$EditingStampImpl) then) =
+      __$$EditingStampImplCopyWithImpl<$Res>;
+  @useResult
+  $Res call({StampDraft draft});
+
+  $StampDraftCopyWith<$Res> get draft;
+}
+
+/// @nodoc
+class __$$EditingStampImplCopyWithImpl<$Res>
+    extends _$CheckinStateCopyWithImpl<$Res, _$EditingStampImpl>
+    implements _$$EditingStampImplCopyWith<$Res> {
+  __$$EditingStampImplCopyWithImpl(
+      _$EditingStampImpl _value, $Res Function(_$EditingStampImpl) _then)
+      : super(_value, _then);
+
+  /// Create a copy of CheckinState
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? draft = null,
+  }) {
+    return _then(_$EditingStampImpl(
       draft: null == draft
           ? _value.draft
           : draft // ignore: cast_nullable_to_non_nullable
               as StampDraft,
-      nearbyStamps: null == nearbyStamps
-          ? _value._nearbyStamps
-          : nearbyStamps // ignore: cast_nullable_to_non_nullable
-              as List<Stamp>,
     ));
   }
 
@@ -1008,47 +1309,43 @@ class __$$EditingImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$EditingImpl implements _Editing {
-  const _$EditingImpl(
-      {required this.draft, required final List<Stamp> nearbyStamps})
-      : _nearbyStamps = nearbyStamps;
+class _$EditingStampImpl with DiagnosticableTreeMixin implements _EditingStamp {
+  const _$EditingStampImpl({required this.draft});
 
   @override
   final StampDraft draft;
-  final List<Stamp> _nearbyStamps;
+
   @override
-  List<Stamp> get nearbyStamps {
-    if (_nearbyStamps is EqualUnmodifiableListView) return _nearbyStamps;
-    // ignore: implicit_dynamic_type
-    return EqualUnmodifiableListView(_nearbyStamps);
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
+    return 'CheckinState.editingStamp(draft: $draft)';
   }
 
   @override
-  String toString() {
-    return 'CheckinState.editing(draft: $draft, nearbyStamps: $nearbyStamps)';
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'CheckinState.editingStamp'))
+      ..add(DiagnosticsProperty('draft', draft));
   }
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
-            other is _$EditingImpl &&
-            (identical(other.draft, draft) || other.draft == draft) &&
-            const DeepCollectionEquality()
-                .equals(other._nearbyStamps, _nearbyStamps));
+            other is _$EditingStampImpl &&
+            (identical(other.draft, draft) || other.draft == draft));
   }
 
   @override
-  int get hashCode => Object.hash(
-      runtimeType, draft, const DeepCollectionEquality().hash(_nearbyStamps));
+  int get hashCode => Object.hash(runtimeType, draft);
 
   /// Create a copy of CheckinState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$EditingImplCopyWith<_$EditingImpl> get copyWith =>
-      __$$EditingImplCopyWithImpl<_$EditingImpl>(this, _$identity);
+  _$$EditingStampImplCopyWith<_$EditingStampImpl> get copyWith =>
+      __$$EditingStampImplCopyWithImpl<_$EditingStampImpl>(this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -1058,13 +1355,14 @@ class _$EditingImpl implements _Editing {
     required TResult Function(double lat, double lng, List<Stamp> nearbyStamps,
             ExternalPlace? suggestedPlace, List<ExternalPlace> placeSuggestions)
         placeSelected,
-    required TResult Function(StampDraft draft, List<Stamp> nearbyStamps)
-        editing,
+    required TResult Function(CheckInDraft draft) editingCheckIn,
+    required TResult Function(StampDraft draft) editingStamp,
     required TResult Function() saving,
-    required TResult Function(Stamp stamp) complete,
+    required TResult Function(CheckIn checkIn) completeCheckIn,
+    required TResult Function(String stampId) completeStamp,
     required TResult Function(String message) error,
   }) {
-    return editing(draft, nearbyStamps);
+    return editingStamp(draft);
   }
 
   @override
@@ -1079,12 +1377,14 @@ class _$EditingImpl implements _Editing {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult? Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult? Function(CheckInDraft draft)? editingCheckIn,
+    TResult? Function(StampDraft draft)? editingStamp,
     TResult? Function()? saving,
-    TResult? Function(Stamp stamp)? complete,
+    TResult? Function(CheckIn checkIn)? completeCheckIn,
+    TResult? Function(String stampId)? completeStamp,
     TResult? Function(String message)? error,
   }) {
-    return editing?.call(draft, nearbyStamps);
+    return editingStamp?.call(draft);
   }
 
   @override
@@ -1099,14 +1399,16 @@ class _$EditingImpl implements _Editing {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult Function(CheckInDraft draft)? editingCheckIn,
+    TResult Function(StampDraft draft)? editingStamp,
     TResult Function()? saving,
-    TResult Function(Stamp stamp)? complete,
+    TResult Function(CheckIn checkIn)? completeCheckIn,
+    TResult Function(String stampId)? completeStamp,
     TResult Function(String message)? error,
     required TResult orElse(),
   }) {
-    if (editing != null) {
-      return editing(draft, nearbyStamps);
+    if (editingStamp != null) {
+      return editingStamp(draft);
     }
     return orElse();
   }
@@ -1117,12 +1419,14 @@ class _$EditingImpl implements _Editing {
     required TResult Function(_Idle value) idle,
     required TResult Function(_Locating value) locating,
     required TResult Function(_PlaceSelected value) placeSelected,
-    required TResult Function(_Editing value) editing,
+    required TResult Function(_EditingCheckIn value) editingCheckIn,
+    required TResult Function(_EditingStamp value) editingStamp,
     required TResult Function(_Saving value) saving,
-    required TResult Function(_Complete value) complete,
+    required TResult Function(_CompleteCheckIn value) completeCheckIn,
+    required TResult Function(_CompleteStamp value) completeStamp,
     required TResult Function(_Error value) error,
   }) {
-    return editing(this);
+    return editingStamp(this);
   }
 
   @override
@@ -1131,12 +1435,14 @@ class _$EditingImpl implements _Editing {
     TResult? Function(_Idle value)? idle,
     TResult? Function(_Locating value)? locating,
     TResult? Function(_PlaceSelected value)? placeSelected,
-    TResult? Function(_Editing value)? editing,
+    TResult? Function(_EditingCheckIn value)? editingCheckIn,
+    TResult? Function(_EditingStamp value)? editingStamp,
     TResult? Function(_Saving value)? saving,
-    TResult? Function(_Complete value)? complete,
+    TResult? Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult? Function(_CompleteStamp value)? completeStamp,
     TResult? Function(_Error value)? error,
   }) {
-    return editing?.call(this);
+    return editingStamp?.call(this);
   }
 
   @override
@@ -1145,31 +1451,31 @@ class _$EditingImpl implements _Editing {
     TResult Function(_Idle value)? idle,
     TResult Function(_Locating value)? locating,
     TResult Function(_PlaceSelected value)? placeSelected,
-    TResult Function(_Editing value)? editing,
+    TResult Function(_EditingCheckIn value)? editingCheckIn,
+    TResult Function(_EditingStamp value)? editingStamp,
     TResult Function(_Saving value)? saving,
-    TResult Function(_Complete value)? complete,
+    TResult Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult Function(_CompleteStamp value)? completeStamp,
     TResult Function(_Error value)? error,
     required TResult orElse(),
   }) {
-    if (editing != null) {
-      return editing(this);
+    if (editingStamp != null) {
+      return editingStamp(this);
     }
     return orElse();
   }
 }
 
-abstract class _Editing implements CheckinState {
-  const factory _Editing(
-      {required final StampDraft draft,
-      required final List<Stamp> nearbyStamps}) = _$EditingImpl;
+abstract class _EditingStamp implements CheckinState {
+  const factory _EditingStamp({required final StampDraft draft}) =
+      _$EditingStampImpl;
 
   StampDraft get draft;
-  List<Stamp> get nearbyStamps;
 
   /// Create a copy of CheckinState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$EditingImplCopyWith<_$EditingImpl> get copyWith =>
+  _$$EditingStampImplCopyWith<_$EditingStampImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
 
@@ -1194,12 +1500,18 @@ class __$$SavingImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$SavingImpl implements _Saving {
+class _$SavingImpl with DiagnosticableTreeMixin implements _Saving {
   const _$SavingImpl();
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.saving()';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties..add(DiagnosticsProperty('type', 'CheckinState.saving'));
   }
 
   @override
@@ -1219,10 +1531,11 @@ class _$SavingImpl implements _Saving {
     required TResult Function(double lat, double lng, List<Stamp> nearbyStamps,
             ExternalPlace? suggestedPlace, List<ExternalPlace> placeSuggestions)
         placeSelected,
-    required TResult Function(StampDraft draft, List<Stamp> nearbyStamps)
-        editing,
+    required TResult Function(CheckInDraft draft) editingCheckIn,
+    required TResult Function(StampDraft draft) editingStamp,
     required TResult Function() saving,
-    required TResult Function(Stamp stamp) complete,
+    required TResult Function(CheckIn checkIn) completeCheckIn,
+    required TResult Function(String stampId) completeStamp,
     required TResult Function(String message) error,
   }) {
     return saving();
@@ -1240,9 +1553,11 @@ class _$SavingImpl implements _Saving {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult? Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult? Function(CheckInDraft draft)? editingCheckIn,
+    TResult? Function(StampDraft draft)? editingStamp,
     TResult? Function()? saving,
-    TResult? Function(Stamp stamp)? complete,
+    TResult? Function(CheckIn checkIn)? completeCheckIn,
+    TResult? Function(String stampId)? completeStamp,
     TResult? Function(String message)? error,
   }) {
     return saving?.call();
@@ -1260,9 +1575,11 @@ class _$SavingImpl implements _Saving {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult Function(CheckInDraft draft)? editingCheckIn,
+    TResult Function(StampDraft draft)? editingStamp,
     TResult Function()? saving,
-    TResult Function(Stamp stamp)? complete,
+    TResult Function(CheckIn checkIn)? completeCheckIn,
+    TResult Function(String stampId)? completeStamp,
     TResult Function(String message)? error,
     required TResult orElse(),
   }) {
@@ -1278,9 +1595,11 @@ class _$SavingImpl implements _Saving {
     required TResult Function(_Idle value) idle,
     required TResult Function(_Locating value) locating,
     required TResult Function(_PlaceSelected value) placeSelected,
-    required TResult Function(_Editing value) editing,
+    required TResult Function(_EditingCheckIn value) editingCheckIn,
+    required TResult Function(_EditingStamp value) editingStamp,
     required TResult Function(_Saving value) saving,
-    required TResult Function(_Complete value) complete,
+    required TResult Function(_CompleteCheckIn value) completeCheckIn,
+    required TResult Function(_CompleteStamp value) completeStamp,
     required TResult Function(_Error value) error,
   }) {
     return saving(this);
@@ -1292,9 +1611,11 @@ class _$SavingImpl implements _Saving {
     TResult? Function(_Idle value)? idle,
     TResult? Function(_Locating value)? locating,
     TResult? Function(_PlaceSelected value)? placeSelected,
-    TResult? Function(_Editing value)? editing,
+    TResult? Function(_EditingCheckIn value)? editingCheckIn,
+    TResult? Function(_EditingStamp value)? editingStamp,
     TResult? Function(_Saving value)? saving,
-    TResult? Function(_Complete value)? complete,
+    TResult? Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult? Function(_CompleteStamp value)? completeStamp,
     TResult? Function(_Error value)? error,
   }) {
     return saving?.call(this);
@@ -1306,9 +1627,11 @@ class _$SavingImpl implements _Saving {
     TResult Function(_Idle value)? idle,
     TResult Function(_Locating value)? locating,
     TResult Function(_PlaceSelected value)? placeSelected,
-    TResult Function(_Editing value)? editing,
+    TResult Function(_EditingCheckIn value)? editingCheckIn,
+    TResult Function(_EditingStamp value)? editingStamp,
     TResult Function(_Saving value)? saving,
-    TResult Function(_Complete value)? complete,
+    TResult Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult Function(_CompleteStamp value)? completeStamp,
     TResult Function(_Error value)? error,
     required TResult orElse(),
   }) {
@@ -1324,22 +1647,22 @@ abstract class _Saving implements CheckinState {
 }
 
 /// @nodoc
-abstract class _$$CompleteImplCopyWith<$Res> {
-  factory _$$CompleteImplCopyWith(
-          _$CompleteImpl value, $Res Function(_$CompleteImpl) then) =
-      __$$CompleteImplCopyWithImpl<$Res>;
+abstract class _$$CompleteCheckInImplCopyWith<$Res> {
+  factory _$$CompleteCheckInImplCopyWith(_$CompleteCheckInImpl value,
+          $Res Function(_$CompleteCheckInImpl) then) =
+      __$$CompleteCheckInImplCopyWithImpl<$Res>;
   @useResult
-  $Res call({Stamp stamp});
+  $Res call({CheckIn checkIn});
 
-  $StampCopyWith<$Res> get stamp;
+  $CheckInCopyWith<$Res> get checkIn;
 }
 
 /// @nodoc
-class __$$CompleteImplCopyWithImpl<$Res>
-    extends _$CheckinStateCopyWithImpl<$Res, _$CompleteImpl>
-    implements _$$CompleteImplCopyWith<$Res> {
-  __$$CompleteImplCopyWithImpl(
-      _$CompleteImpl _value, $Res Function(_$CompleteImpl) _then)
+class __$$CompleteCheckInImplCopyWithImpl<$Res>
+    extends _$CheckinStateCopyWithImpl<$Res, _$CompleteCheckInImpl>
+    implements _$$CompleteCheckInImplCopyWith<$Res> {
+  __$$CompleteCheckInImplCopyWithImpl(
+      _$CompleteCheckInImpl _value, $Res Function(_$CompleteCheckInImpl) _then)
       : super(_value, _then);
 
   /// Create a copy of CheckinState
@@ -1347,13 +1670,13 @@ class __$$CompleteImplCopyWithImpl<$Res>
   @pragma('vm:prefer-inline')
   @override
   $Res call({
-    Object? stamp = null,
+    Object? checkIn = null,
   }) {
-    return _then(_$CompleteImpl(
-      null == stamp
-          ? _value.stamp
-          : stamp // ignore: cast_nullable_to_non_nullable
-              as Stamp,
+    return _then(_$CompleteCheckInImpl(
+      null == checkIn
+          ? _value.checkIn
+          : checkIn // ignore: cast_nullable_to_non_nullable
+              as CheckIn,
     ));
   }
 
@@ -1361,44 +1684,55 @@ class __$$CompleteImplCopyWithImpl<$Res>
   /// with the given fields replaced by the non-null parameter values.
   @override
   @pragma('vm:prefer-inline')
-  $StampCopyWith<$Res> get stamp {
-    return $StampCopyWith<$Res>(_value.stamp, (value) {
-      return _then(_value.copyWith(stamp: value));
+  $CheckInCopyWith<$Res> get checkIn {
+    return $CheckInCopyWith<$Res>(_value.checkIn, (value) {
+      return _then(_value.copyWith(checkIn: value));
     });
   }
 }
 
 /// @nodoc
 
-class _$CompleteImpl implements _Complete {
-  const _$CompleteImpl(this.stamp);
+class _$CompleteCheckInImpl
+    with DiagnosticableTreeMixin
+    implements _CompleteCheckIn {
+  const _$CompleteCheckInImpl(this.checkIn);
 
   @override
-  final Stamp stamp;
+  final CheckIn checkIn;
 
   @override
-  String toString() {
-    return 'CheckinState.complete(stamp: $stamp)';
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
+    return 'CheckinState.completeCheckIn(checkIn: $checkIn)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'CheckinState.completeCheckIn'))
+      ..add(DiagnosticsProperty('checkIn', checkIn));
   }
 
   @override
   bool operator ==(Object other) {
     return identical(this, other) ||
         (other.runtimeType == runtimeType &&
-            other is _$CompleteImpl &&
-            (identical(other.stamp, stamp) || other.stamp == stamp));
+            other is _$CompleteCheckInImpl &&
+            (identical(other.checkIn, checkIn) || other.checkIn == checkIn));
   }
 
   @override
-  int get hashCode => Object.hash(runtimeType, stamp);
+  int get hashCode => Object.hash(runtimeType, checkIn);
 
   /// Create a copy of CheckinState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
   @override
   @pragma('vm:prefer-inline')
-  _$$CompleteImplCopyWith<_$CompleteImpl> get copyWith =>
-      __$$CompleteImplCopyWithImpl<_$CompleteImpl>(this, _$identity);
+  _$$CompleteCheckInImplCopyWith<_$CompleteCheckInImpl> get copyWith =>
+      __$$CompleteCheckInImplCopyWithImpl<_$CompleteCheckInImpl>(
+          this, _$identity);
 
   @override
   @optionalTypeArgs
@@ -1408,13 +1742,14 @@ class _$CompleteImpl implements _Complete {
     required TResult Function(double lat, double lng, List<Stamp> nearbyStamps,
             ExternalPlace? suggestedPlace, List<ExternalPlace> placeSuggestions)
         placeSelected,
-    required TResult Function(StampDraft draft, List<Stamp> nearbyStamps)
-        editing,
+    required TResult Function(CheckInDraft draft) editingCheckIn,
+    required TResult Function(StampDraft draft) editingStamp,
     required TResult Function() saving,
-    required TResult Function(Stamp stamp) complete,
+    required TResult Function(CheckIn checkIn) completeCheckIn,
+    required TResult Function(String stampId) completeStamp,
     required TResult Function(String message) error,
   }) {
-    return complete(stamp);
+    return completeCheckIn(checkIn);
   }
 
   @override
@@ -1429,12 +1764,14 @@ class _$CompleteImpl implements _Complete {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult? Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult? Function(CheckInDraft draft)? editingCheckIn,
+    TResult? Function(StampDraft draft)? editingStamp,
     TResult? Function()? saving,
-    TResult? Function(Stamp stamp)? complete,
+    TResult? Function(CheckIn checkIn)? completeCheckIn,
+    TResult? Function(String stampId)? completeStamp,
     TResult? Function(String message)? error,
   }) {
-    return complete?.call(stamp);
+    return completeCheckIn?.call(checkIn);
   }
 
   @override
@@ -1449,14 +1786,16 @@ class _$CompleteImpl implements _Complete {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult Function(CheckInDraft draft)? editingCheckIn,
+    TResult Function(StampDraft draft)? editingStamp,
     TResult Function()? saving,
-    TResult Function(Stamp stamp)? complete,
+    TResult Function(CheckIn checkIn)? completeCheckIn,
+    TResult Function(String stampId)? completeStamp,
     TResult Function(String message)? error,
     required TResult orElse(),
   }) {
-    if (complete != null) {
-      return complete(stamp);
+    if (completeCheckIn != null) {
+      return completeCheckIn(checkIn);
     }
     return orElse();
   }
@@ -1467,12 +1806,14 @@ class _$CompleteImpl implements _Complete {
     required TResult Function(_Idle value) idle,
     required TResult Function(_Locating value) locating,
     required TResult Function(_PlaceSelected value) placeSelected,
-    required TResult Function(_Editing value) editing,
+    required TResult Function(_EditingCheckIn value) editingCheckIn,
+    required TResult Function(_EditingStamp value) editingStamp,
     required TResult Function(_Saving value) saving,
-    required TResult Function(_Complete value) complete,
+    required TResult Function(_CompleteCheckIn value) completeCheckIn,
+    required TResult Function(_CompleteStamp value) completeStamp,
     required TResult Function(_Error value) error,
   }) {
-    return complete(this);
+    return completeCheckIn(this);
   }
 
   @override
@@ -1481,12 +1822,14 @@ class _$CompleteImpl implements _Complete {
     TResult? Function(_Idle value)? idle,
     TResult? Function(_Locating value)? locating,
     TResult? Function(_PlaceSelected value)? placeSelected,
-    TResult? Function(_Editing value)? editing,
+    TResult? Function(_EditingCheckIn value)? editingCheckIn,
+    TResult? Function(_EditingStamp value)? editingStamp,
     TResult? Function(_Saving value)? saving,
-    TResult? Function(_Complete value)? complete,
+    TResult? Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult? Function(_CompleteStamp value)? completeStamp,
     TResult? Function(_Error value)? error,
   }) {
-    return complete?.call(this);
+    return completeCheckIn?.call(this);
   }
 
   @override
@@ -1495,28 +1838,236 @@ class _$CompleteImpl implements _Complete {
     TResult Function(_Idle value)? idle,
     TResult Function(_Locating value)? locating,
     TResult Function(_PlaceSelected value)? placeSelected,
-    TResult Function(_Editing value)? editing,
+    TResult Function(_EditingCheckIn value)? editingCheckIn,
+    TResult Function(_EditingStamp value)? editingStamp,
     TResult Function(_Saving value)? saving,
-    TResult Function(_Complete value)? complete,
+    TResult Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult Function(_CompleteStamp value)? completeStamp,
     TResult Function(_Error value)? error,
     required TResult orElse(),
   }) {
-    if (complete != null) {
-      return complete(this);
+    if (completeCheckIn != null) {
+      return completeCheckIn(this);
     }
     return orElse();
   }
 }
 
-abstract class _Complete implements CheckinState {
-  const factory _Complete(final Stamp stamp) = _$CompleteImpl;
+abstract class _CompleteCheckIn implements CheckinState {
+  const factory _CompleteCheckIn(final CheckIn checkIn) = _$CompleteCheckInImpl;
 
-  Stamp get stamp;
+  CheckIn get checkIn;
 
   /// Create a copy of CheckinState
   /// with the given fields replaced by the non-null parameter values.
   @JsonKey(includeFromJson: false, includeToJson: false)
-  _$$CompleteImplCopyWith<_$CompleteImpl> get copyWith =>
+  _$$CompleteCheckInImplCopyWith<_$CompleteCheckInImpl> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class _$$CompleteStampImplCopyWith<$Res> {
+  factory _$$CompleteStampImplCopyWith(
+          _$CompleteStampImpl value, $Res Function(_$CompleteStampImpl) then) =
+      __$$CompleteStampImplCopyWithImpl<$Res>;
+  @useResult
+  $Res call({String stampId});
+}
+
+/// @nodoc
+class __$$CompleteStampImplCopyWithImpl<$Res>
+    extends _$CheckinStateCopyWithImpl<$Res, _$CompleteStampImpl>
+    implements _$$CompleteStampImplCopyWith<$Res> {
+  __$$CompleteStampImplCopyWithImpl(
+      _$CompleteStampImpl _value, $Res Function(_$CompleteStampImpl) _then)
+      : super(_value, _then);
+
+  /// Create a copy of CheckinState
+  /// with the given fields replaced by the non-null parameter values.
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? stampId = null,
+  }) {
+    return _then(_$CompleteStampImpl(
+      null == stampId
+          ? _value.stampId
+          : stampId // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
+
+class _$CompleteStampImpl
+    with DiagnosticableTreeMixin
+    implements _CompleteStamp {
+  const _$CompleteStampImpl(this.stampId);
+
+  @override
+  final String stampId;
+
+  @override
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
+    return 'CheckinState.completeStamp(stampId: $stampId)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'CheckinState.completeStamp'))
+      ..add(DiagnosticsProperty('stampId', stampId));
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$CompleteStampImpl &&
+            (identical(other.stampId, stampId) || other.stampId == stampId));
+  }
+
+  @override
+  int get hashCode => Object.hash(runtimeType, stampId);
+
+  /// Create a copy of CheckinState
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$CompleteStampImplCopyWith<_$CompleteStampImpl> get copyWith =>
+      __$$CompleteStampImplCopyWithImpl<_$CompleteStampImpl>(this, _$identity);
+
+  @override
+  @optionalTypeArgs
+  TResult when<TResult extends Object?>({
+    required TResult Function() idle,
+    required TResult Function() locating,
+    required TResult Function(double lat, double lng, List<Stamp> nearbyStamps,
+            ExternalPlace? suggestedPlace, List<ExternalPlace> placeSuggestions)
+        placeSelected,
+    required TResult Function(CheckInDraft draft) editingCheckIn,
+    required TResult Function(StampDraft draft) editingStamp,
+    required TResult Function() saving,
+    required TResult Function(CheckIn checkIn) completeCheckIn,
+    required TResult Function(String stampId) completeStamp,
+    required TResult Function(String message) error,
+  }) {
+    return completeStamp(stampId);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? whenOrNull<TResult extends Object?>({
+    TResult? Function()? idle,
+    TResult? Function()? locating,
+    TResult? Function(
+            double lat,
+            double lng,
+            List<Stamp> nearbyStamps,
+            ExternalPlace? suggestedPlace,
+            List<ExternalPlace> placeSuggestions)?
+        placeSelected,
+    TResult? Function(CheckInDraft draft)? editingCheckIn,
+    TResult? Function(StampDraft draft)? editingStamp,
+    TResult? Function()? saving,
+    TResult? Function(CheckIn checkIn)? completeCheckIn,
+    TResult? Function(String stampId)? completeStamp,
+    TResult? Function(String message)? error,
+  }) {
+    return completeStamp?.call(stampId);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeWhen<TResult extends Object?>({
+    TResult Function()? idle,
+    TResult Function()? locating,
+    TResult Function(
+            double lat,
+            double lng,
+            List<Stamp> nearbyStamps,
+            ExternalPlace? suggestedPlace,
+            List<ExternalPlace> placeSuggestions)?
+        placeSelected,
+    TResult Function(CheckInDraft draft)? editingCheckIn,
+    TResult Function(StampDraft draft)? editingStamp,
+    TResult Function()? saving,
+    TResult Function(CheckIn checkIn)? completeCheckIn,
+    TResult Function(String stampId)? completeStamp,
+    TResult Function(String message)? error,
+    required TResult orElse(),
+  }) {
+    if (completeStamp != null) {
+      return completeStamp(stampId);
+    }
+    return orElse();
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult map<TResult extends Object?>({
+    required TResult Function(_Idle value) idle,
+    required TResult Function(_Locating value) locating,
+    required TResult Function(_PlaceSelected value) placeSelected,
+    required TResult Function(_EditingCheckIn value) editingCheckIn,
+    required TResult Function(_EditingStamp value) editingStamp,
+    required TResult Function(_Saving value) saving,
+    required TResult Function(_CompleteCheckIn value) completeCheckIn,
+    required TResult Function(_CompleteStamp value) completeStamp,
+    required TResult Function(_Error value) error,
+  }) {
+    return completeStamp(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult? mapOrNull<TResult extends Object?>({
+    TResult? Function(_Idle value)? idle,
+    TResult? Function(_Locating value)? locating,
+    TResult? Function(_PlaceSelected value)? placeSelected,
+    TResult? Function(_EditingCheckIn value)? editingCheckIn,
+    TResult? Function(_EditingStamp value)? editingStamp,
+    TResult? Function(_Saving value)? saving,
+    TResult? Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult? Function(_CompleteStamp value)? completeStamp,
+    TResult? Function(_Error value)? error,
+  }) {
+    return completeStamp?.call(this);
+  }
+
+  @override
+  @optionalTypeArgs
+  TResult maybeMap<TResult extends Object?>({
+    TResult Function(_Idle value)? idle,
+    TResult Function(_Locating value)? locating,
+    TResult Function(_PlaceSelected value)? placeSelected,
+    TResult Function(_EditingCheckIn value)? editingCheckIn,
+    TResult Function(_EditingStamp value)? editingStamp,
+    TResult Function(_Saving value)? saving,
+    TResult Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult Function(_CompleteStamp value)? completeStamp,
+    TResult Function(_Error value)? error,
+    required TResult orElse(),
+  }) {
+    if (completeStamp != null) {
+      return completeStamp(this);
+    }
+    return orElse();
+  }
+}
+
+abstract class _CompleteStamp implements CheckinState {
+  const factory _CompleteStamp(final String stampId) = _$CompleteStampImpl;
+
+  String get stampId;
+
+  /// Create a copy of CheckinState
+  /// with the given fields replaced by the non-null parameter values.
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  _$$CompleteStampImplCopyWith<_$CompleteStampImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
 
@@ -1555,15 +2106,23 @@ class __$$ErrorImplCopyWithImpl<$Res>
 
 /// @nodoc
 
-class _$ErrorImpl implements _Error {
+class _$ErrorImpl with DiagnosticableTreeMixin implements _Error {
   const _$ErrorImpl(this.message);
 
   @override
   final String message;
 
   @override
-  String toString() {
+  String toString({DiagnosticLevel minLevel = DiagnosticLevel.info}) {
     return 'CheckinState.error(message: $message)';
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties
+      ..add(DiagnosticsProperty('type', 'CheckinState.error'))
+      ..add(DiagnosticsProperty('message', message));
   }
 
   @override
@@ -1593,10 +2152,11 @@ class _$ErrorImpl implements _Error {
     required TResult Function(double lat, double lng, List<Stamp> nearbyStamps,
             ExternalPlace? suggestedPlace, List<ExternalPlace> placeSuggestions)
         placeSelected,
-    required TResult Function(StampDraft draft, List<Stamp> nearbyStamps)
-        editing,
+    required TResult Function(CheckInDraft draft) editingCheckIn,
+    required TResult Function(StampDraft draft) editingStamp,
     required TResult Function() saving,
-    required TResult Function(Stamp stamp) complete,
+    required TResult Function(CheckIn checkIn) completeCheckIn,
+    required TResult Function(String stampId) completeStamp,
     required TResult Function(String message) error,
   }) {
     return error(message);
@@ -1614,9 +2174,11 @@ class _$ErrorImpl implements _Error {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult? Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult? Function(CheckInDraft draft)? editingCheckIn,
+    TResult? Function(StampDraft draft)? editingStamp,
     TResult? Function()? saving,
-    TResult? Function(Stamp stamp)? complete,
+    TResult? Function(CheckIn checkIn)? completeCheckIn,
+    TResult? Function(String stampId)? completeStamp,
     TResult? Function(String message)? error,
   }) {
     return error?.call(message);
@@ -1634,9 +2196,11 @@ class _$ErrorImpl implements _Error {
             ExternalPlace? suggestedPlace,
             List<ExternalPlace> placeSuggestions)?
         placeSelected,
-    TResult Function(StampDraft draft, List<Stamp> nearbyStamps)? editing,
+    TResult Function(CheckInDraft draft)? editingCheckIn,
+    TResult Function(StampDraft draft)? editingStamp,
     TResult Function()? saving,
-    TResult Function(Stamp stamp)? complete,
+    TResult Function(CheckIn checkIn)? completeCheckIn,
+    TResult Function(String stampId)? completeStamp,
     TResult Function(String message)? error,
     required TResult orElse(),
   }) {
@@ -1652,9 +2216,11 @@ class _$ErrorImpl implements _Error {
     required TResult Function(_Idle value) idle,
     required TResult Function(_Locating value) locating,
     required TResult Function(_PlaceSelected value) placeSelected,
-    required TResult Function(_Editing value) editing,
+    required TResult Function(_EditingCheckIn value) editingCheckIn,
+    required TResult Function(_EditingStamp value) editingStamp,
     required TResult Function(_Saving value) saving,
-    required TResult Function(_Complete value) complete,
+    required TResult Function(_CompleteCheckIn value) completeCheckIn,
+    required TResult Function(_CompleteStamp value) completeStamp,
     required TResult Function(_Error value) error,
   }) {
     return error(this);
@@ -1666,9 +2232,11 @@ class _$ErrorImpl implements _Error {
     TResult? Function(_Idle value)? idle,
     TResult? Function(_Locating value)? locating,
     TResult? Function(_PlaceSelected value)? placeSelected,
-    TResult? Function(_Editing value)? editing,
+    TResult? Function(_EditingCheckIn value)? editingCheckIn,
+    TResult? Function(_EditingStamp value)? editingStamp,
     TResult? Function(_Saving value)? saving,
-    TResult? Function(_Complete value)? complete,
+    TResult? Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult? Function(_CompleteStamp value)? completeStamp,
     TResult? Function(_Error value)? error,
   }) {
     return error?.call(this);
@@ -1680,9 +2248,11 @@ class _$ErrorImpl implements _Error {
     TResult Function(_Idle value)? idle,
     TResult Function(_Locating value)? locating,
     TResult Function(_PlaceSelected value)? placeSelected,
-    TResult Function(_Editing value)? editing,
+    TResult Function(_EditingCheckIn value)? editingCheckIn,
+    TResult Function(_EditingStamp value)? editingStamp,
     TResult Function(_Saving value)? saving,
-    TResult Function(_Complete value)? complete,
+    TResult Function(_CompleteCheckIn value)? completeCheckIn,
+    TResult Function(_CompleteStamp value)? completeStamp,
     TResult Function(_Error value)? error,
     required TResult orElse(),
   }) {

@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_auth_2/flutter_web_auth_2.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../app.dart';
-import '../../../core/auth/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -113,17 +112,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     : () => _signInWithOAuth(OAuthProvider.google),
                 dark: false,
               ),
-              const SizedBox(height: 12),
-              _AuthButton(
-                label: 'Bypass Login (Dev Mock)',
-                icon: Icons.developer_mode,
-                onTap: _loading
-                    ? null
-                    : () => ref.read(devLoggedInProvider.notifier).login(),
-                dark: false,
-                backgroundColor: kBrandGreen,
-                foregroundColor: Colors.white,
-              ),
               if (_loading) ...[
                 const SizedBox(height: 24),
                 const CircularProgressIndicator(color: kBrandGreen),
@@ -148,16 +136,12 @@ class _AuthButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
   final bool dark;
-  final Color? backgroundColor;
-  final Color? foregroundColor;
 
   const _AuthButton({
     required this.label,
     required this.icon,
     required this.onTap,
     required this.dark,
-    this.backgroundColor,
-    this.foregroundColor,
   });
 
   @override
@@ -170,8 +154,8 @@ class _AuthButton extends StatelessWidget {
         icon: Icon(icon),
         label: Text(label),
         style: FilledButton.styleFrom(
-          backgroundColor: backgroundColor ?? (dark ? Colors.black : Colors.white),
-          foregroundColor: foregroundColor ?? (dark ? Colors.white : Colors.black87),
+          backgroundColor: dark ? Colors.black : Colors.white,
+          foregroundColor: dark ? Colors.white : Colors.black87,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),

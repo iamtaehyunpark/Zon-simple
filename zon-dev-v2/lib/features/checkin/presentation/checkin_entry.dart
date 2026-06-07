@@ -2,14 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/repositories/check_in_repository.dart';
+import '../../../shared/widgets/app_states.dart';
 import 'providers/checkin_provider.dart';
 import 'stamp_editor.dart';
+import 'check_in_editor.dart';
 
 class CheckinEntry extends ConsumerStatefulWidget {
   final double? lat;
   final double? lng;
+  final CheckinMode mode;
+  // When set, the flow opens straight into the stamp editor pre-filled from
+  // this existing check-in (promote-to-stamp as an editable step).
+  final String? fromCheckInId;
 
-  const CheckinEntry({super.key, this.lat, this.lng});
+  const CheckinEntry({
+    super.key,
+    this.lat,
+    this.lng,
+    this.mode = CheckinMode.checkIn,
+    this.fromCheckInId,
+  });
 
   @override
   ConsumerState<CheckinEntry> createState() => _CheckinEntryState();
@@ -24,10 +37,33 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref
-          .read(checkinNotifierProvider.notifier)
-          .startCheckin(lat: widget.lat, lng: widget.lng);
+      if (widget.fromCheckInId != null) {
+        _startFromCheckIn(widget.fromCheckInId!);
+      } else {
+        ref
+            .read(checkinNotifierProvider.notifier)
+            .startCheckin(lat: widget.lat, lng: widget.lng, mode: widget.mode);
+      }
     });
+  }
+
+  Future<void> _startFromCheckIn(String id) async {
+    final repo = ref.read(checkInRepositoryProvider);
+    final res = await repo.getCheckIn(id);
+    final ci = res.fold((_) => null, (c) => c);
+    if (ci == null) {
+      if (mounted) {
+        ref
+            .read(checkinNotifierProvider.notifier)
+            .startCheckin(mode: CheckinMode.stamp);
+      }
+      return;
+    }
+    final photos = await repo.getCheckInPhotos(id);
+    if (!mounted) return;
+    ref
+        .read(checkinNotifierProvider.notifier)
+        .startStampFromCheckIn(ci, [for (final p in photos) p.url]);
   }
 
   @override
@@ -61,10 +97,12 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
   @override
   Widget build(BuildContext context) {
     final checkinState = ref.watch(checkinNotifierProvider);
+    final isStamp =
+        widget.mode == CheckinMode.stamp || widget.fromCheckInId != null;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Add a Stamp'),
+        title: Text(isStamp ? 'Create Stamp' : 'Check In'),
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () {
@@ -85,8 +123,9 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
             ],
           ),
         ),
-        placeSelected: (lat, lng, nearbyStamps, suggestedPlace, placeSuggestions) =>
-            _PlaceSelectionBody(
+        placeSelected:
+            (lat, lng, nearbyStamps, suggestedPlace, placeSuggestions) =>
+                _PlaceSelectionBody(
           lat: lat,
           lng: lng,
           suggestedPlace: suggestedPlace,
@@ -103,41 +142,42 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
             ref.read(checkinNotifierProvider.notifier).beginEditing(null);
           },
         ),
-        editing: (draft, nearbyStamps) => StampEditorBody(
+        editingCheckIn: (draft) => CheckInEditorBody(
           draft: draft,
-          nearbyStamps: nearbyStamps,
           onUpdate: (d) =>
-              ref.read(checkinNotifierProvider.notifier).updateDraft(d),
-          onSave: () =>
-              ref.read(checkinNotifierProvider.notifier).saveStamp(),
+              ref.read(checkinNotifierProvider.notifier).updateCheckInDraft(d),
+          onSave: () => ref.read(checkinNotifierProvider.notifier).save(),
+        ),
+        editingStamp: (draft) => StampEditorBody(
+          draft: draft,
+          nearbyStamps: const [],
+          onUpdate: (d) =>
+              ref.read(checkinNotifierProvider.notifier).updateStampDraft(d),
+          onSave: () => ref.read(checkinNotifierProvider.notifier).save(),
         ),
         saving: () => const Center(child: CircularProgressIndicator()),
-        complete: (stamp) {
+        completeCheckIn: (checkIn) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Stamp saved at ${stamp.placeName}!')),
+              SnackBar(content: Text('Checked in at ${checkIn.placeName}')),
             );
             ref.read(checkinNotifierProvider.notifier).reset();
             context.pop();
           });
           return const Center(child: CircularProgressIndicator());
         },
-        error: (msg) => Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
-              Text(msg, textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref
-                    .read(checkinNotifierProvider.notifier)
-                    .startCheckin(lat: widget.lat, lng: widget.lng),
-                child: const Text('Retry'),
-              ),
-            ],
-          ),
+        completeStamp: (stampId) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            ref.read(checkinNotifierProvider.notifier).reset();
+            context.pop();
+            context.push('/stamp/$stampId');
+          });
+          return const Center(child: CircularProgressIndicator());
+        },
+        error: (msg) => ErrorView(
+          message: msg,
+          onRetry: () => ref.read(checkinNotifierProvider.notifier).startCheckin(
+              lat: widget.lat, lng: widget.lng, mode: widget.mode),
         ),
       ),
     );
@@ -265,17 +305,19 @@ class _PlaceSelectionBody extends StatelessWidget {
         ],
         Expanded(
           child: ListView.builder(
+            // Index 0 is always "Use current location" (the default).
             itemCount: displayPlaces.length + 1,
             itemBuilder: (ctx, i) {
-              if (i == displayPlaces.length) {
+              if (i == 0) {
                 return ListTile(
-                  leading: const Icon(Icons.location_on_outlined),
+                  leading: Icon(Icons.my_location,
+                      color: Theme.of(ctx).colorScheme.primary),
                   title: const Text('Use current location'),
-                  subtitle: const Text('No specific place'),
+                  subtitle: const Text('Check in right where you are'),
                   onTap: onSkipPlace,
                 );
               }
-              final place = displayPlaces[i];
+              final place = displayPlaces[i - 1];
               return ListTile(
                 leading: const Icon(Icons.place),
                 title: Text(place.name),

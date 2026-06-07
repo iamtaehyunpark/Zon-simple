@@ -8,7 +8,7 @@ import '../../data/repositories/location_repository.dart';
 
 part 'location_batcher.g.dart';
 
-@riverpod
+@Riverpod(keepAlive: true)
 LocationBatcher locationBatcher(LocationBatcherRef ref) {
   final repo = ref.watch(locationRepositoryProvider);
   final batcher = LocationBatcher(repo);

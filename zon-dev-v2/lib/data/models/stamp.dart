@@ -15,6 +15,7 @@ class Stamp with _$Stamp {
     required double lng,
     String? externalPlaceId,
     String? externalSource,
+    String? checkInId,
     required StampVisibility visibility,
     String? coverPhotoUrl,
     String? caption,
@@ -41,6 +42,7 @@ class Stamp with _$Stamp {
 class StampDraft with _$StampDraft {
   const factory StampDraft({
     String? existingStampId,
+    String? checkInId,
     required String placeName,
     required double lat,
     required double lng,
@@ -51,6 +53,9 @@ class StampDraft with _$StampDraft {
     @Default([]) List<String> sensoryTags,
     @Default([]) List<String> taggedUserIds,
     @Default([]) List<String> selectedPhotoPaths,
+    // Already-uploaded photos carried in from a source check-in (display-only;
+    // they're re-pointed to the stamp on promote, not re-uploaded).
+    @Default([]) List<String> existingPhotoUrls,
     String? coverPhotoPath,
   }) = _StampDraft;
 

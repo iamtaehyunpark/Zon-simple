@@ -2,10 +2,140 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/repositories/profile_repository.dart';
+import '../../../shared/widgets/app_states.dart';
+import '../../../shared/utils/format.dart';
 import 'providers/profile_provider.dart';
 import '../../../core/auth/auth_provider.dart';
+
+// ── Social action buttons (Add Friend + Follow) ───────────────────────────
+
+class _SocialButtons extends ConsumerWidget {
+  final String targetId;
+  const _SocialButtons({required this.targetId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final fs = ref.watch(friendStateProvider(targetId)).valueOrNull ??
+        FriendState.none;
+    final fw = ref.watch(followStateProvider(targetId)).valueOrNull ??
+        FollowState.none;
+    final notifier =
+        ref.read(profileNotifierProvider(targetId).notifier);
+
+    return Row(
+      children: [
+        Expanded(child: _friendButton(context, ref, fs, fw, notifier)),
+        const SizedBox(width: 8),
+        Expanded(child: _followButton(context, ref, fw, notifier, targetId)),
+      ],
+    );
+  }
+
+  Widget _friendButton(
+    BuildContext context,
+    WidgetRef ref,
+    FriendState fs,
+    FollowState fw,
+    ProfileNotifier notifier,
+  ) {
+    switch (fs) {
+      case FriendState.none:
+        return FilledButton.icon(
+          icon: const Icon(Icons.person_add_outlined, size: 18),
+          label: const Text('Add Friend'),
+          onPressed: () => notifier.sendFriendRequest(),
+        );
+      case FriendState.requestedByMe:
+        return OutlinedButton.icon(
+          icon: const Icon(Icons.hourglass_empty, size: 18),
+          label: const Text('Requested'),
+          onPressed: () => notifier.cancelFriendRequest(),
+        );
+      case FriendState.requestedByThem:
+        return FilledButton.icon(
+          icon: const Icon(Icons.people_alt_outlined, size: 18),
+          label: const Text('Respond'),
+          onPressed: () => _showRespondMenu(context, ref),
+        );
+      case FriendState.friends:
+        return PopupMenuButton<_FriendAction>(
+          onSelected: (a) {
+            if (a == _FriendAction.unfriend) notifier.unfriend();
+          },
+          itemBuilder: (_) => [
+            const PopupMenuItem(
+              value: _FriendAction.unfriend,
+              child: Text('Unfriend'),
+            ),
+          ],
+          child: OutlinedButton.icon(
+            icon: const Icon(Icons.people_alt, size: 18),
+            label: const Text('Friends'),
+            onPressed: null, // handled by PopupMenuButton
+          ),
+        );
+    }
+  }
+
+  void _showRespondMenu(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.check_circle_outline),
+              title: const Text('Confirm'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await ref
+                    .read(profileRepositoryProvider)
+                    .acceptFriendRequest(targetId);
+                ref.invalidate(friendStateProvider(targetId));
+                ref.invalidate(friendRequestsProvider);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.cancel_outlined),
+              title: const Text('Delete'),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await ref
+                    .read(profileRepositoryProvider)
+                    .denyFriendRequest(targetId);
+                ref.invalidate(friendStateProvider(targetId));
+                ref.invalidate(friendRequestsProvider);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _followButton(
+    BuildContext context,
+    WidgetRef ref,
+    FollowState fw,
+    ProfileNotifier notifier,
+    String targetId,
+  ) {
+    final label = switch (fw) {
+      FollowState.following => 'Following',
+      FollowState.requested => 'Requested',
+      FollowState.none => 'Follow',
+    };
+    return OutlinedButton(
+      onPressed: () => notifier.toggleFollow(targetId),
+      child: Text(label),
+    );
+  }
+}
+
+enum _FriendAction { unfriend }
 
 class ProfileScreen extends ConsumerWidget {
   final String? userId;
@@ -17,22 +147,24 @@ class ProfileScreen extends ConsumerWidget {
     final targetId = userId ?? currentUser?.id;
 
     if (targetId == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: LoadingView());
     }
 
-    final profileState = ref.watch(profileNotifierProvider(targetId));
-    final stampsState = ref.watch(profileStampsNotifierProvider(targetId));
     final isOwnProfile = targetId == currentUser?.id;
+    final profileState = ref.watch(profileNotifierProvider(targetId));
+    final stampsState = ref.watch(
+        profileStampsNotifierProvider(targetId, publicOnly: !isOwnProfile));
 
     return Scaffold(
       body: profileState.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text(e.toString())),
+        loading: () => const LoadingView(),
+        error: (e, _) => ErrorView(message: errorMessage(e)),
         data: (profile) {
           if (profile == null) {
-            return const Center(child: Text('Profile not found'));
+            return const EmptyView(
+              icon: Icons.person_off_outlined,
+              message: 'Profile not found',
+            );
           }
           return CustomScrollView(
             slivers: [
@@ -57,11 +189,18 @@ class ProfileScreen extends ConsumerWidget {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          profile.username,
+                          profile.displayName?.isNotEmpty == true
+                              ? profile.displayName!
+                              : profile.username,
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
                           ),
+                        ),
+                        Text(
+                          '@${profile.username}',
+                          style: const TextStyle(
+                              color: Colors.black54, fontSize: 13),
                         ),
                         if (profile.bio != null && profile.bio!.isNotEmpty)
                           Padding(
@@ -82,19 +221,18 @@ class ProfileScreen extends ConsumerWidget {
                 actions: isOwnProfile
                     ? [
                         IconButton(
-                          icon: const Icon(Icons.settings),
-                          onPressed: () {},
+                          icon: const Icon(Icons.bookmark_border),
+                          tooltip: 'Saved',
+                          onPressed: () => context.push('/saved'),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.logout),
-                          onPressed: () async {
-                            try {
-                              await Supabase.instance.client.auth.signOut();
-                            } catch (e) {
-                              debugPrint('Supabase signout failed: $e');
-                            }
-                            ref.read(devLoggedInProvider.notifier).logout();
-                          },
+                          icon: const Icon(Icons.pin_drop_outlined),
+                          tooltip: 'My check-ins',
+                          onPressed: () => context.push('/check-ins'),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.settings),
+                          onPressed: () => context.push('/settings'),
                         ),
                       ]
                     : null,
@@ -105,12 +243,22 @@ class ProfileScreen extends ConsumerWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
+                      _StatItem(label: 'Stamps', value: profile.stampCount),
                       _StatItem(
-                          label: 'Stamps', value: profile.stampCount),
+                          label: 'Friends',
+                          value: profile.friendCount,
+                          onTap: () =>
+                              context.push('/profile/$targetId/friends')),
                       _StatItem(
-                          label: 'Followers', value: profile.followerCount),
+                          label: 'Followers',
+                          value: profile.followerCount,
+                          onTap: () =>
+                              context.push('/profile/$targetId/followers')),
                       _StatItem(
-                          label: 'Following', value: profile.followingCount),
+                          label: 'Following',
+                          value: profile.followingCount,
+                          onTap: () =>
+                              context.push('/profile/$targetId/following')),
                     ],
                   ),
                 ),
@@ -119,35 +267,61 @@ class ProfileScreen extends ConsumerWidget {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Consumer(builder: (ctx, ref, _) {
-                      final followingAsync = ref.watch(
-                          isFollowingProvider(targetId));
-                      final isFollowing =
-                          followingAsync.valueOrNull ?? false;
-                      return FilledButton(
-                        onPressed: () => ref
-                            .read(profileNotifierProvider(targetId).notifier)
-                            .toggleFollow(targetId),
-                        child: Text(isFollowing ? 'Unfollow' : 'Follow'),
-                      );
-                    }),
+                    child: _SocialButtons(targetId: targetId),
                   ),
                 ),
-              stampsState.when(
+              // A private account hides its stamps until you're an accepted follower or friend.
+              if (!isOwnProfile &&
+                  profile.isPrivate &&
+                  (ref.watch(followStateProvider(targetId)).valueOrNull ??
+                          FollowState.none) !=
+                      FollowState.following &&
+                  (ref.watch(friendStateProvider(targetId)).valueOrNull ??
+                          FriendState.none) !=
+                      FriendState.friends)
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(48),
+                    child: Column(
+                      children: [
+                        Icon(Icons.lock_outline, size: 48, color: Colors.grey),
+                        SizedBox(height: 12),
+                        Text('This account is private',
+                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        SizedBox(height: 4),
+                        Text('Follow to see their stamps',
+                            style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                stampsState.when(
                 loading: () => const SliverToBoxAdapter(
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Padding(
+                    padding: EdgeInsets.all(32),
+                    child: LoadingView(),
+                  ),
                 ),
                 error: (e, _) => SliverToBoxAdapter(
-                  child: Center(child: Text(e.toString())),
+                  child: ErrorView(message: errorMessage(e)),
                 ),
                 data: (stamps) {
                   if (stamps.isEmpty) {
-                    return const SliverToBoxAdapter(
-                      child: Center(
-                        child: Padding(
-                          padding: EdgeInsets.all(32),
-                          child: Text('No public stamps yet'),
-                        ),
+                    return SliverToBoxAdapter(
+                      child: EmptyView(
+                        icon: Icons.auto_awesome_outlined,
+                        message: isOwnProfile
+                            ? 'No stamps yet'
+                            : 'No public stamps yet',
+                        action: isOwnProfile
+                            ? FilledButton.icon(
+                                onPressed: () =>
+                                    context.push('/checkin?mode=stamp'),
+                                icon: const Icon(Icons.add),
+                                label: const Text('Create a stamp'),
+                              )
+                            : null,
                       ),
                     );
                   }
@@ -155,7 +329,16 @@ class ProfileScreen extends ConsumerWidget {
                     padding: const EdgeInsets.all(2),
                     sliver: SliverGrid(
                       delegate: SliverChildBuilderDelegate(
-                        (ctx, i) => _StampGridItem(stamp: stamps[i]),
+                        (ctx, i) {
+                          if (i == stamps.length - 3) {
+                            ref
+                                .read(profileStampsNotifierProvider(targetId,
+                                        publicOnly: !isOwnProfile)
+                                    .notifier)
+                                .loadMore(targetId, publicOnly: !isOwnProfile);
+                          }
+                          return _StampGridItem(stamp: stamps[i]);
+                        },
                         childCount: stamps.length,
                       ),
                       gridDelegate:
@@ -179,18 +362,28 @@ class ProfileScreen extends ConsumerWidget {
 class _StatItem extends StatelessWidget {
   final String label;
   final int value;
-  const _StatItem({required this.label, required this.value});
+  final VoidCallback? onTap;
+  const _StatItem({required this.label, required this.value, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          '$value',
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        child: Column(
+          children: [
+            Text(
+              compactCount(value),
+              style:
+                  const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+            ),
+            Text(label,
+                style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          ],
         ),
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-      ],
+      ),
     );
   }
 }

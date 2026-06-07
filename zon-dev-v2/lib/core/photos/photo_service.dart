@@ -1,4 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+import 'package:dio/dio.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:photo_manager/photo_manager.dart';
@@ -22,6 +25,9 @@ class PhotoService {
 
     final since = DateTime.now().subtract(Duration(days: days));
     final albums = await PhotoManager.getAssetPathList(
+      // Single "all photos" album — avoids the same asset appearing once per
+      // album (Recents/Camera Roll/Favorites…), which caused duplicate uploads.
+      onlyAll: true,
       type: RequestType.image,
       filterOption: FilterOptionGroup(
         updateTimeCond: DateTimeCond(min: since, max: DateTime.now()),
@@ -41,16 +47,13 @@ class PhotoService {
     return results;
   }
 
-  /// Upload a photo to Supabase Storage and return its public URL.
-  Future<String?> uploadPhoto(AssetEntity asset) async {
+  /// Compress + upload a local image file to a Supabase Storage [bucket];
+  /// returns the public URL. Files are namespaced under the user's id (RLS).
+  Future<String?> uploadFile(File file, {String bucket = 'photos'}) async {
     try {
-      final file = await asset.originFile;
-      if (file == null) return null;
-
       final userId = Supabase.instance.client.auth.currentUser?.id;
       if (userId == null) return null;
 
-      // Compress before upload
       final tmpDir = await getTemporaryDirectory();
       final compressed = await FlutterImageCompress.compressAndGetFile(
         file.absolute.path,
@@ -64,42 +67,51 @@ class PhotoService {
       final filename = '$userId/${_uuid.v4()}.jpg';
 
       await Supabase.instance.client.storage
-          .from('photos')
+          .from(bucket)
           .upload(filename, uploadFile);
 
-      final url = Supabase.instance.client.storage
-          .from('photos')
+      return Supabase.instance.client.storage
+          .from(bucket)
           .getPublicUrl(filename);
-
-      return url;
     } catch (_) {
       return null;
     }
   }
 
-  /// Process a single asset: upload it and call ingest-photo-exif edge function.
-  Future<void> processAsset(AssetEntity asset) async {
-    final latLng = await asset.latlngAsync();
-    if (latLng == null) return;
-    if (latLng.latitude == 0.0 && latLng.longitude == 0.0) return;
-
-    final url = await uploadPhoto(asset);
-    if (url == null) return;
-
-    final session = Supabase.instance.client.auth.currentSession;
-    if (session == null) return;
-
-    await Supabase.instance.client.functions.invoke(
-      'ingest-photo-exif',
-      body: {
-        'storage_url': url,
-        'exif_lat': latLng.latitude,
-        'exif_lng': latLng.longitude,
-        'exif_taken_at': (asset.createDateTime).toIso8601String(),
-        'width': asset.width,
-        'height': asset.height,
-      },
-      headers: {'Authorization': 'Bearer ${session.accessToken}'},
-    );
+  /// Download [url], compress to ≤ 512 px, and return a base64-encoded JPEG
+  /// string. The resized bytes are never written to disk or stored — they exist
+  /// only in memory for the duration of the LLM call.
+  ///
+  /// Returns null on any network or compression failure.
+  static Future<String?> resizeForLlm(String url) async {
+    try {
+      final response = await Dio().get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = response.data;
+      if (bytes == null || bytes.isEmpty) return null;
+      final compressed = await FlutterImageCompress.compressWithList(
+        Uint8List.fromList(bytes),
+        minWidth: 512,
+        minHeight: 512,
+        quality: 75,
+        format: CompressFormat.jpeg,
+      );
+      return base64Encode(compressed);
+    } catch (_) {
+      return null;
+    }
   }
+
+  /// Geotagged photos taken *today* — the basis for check-in suggestions.
+  Future<List<AssetEntity>> getNewPhotosToday() async {
+    final all = await getPhotosWithLocation(days: 1);
+    final now = DateTime.now();
+    return all.where((a) {
+      final d = a.createDateTime;
+      return d.year == now.year && d.month == now.month && d.day == now.day;
+    }).toList();
+  }
+
 }

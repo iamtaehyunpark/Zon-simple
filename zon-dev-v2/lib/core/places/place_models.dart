@@ -7,7 +7,7 @@ class PlaceResult {
   final double lat;
   final double lng;
   final List<String> categories;
-  final String externalSource; // 'kakao' | 'naver' | 'google_places' | 'mapbox'
+  final String externalSource; // 'kakao' | 'google_places'
 
   const PlaceResult({
     required this.placeId,
@@ -29,9 +29,6 @@ class PlaceResult {
         'external_source': externalSource,
       };
 }
-
-/// Which place provider is active for a given coordinate.
-enum PlaceProvider { kakao, naver, google }
 
 /// Korea bounding box (roughly). Used for auto-detection.
 bool isKorea(double lat, double lng) =>
