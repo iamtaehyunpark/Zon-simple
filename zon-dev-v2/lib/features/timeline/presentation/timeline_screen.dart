@@ -323,50 +323,57 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     ]..sort((a, b) => a.time.compareTo(b.time));
 
     // Proximity check:
-    // If the auto check-in is close enough to any manual check-in or stamp on the same day,
-    // or to any already-displayed auto check-in, do not show it in the list.
+    // Only filter out an auto check-in if it is close (< 80m) to the immediately preceding
+    // location node (indicating a continuous stay) or close to the immediately succeeding
+    // manual/stamp node (preventing double entries for a manual check-in).
     final filtered = <_TlItem>[];
-    for (final item in items) {
+    for (int i = 0; i < items.length; i++) {
+      final item = items[i];
       if (item.isAuto) {
-        // Check if close to any manual check-in or stamp today
-        bool closeToManual = false;
-        for (final other in items) {
-          if (!other.isAuto && !other.isNote) {
-            if (other.lat != null && other.lng != null && item.lat != null && item.lng != null) {
-              final dist = Geolocator.distanceBetween(
-                item.lat!,
-                item.lng!,
-                other.lat!,
-                other.lng!,
-              );
-              if (dist < 80) {
-                closeToManual = true;
-                break;
-              }
-            }
+        // Find nearest preceding location-based item
+        _TlItem? prevLoc;
+        for (int j = i - 1; j >= 0; j--) {
+          if (!items[j].isNote && items[j].lat != null && items[j].lng != null) {
+            prevLoc = items[j];
+            break;
           }
         }
-        if (closeToManual) continue;
 
-        // Also check if close to any previously added auto check-in today to deduplicate
-        bool closeToPrevAuto = false;
-        for (final prev in filtered) {
-          if (prev.isAuto) {
-            if (prev.lat != null && prev.lng != null && item.lat != null && item.lng != null) {
-              final dist = Geolocator.distanceBetween(
-                item.lat!,
-                item.lng!,
-                prev.lat!,
-                prev.lng!,
-              );
-              if (dist < 80) {
-                closeToPrevAuto = true;
-                break;
-              }
-            }
+        // Find nearest succeeding location-based item
+        _TlItem? nextLoc;
+        for (int j = i + 1; j < items.length; j++) {
+          if (!items[j].isNote && items[j].lat != null && items[j].lng != null) {
+            nextLoc = items[j];
+            break;
           }
         }
-        if (closeToPrevAuto) continue;
+
+        bool shouldSkip = false;
+        if (prevLoc != null && item.lat != null && item.lng != null) {
+          final dist = Geolocator.distanceBetween(
+            item.lat!,
+            item.lng!,
+            prevLoc.lat!,
+            prevLoc.lng!,
+          );
+          if (dist < 80) {
+            shouldSkip = true;
+          }
+        }
+
+        if (!shouldSkip && nextLoc != null && !nextLoc.isAuto && item.lat != null && item.lng != null) {
+          final dist = Geolocator.distanceBetween(
+            item.lat!,
+            item.lng!,
+            nextLoc.lat!,
+            nextLoc.lng!,
+          );
+          if (dist < 80) {
+            shouldSkip = true;
+          }
+        }
+
+        if (shouldSkip) continue;
       }
       filtered.add(item);
     }
