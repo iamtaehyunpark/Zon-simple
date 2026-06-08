@@ -99,6 +99,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   // Nearby hot list state (Phase E)
   List<PlaceStat> _nearbyPlaces = [];
   bool _nearbyLoading = false;
+  bool _nearbyLoaded = false;
 
   double _sheetExtent = 0.26;
   late final DraggableScrollableController _sheetController = DraggableScrollableController();
@@ -288,6 +289,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     setState(() {
       _nearbyPlaces = places;
       _nearbyLoading = false;
+      _nearbyLoaded = true;
     });
     // Phase C: draw hot-place circles on the map
     final map = _map;
@@ -611,6 +613,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _centerOnUserInitial(pos);
       _drawLive();
       _maybeBroadcast(pos);
+      if (!_nearbyLoaded && !_nearbyLoading) {
+        _loadNearbyPlaces();
+      }
     });
 
     // Friend locations: subscribe to Realtime stream
@@ -1098,7 +1103,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                               )
                             else
                               SizedBox(
-                                height: 96,
+                                height: 100,
                                 child: ListView.builder(
                                   scrollDirection: Axis.horizontal,
                                   padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -1315,7 +1320,7 @@ class _NearbyCard extends StatelessWidget {
       child: Container(
         width: 140,
         margin: const EdgeInsets.only(right: 8),
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
           color: Z.surface1,
           border: Border.all(color: Z.outline),
