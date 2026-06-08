@@ -298,27 +298,27 @@ class _GroupPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Hero photo (full-width) ───────────────────────────────────────
-          if (group.assets.isNotEmpty)
-            _HeroPhotoSlider(assets: group.assets),
-
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-            child: Text(
-              '${group.assets.length} photo${group.assets.length == 1 ? '' : 's'} · '
-              '${DateFormat('EEE, MMM d · h:mm a').format(group.takenAt)}',
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          // ── Photo thumbnails ──────────────────────────────────────────────
+          SizedBox(
+            height: 110,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: group.assets.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 6),
+              itemBuilder: (_, i) => _AssetThumb(asset: group.assets[i]),
             ),
           ),
+          const SizedBox(height: 6),
+          Text(
+            '${group.assets.length} photo${group.assets.length == 1 ? '' : 's'} · '
+            '${DateFormat('EEE, MMM d · h:mm a').format(group.takenAt)}',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
           const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
 
           // ── Place name ────────────────────────────────────────────────────
           PlaceSearchField(
@@ -388,67 +388,8 @@ class _GroupPage extends StatelessWidget {
                     side: const BorderSide(color: Colors.red)),
               ),
             ),
-          const SizedBox(height: 24),
-              ],
-            ),
-          ),
         ],
       ),
-    );
-  }
-}
-
-// ── Hero photo slider (full-width, photo-first) ───────────────────────────────
-class _HeroPhotoSlider extends StatefulWidget {
-  final List<AssetEntity> assets;
-  const _HeroPhotoSlider({required this.assets});
-
-  @override
-  State<_HeroPhotoSlider> createState() => _HeroPhotoSliderState();
-}
-
-class _HeroPhotoSliderState extends State<_HeroPhotoSlider> {
-  int _index = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        SizedBox(
-          height: 280,
-          child: PageView.builder(
-            itemCount: widget.assets.length,
-            onPageChanged: (i) => setState(() => _index = i),
-            itemBuilder: (_, i) => _AssetThumb(
-              asset: widget.assets[i],
-              fit: BoxFit.cover,
-              height: 280,
-            ),
-          ),
-        ),
-        if (widget.assets.length > 1)
-          Positioned(
-            bottom: 10,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                for (int i = 0; i < widget.assets.length; i++)
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: i == _index ? 10 : 6,
-                    height: i == _index ? 10 : 6,
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: i == _index ? Colors.white : Colors.white54,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-      ],
     );
   }
 }
@@ -457,13 +398,7 @@ class _HeroPhotoSliderState extends State<_HeroPhotoSlider> {
 
 class _AssetThumb extends StatefulWidget {
   final AssetEntity asset;
-  final BoxFit fit;
-  final double? height;
-  const _AssetThumb({
-    required this.asset,
-    this.fit = BoxFit.cover,
-    this.height,
-  });
+  const _AssetThumb({required this.asset});
 
   @override
   State<_AssetThumb> createState() => _AssetThumbState();
@@ -475,27 +410,26 @@ class _AssetThumbState extends State<_AssetThumb> {
   @override
   void initState() {
     super.initState();
-    final sz = widget.height != null ? 600 : 220;
-    _future = widget.asset.thumbnailDataWithSize(ThumbnailSize(sz, sz));
+    _future = widget.asset.thumbnailDataWithSize(const ThumbnailSize(220, 220));
   }
 
   @override
   Widget build(BuildContext context) {
-    final h = widget.height ?? 110.0;
     return FutureBuilder<Uint8List?>(
       future: _future,
       builder: (_, snap) {
         if (snap.data == null) {
           return Container(
-            width: widget.height != null ? double.infinity : h,
-            height: h,
-            color: Colors.grey[200],
-          );
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                  color: Colors.grey[200],
+                  borderRadius: BorderRadius.circular(8)));
         }
-        return SizedBox(
-          width: widget.height != null ? double.infinity : h,
-          height: h,
-          child: Image.memory(snap.data!, fit: widget.fit),
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Image.memory(snap.data!,
+              width: 110, height: 110, fit: BoxFit.cover),
         );
       },
     );
