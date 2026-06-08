@@ -62,6 +62,29 @@ class StampRepository with BaseRepository {
     }
   }
 
+  Future<Either<AppException, List<Stamp>>> getMyStampsForRange({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    try {
+      final userId = this.userId;
+      if (userId == null) return left(const AuthError('Unauthorized'));
+      final data = await client
+          .from('stamps')
+          .select()
+          .eq('user_id', userId)
+          .gte('visited_at', from.toIso8601String())
+          .lt('visited_at', to.toIso8601String())
+          .order('visited_at', ascending: false);
+      return right((data as List)
+          .map((r) => _fromRow(r as Map<String, dynamic>))
+          .toList());
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+
   /// Public stamps from people the user follows within [from, to) (map layer).
   Future<Either<AppException, List<Stamp>>> getFollowingStamps({
     required DateTime from,
@@ -156,7 +179,7 @@ Future<Either<AppException, List<Stamp>>> getUserStamps(
   Future<Either<AppException, Stamp>> getStamp(String id) async {
     try {
       final data = await client
-          .from('stamps')
+          .from('v_feed_stamps')
           .select()
           .eq('id', id)
           .single();

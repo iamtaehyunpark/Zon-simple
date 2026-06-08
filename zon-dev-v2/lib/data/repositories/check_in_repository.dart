@@ -98,6 +98,29 @@ class CheckInRepository with BaseRepository {
     }
   }
 
+  Future<Either<AppException, List<CheckIn>>> getMyCheckInsForRange({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    try {
+      final userId = this.userId;
+      if (userId == null) return left(const AuthError('Unauthorized'));
+      final data = await client
+          .from('check_ins')
+          .select()
+          .eq('user_id', userId)
+          .gte('visited_at', from.toIso8601String())
+          .lt('visited_at', to.toIso8601String())
+          .order('visited_at', ascending: false);
+      return right((data as List)
+          .map((r) => _fromRow(r as Map<String, dynamic>))
+          .toList());
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+
   Future<Either<AppException, List<CheckIn>>> getMyCheckIns({
     int limit = 50,
     int offset = 0,
@@ -391,6 +414,10 @@ class CheckInRepository with BaseRepository {
 
   Future<void> deletePhoto(String photoId) async {
     await client.from('photos').delete().eq('id', photoId);
+  }
+
+  Future<void> deletePhotoByUrl(String url) async {
+    await client.from('photos').delete().eq('storage_url', url);
   }
 
   /// Day-of-month → visit count for [month] (for the calendar badges).

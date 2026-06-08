@@ -74,8 +74,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   // Friend live locations (Snap Map layer)
   List<FriendLocation> _friendLocations = [];
-  Map<String, Offset> _friendScreenPos = {}; // userId → screen offset
-  Timer? _positionTimer;
+  final ValueNotifier<Map<String, Offset>> _friendScreenPosNotifier = ValueNotifier({});
 
   // Location broadcasting state
   DateTime? _lastBroadcast;
@@ -102,6 +101,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   bool _nearbyLoading = false;
 
   double _sheetExtent = 0.26;
+  late final DraggableScrollableController _sheetController = DraggableScrollableController();
+  Timer? _legendTimer;
+  bool _showLegend = false;
 
   double get _sessionDistanceKm {
     final path = ref.read(gpsNotifierProvider.notifier).sessionPath;
@@ -113,11 +115,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       totalMeters += geo.Geolocator.distanceBetween(p1[1], p1[0], p2[1], p2[0]);
     }
     return totalMeters / 1000.0;
-  }
-
-  DateTime get _today {
-    final n = DateTime.now();
-    return DateTime(n.year, n.month, n.day);
   }
 
   (DateTime, DateTime) _filterRange() {
@@ -148,9 +145,25 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   void dispose() {
-    _positionTimer?.cancel();
+    _sheetController.dispose();
+    _friendScreenPosNotifier.dispose();
+    _legendTimer?.cancel();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onMapTouch() {
+    _legendTimer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _showLegend = true;
+    });
+    _legendTimer = Timer(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      setState(() {
+        _showLegend = false;
+      });
+    });
   }
 
   // ── Data loading ──────────────────────────────────────────────────────────
@@ -164,8 +177,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
     final (myStamps, myCheckIns, followedStamps, followedCheckIns, saved) =
         await (
-      stampRepo.getMyStampsForDay(_today),
-      checkInRepo.getForDay(_today),
+      stampRepo.getMyStampsForRange(from: from, to: to),
+      checkInRepo.getMyCheckInsForRange(from: from, to: to),
       stampRepo.getFollowingStamps(from: from, to: to),
       checkInRepo.getFollowingPublicCheckIns(),
       stampRepo.getSavedStamps(),
@@ -305,26 +318,36 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _clearSearchLayer();
   }
 
+  bool _hasCenteredOnUser = false;
+
+  void _centerOnUserInitial(geo.Position pos) {
+    if (_hasCenteredOnUser || _map == null) return;
+    _hasCenteredOnUser = true;
+    _map?.flyTo(
+      CameraOptions(
+        center: Point(
+          coordinates: Position(pos.longitude, pos.latitude),
+        ),
+        zoom: 14.0,
+      ),
+      MapAnimationOptions(duration: 800),
+    );
+  }
+
   // ── Friend avatar overlay ─────────────────────────────────────────────────
 
   void _onFriendLocationsChanged(List<FriendLocation> locations) {
     if (!mounted) return;
     setState(() => _friendLocations = locations.where((f) => !f.isStale).toList());
-    _startPositionTimer();
     _updateFriendScreenPositions();
-  }
-
-  void _startPositionTimer() {
-    if (_positionTimer?.isActive == true) return;
-    _positionTimer = Timer.periodic(const Duration(milliseconds: 200), (_) {
-      if (!mounted || _friendLocations.isEmpty) return;
-      _updateFriendScreenPositions();
-    });
   }
 
   Future<void> _updateFriendScreenPositions() async {
     final map = _map;
-    if (map == null || _friendLocations.isEmpty) return;
+    if (map == null || _friendLocations.isEmpty) {
+      _friendScreenPosNotifier.value = const {};
+      return;
+    }
     final positions = <String, Offset>{};
     for (final fl in _friendLocations) {
       try {
@@ -334,7 +357,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         positions[fl.userId] = Offset(sc.x, sc.y);
       } catch (_) {}
     }
-    if (mounted) setState(() => _friendScreenPos = positions);
+    _friendScreenPosNotifier.value = positions;
   }
 
   // ── Location broadcasting ─────────────────────────────────────────────────
@@ -574,21 +597,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final pos = ref.watch(gpsNotifierProvider).valueOrNull;
     final bottomPad = MediaQuery.of(context).padding.bottom;
     final mapScreenHeight = MediaQuery.of(context).size.height - 83 - bottomPad;
+    final paddingTop = MediaQuery.of(context).padding.top;
+    final maxSheetSize = mapScreenHeight > 0
+        ? (1.0 - (paddingTop + 130) / mapScreenHeight).clamp(0.6, 0.85)
+        : 0.8;
     // GPS: draw live route + broadcast position
     ref.listen(gpsNotifierProvider, (previous, next) {
       final pos = next.valueOrNull;
       if (pos == null) return;
-      if (previous?.valueOrNull == null) {
-        _map?.flyTo(
-          CameraOptions(
-            center: Point(coordinates: Position(pos.longitude, pos.latitude)),
-            zoom: 14.0,
-          ),
-          MapAnimationOptions(duration: 800),
-        );
-      }
+      _centerOnUserInitial(pos);
       _drawLive();
       _maybeBroadcast(pos);
     });
@@ -602,50 +622,83 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     // Ghost Mode indicator
     final ghostMode = ref.watch(ghostModeProvider).valueOrNull ?? false;
 
-    final pos = ref.watch(gpsNotifierProvider).valueOrNull;
-
-
     return Scaffold(
       body: Stack(
         children: [
           // ── Mapbox base ─────────────────────────────────────────────
-          MapWidget(
-            key: const ValueKey('mapbox-map'),
-            viewport: CameraViewportState(
-              center: Point(
-                coordinates: Position(
-                  pos?.longitude ?? 126.9780,
-                  pos?.latitude ?? 37.5665,
+          Positioned.fill(
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (_) => _onMapTouch(),
+              child: MapWidget(
+                key: const ValueKey("mapWidget"),
+                styleUri: MapboxStyles.MAPBOX_STREETS,
+                textureView: true,
+                // ignore: deprecated_member_use
+                cameraOptions: CameraOptions(
+                  center: Point(
+                    coordinates: Position(
+                      pos?.longitude ?? 126.9780,
+                      pos?.latitude ?? 37.5665,
+                    ),
+                  ),
+                  zoom: 13.0,
                 ),
+                onCameraChangeListener: (data) {
+                  _updateFriendScreenPositions();
+                },
+                onStyleLoadedListener: (styleLoadedEventData) {
+                  final posVal = ref.read(gpsNotifierProvider).valueOrNull;
+                  if (posVal != null) {
+                    _centerOnUserInitial(posVal);
+                  }
+                },
+                onMapCreated: (controller) {
+                  _map = controller;
+                  controller.addInteraction(TapInteraction.onMap(_onMapTap));
+                  _updateLayers();
+                  
+                  // Center camera immediately if location is already resolved
+                  final posVal = ref.read(gpsNotifierProvider).valueOrNull;
+                  if (posVal != null) {
+                    _centerOnUserInitial(posVal);
+                  }
+                  
+                  _updateFriendScreenPositions();
+                },
               ),
-              zoom: 13.0,
             ),
-            onMapCreated: (controller) {
-              _map = controller;
-              controller.addInteraction(TapInteraction.onMap(_onMapTap));
-              _updateLayers();
-              _updateFriendScreenPositions();
-            },
           ),
 
           // ── Friend avatar bubbles ───────────────────────────────────
-          for (final entry in _friendScreenPos.entries)
-            Builder(builder: (ctx) {
-              final fl = _find(_friendLocations, (f) => f.userId == entry.key);
-              if (fl == null) return const SizedBox.shrink();
-              return Positioned(
-                left: entry.value.dx - 28,
-                top: entry.value.dy - 80,
-                child: _FriendBubble(
-                  location: fl,
-                  onTap: () => _showFriendSheet(fl.userId),
-                ),
+          ValueListenableBuilder<Map<String, Offset>>(
+            valueListenable: _friendScreenPosNotifier,
+            builder: (ctx, positions, _) {
+              final bubbles = <Widget>[];
+              for (final entry in positions.entries) {
+                final fl = _find(_friendLocations, (f) => f.userId == entry.key);
+                if (fl != null) {
+                  bubbles.add(
+                    Positioned(
+                      left: entry.value.dx - 28,
+                      top: entry.value.dy - 80,
+                      child: _FriendBubble(
+                        location: fl,
+                        onTap: () => _showFriendSheet(fl.userId),
+                      ),
+                    ),
+                  );
+                }
+              }
+              return Stack(
+                children: bubbles,
               );
-            }),
+            },
+          ),
 
           // ── Phase A: Search bar ─────────────────────────────────────
           Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
+            top: MediaQuery.of(context).padding.top + 16,
             left: 16,
             right: 16,
             child: Column(
@@ -749,7 +802,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           // ── Phase B: Category filter chips ─────────────────────────
           if (!_searchActive)
             Positioned(
-              top: MediaQuery.of(context).padding.top + 64,
+              top: MediaQuery.of(context).padding.top + 76,
               left: 0,
               right: 0,
               child: SingleChildScrollView(
@@ -833,6 +886,67 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
           ),
 
+          // ── Map Legend ──
+          Positioned(
+            bottom: _sheetExtent * mapScreenHeight + 56,
+            left: 16,
+            child: AnimatedOpacity(
+              opacity: _showLegend ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: IgnorePointer(
+                ignoring: !_showLegend,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Z.surface1.withValues(alpha: 0.75),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Z.outline.withValues(alpha: 0.75)),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x0A000000),
+                        blurRadius: 6,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const _LegendRow(color: kBrandPurple, label: 'My stamps'),
+                      const SizedBox(height: 4),
+                      const _LegendRow(color: Color(_kCheckinBlue), label: 'My check-ins'),
+                      const SizedBox(height: 4),
+                      const _LegendRow(color: Color(_kFollowedOrange), label: 'Following stamps'),
+                      const SizedBox(height: 4),
+                      const _LegendRow(color: Color(_kFollowedCheckinPink), label: 'Stories (24h)'),
+                      if (_friendLocations.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        _LegendRow(
+                          color: Colors.purple[300]!,
+                          label: 'Friends live (${_friendLocations.length})',
+                          isCircleAvatar: true,
+                        ),
+                      ],
+                      if (ghostMode) ...[
+                        const SizedBox(height: 4),
+                        const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.visibility_off, size: 12, color: Z.textMuted),
+                            SizedBox(width: 4),
+                            Text('Ghost mode', style: TextStyle(fontSize: 10, color: Z.textMuted)),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           NotificationListener<DraggableScrollableNotification>(
             onNotification: (notification) {
               setState(() {
@@ -841,75 +955,111 @@ class _MapScreenState extends ConsumerState<MapScreen> {
               return true;
             },
             child: DraggableScrollableSheet(
-            initialChildSize: 0.26,
-            minChildSize: 0.17,
-            maxChildSize: 0.52,
-            snap: true,
-            snapSizes: const [0.26, 0.52],
-            builder: (ctx, scrollCtrl) {
-              final scheme = Theme.of(context).colorScheme;
-              return Container(
-                decoration: BoxDecoration(
-                  color: scheme.surface,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(20)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 10,
-                      offset: const Offset(0, -2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    // Handle
-                    Center(
-                      child: Container(
-                        margin: const EdgeInsets.only(top: 8, bottom: 4),
-                        width: 40,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: scheme.outlineVariant,
-                          borderRadius: BorderRadius.circular(2),
-                        ),
+              controller: _sheetController,
+              initialChildSize: 0.26,
+              minChildSize: 0.09,
+              maxChildSize: maxSheetSize,
+              snap: true,
+              snapSizes: [0.09, 0.26, 0.52, maxSheetSize],
+              builder: (ctx, scrollCtrl) {
+                final scheme = Theme.of(context).colorScheme;
+                return Container(
+                  decoration: BoxDecoration(
+                    color: scheme.surface,
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(20)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.1),
+                        blurRadius: 10,
+                        offset: const Offset(0, -2),
                       ),
-                    ),
-                    // Filter chips row
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onVerticalDragUpdate: (details) {
+                          final screenHeight = MediaQuery.of(context).size.height;
+                          if (screenHeight > 0) {
+                            final currentSize = _sheetController.size;
+                            final delta = details.primaryDelta ?? 0.0;
+                            final newSize = currentSize - (delta / screenHeight);
+                            _sheetController.jumpTo(newSize.clamp(0.09, maxSheetSize));
+                          }
+                        },
+                        onVerticalDragEnd: (details) {
+                          final currentSize = _sheetController.size;
+                          final targets = [0.09, 0.26, 0.52, maxSheetSize];
+                          double closestTarget = targets.first;
+                          double minDistance = (currentSize - closestTarget).abs();
+                          for (final target in targets) {
+                            final dist = (currentSize - target).abs();
+                            if (dist < minDistance) {
+                              minDistance = dist;
+                              closestTarget = target;
+                            }
+                          }
+                          _sheetController.animateTo(
+                            closestTarget,
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOutCubic,
+                          );
+                        },
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            for (final f in [
-                              MapFilter.today,
-                              MapFilter.week,
-                              MapFilter.month,
-                              MapFilter.all,
-                            ])
-                              Padding(
-                                padding: const EdgeInsets.only(right: 6),
-                                child: _SheetChip(
-                                  label: f.label,
-                                  selected: !_savedOnly && _filter == f,
-                                  onTap: () {
-                                    if (_savedOnly) setState(() => _savedOnly = false);
-                                    _onFilterTap(f);
-                                  },
+                            // Handle
+                            Center(
+                              child: Container(
+                                margin: const EdgeInsets.only(top: 8, bottom: 4),
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: scheme.outlineVariant,
+                                  borderRadius: BorderRadius.circular(2),
                                 ),
                               ),
-                            _SheetChip(
-                              label: 'Saved',
-                              selected: _savedOnly,
-                              onTap: _toggleSaved,
-                              icon: Icons.bookmark,
+                            ),
+                            // Filter chips row
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    for (final f in [
+                                      MapFilter.today,
+                                      MapFilter.week,
+                                      MapFilter.month,
+                                      MapFilter.all,
+                                    ])
+                                      Padding(
+                                        padding: const EdgeInsets.only(right: 6),
+                                        child: _SheetChip(
+                                          label: f.label,
+                                          selected: !_savedOnly && _filter == f,
+                                          onTap: () {
+                                            if (_savedOnly) setState(() => _savedOnly = false);
+                                            _onFilterTap(f);
+                                          },
+                                        ),
+                                      ),
+                                    _SheetChip(
+                                      label: 'Saved',
+                                      selected: _savedOnly,
+                                      onTap: _toggleSaved,
+                                      icon: Icons.bookmark,
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                    const Divider(height: 1, color: Z.outline),
+                      const Divider(height: 1, color: Z.outline),
                     // Scrollable content
                     Expanded(
                       child: ListView(
@@ -948,7 +1098,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                               )
                             else
                               SizedBox(
-                                height: 80,
+                                height: 96,
                                 child: ListView.builder(
                                   scrollDirection: Axis.horizontal,
                                   padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -976,49 +1126,80 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             const SizedBox(height: 8),
                             const Divider(height: 1, color: Z.outline),
                           ],
-                          // ── Map legend ──────────────────────────────────
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const _LegendRow(color: kBrandPurple, label: 'My stamps'),
-                                const SizedBox(height: 6),
-                                const _LegendRow(
-                                    color: Color(_kCheckinBlue),
-                                    label: 'My check-ins'),
-                                const SizedBox(height: 6),
-                                const _LegendRow(
-                                    color: Color(_kFollowedOrange),
-                                    label: 'Following stamps'),
-                                const SizedBox(height: 6),
-                                const _LegendRow(
-                                    color: Color(_kFollowedCheckinPink),
-                                    label: 'Stories (24h)'),
-                                if (_friendLocations.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  _LegendRow(
-                                    color: Colors.purple[300]!,
-                                    label: 'Friends live (${_friendLocations.length})',
-                                    isCircleAvatar: true,
-                                  ),
-                                ],
-                                if (ghostMode) ...[
-                                  const SizedBox(height: 8),
-                                  const Row(
-                                    children: [
-                                      Icon(Icons.visibility_off,
-                                          size: 14, color: Z.textMuted),
-                                      SizedBox(width: 6),
-                                      Text('Ghost mode on',
-                                          style: TextStyle(
-                                              fontSize: 12, color: Z.textMuted)),
-                                    ],
-                                  ),
-                                ],
-                              ],
+                          // ── Trending nearby section ─────────────────────
+                          if (_nearbyPlaces.isNotEmpty || _nearbyLoading) ...[
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
+                              child: Text(
+                                'Trending nearby',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: Z.textMuted,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
                             ),
-                          ),
+                            if (_nearbyLoading)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 12),
+                                child: Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Z.brand,
+                                  ),
+                                ),
+                              )
+                            else
+                              Column(
+                                children: [
+                                  for (int i = 0; i < _nearbyPlaces.length; i++) ...[
+                                    Builder(builder: (ctx) {
+                                      final place = _nearbyPlaces[i];
+                                      final pos = ref.watch(gpsNotifierProvider).valueOrNull;
+                                      final distM = pos != null
+                                          ? geo.Geolocator.distanceBetween(
+                                              pos.latitude,
+                                              pos.longitude,
+                                              place.lat,
+                                              place.lng,
+                                            )
+                                          : 0.0;
+                                      final distStr = distM < 1000
+                                          ? '${distM.round()}m'
+                                          : '${(distM / 1000.0).toStringAsFixed(1)}km';
+                                      return _TrendingRow(
+                                        place: place,
+                                        index: i,
+                                        distance: distStr,
+                                        onTap: () {
+                                          _map?.flyTo(
+                                            CameraOptions(
+                                              center: Point(
+                                                coordinates: Position(
+                                                  place.lng,
+                                                  place.lat,
+                                                ),
+                                              ),
+                                              zoom: 16.0,
+                                            ),
+                                            MapAnimationOptions(duration: 400),
+                                          );
+                                          context.push('/place/${place.placeId}');
+                                        },
+                                      );
+                                    }),
+                                    if (i < _nearbyPlaces.length - 1)
+                                      const Divider(
+                                        height: 1,
+                                        indent: 16,
+                                        endIndent: 16,
+                                        color: Z.outline,
+                                      ),
+                                  ],
+                                ],
+                              ),
+                          ],
                         ],
                       ),
                     ),
@@ -1028,26 +1209,34 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             },
           ),
         ),
+
+        // ── Locate Me Button ──
+        Positioned(
+          bottom: _sheetExtent * mapScreenHeight + 12,
+          right: 16,
+          child: FloatingActionButton.small(
+            heroTag: 'locate-me',
+            tooltip: 'My location',
+            elevation: 4,
+            backgroundColor: Z.surface1,
+            foregroundColor: Z.text,
+            onPressed: () {
+              final p = ref.read(gpsNotifierProvider).valueOrNull;
+              if (p != null) {
+                _map?.flyTo(
+                  CameraOptions(
+                    center: Point(coordinates: Position(p.longitude, p.latitude)),
+                    zoom: 15.0,
+                  ),
+                  MapAnimationOptions(duration: 500),
+                );
+              }
+            },
+            child: const Icon(Icons.my_location),
+          ),
+        ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.small(
-        heroTag: 'locate-me',
-        tooltip: 'My location',
-        onPressed: () {
-          final p = ref.read(gpsNotifierProvider).valueOrNull;
-          if (p != null) {
-            _map?.flyTo(
-              CameraOptions(
-                center: Point(coordinates: Position(p.longitude, p.latitude)),
-                zoom: 15.0,
-              ),
-              MapAnimationOptions(duration: 500),
-            );
-          }
-        },
-        child: const Icon(Icons.my_location),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
@@ -1464,3 +1653,89 @@ class _CheckInSheet extends StatelessWidget {
     );
   }
 }
+
+// ── Trending Row ──────────────────────────────────────────────────────────────
+
+class _TrendingRow extends StatelessWidget {
+  final PlaceStat place;
+  final int index;
+  final String distance;
+  final VoidCallback onTap;
+
+  const _TrendingRow({
+    required this.place,
+    required this.index,
+    required this.distance,
+    required this.onTap,
+  });
+
+  String get _category {
+    final name = place.name.toLowerCase();
+    if (name.contains('café') || name.contains('cafe') || name.contains('coffee')) return 'Café';
+    if (name.contains('restaurant') || name.contains('food') || name.contains('eat') || name.contains('pasta') || name.contains('bar') || name.contains('pub')) return 'Dining';
+    if (name.contains('park') || name.contains('nature') || name.contains('garden')) return 'Nature';
+    if (name.contains('art') || name.contains('museum') || name.contains('gallery')) return 'Art';
+    if (name.contains('shop') || name.contains('market') || name.contains('store')) return 'Retail';
+    return 'Place';
+  }
+
+  String get _scoreText {
+    if (index == 0) return '🔥 Hot';
+    if (index == 1) return '⬆ Rising';
+    return 'New';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    place.name,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Z.text,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$_category · $distance · ${place.stampCount} stamps',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Z.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Z.brandSoft,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                _scoreText,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Z.brand,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

@@ -63,14 +63,14 @@ class GpsNotifier extends _$GpsNotifier {
     _sessionId++;
 
     sessionPath.clear();
-    final batcher = ref.read(locationBatcherProvider);
+    bool isFirstPosition = true;
     _sub = service.startTracking().listen(
       (position) {
         state = AsyncValue.data(position);
         _lastLat = position.latitude;
         _lastLng = position.longitude;
         sessionPath.add([position.longitude, position.latitude]);
-        batcher.add(RawLocationEvent(
+        ref.read(locationBatcherProvider).add(RawLocationEvent(
           id: _uuid.v4(),
           userId: '',
           lat: position.latitude,
@@ -79,6 +79,11 @@ class GpsNotifier extends _$GpsNotifier {
           source: LocationSource.gps,
           capturedAt: DateTime.now(),
         ));
+
+        if (isFirstPosition) {
+          isFirstPosition = false;
+          _addAutoCheckIn(position.latitude, position.longitude);
+        }
       },
       onError: (e) => state = AsyncError(e, StackTrace.current),
     );
@@ -100,19 +105,73 @@ class GpsNotifier extends _$GpsNotifier {
     final lat = _lastLat, lng = _lastLng;
     if (lat == null || lng == null) return;
 
-    final repo = ref.read(checkInRepositoryProvider);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final res = await repo.getForDay(today);
-    final todays = res.fold((_) => const <CheckIn>[], (l) => l);
-
     // If a new session started while we were awaiting, abort — we'd be
     // anchoring in the middle of a live session, not at its end.
     if (_sessionId != sessionAtStop) return;
 
-    final nearbyToday = todays.any((c) =>
-        Geolocator.distanceBetween(c.lat, c.lng, lat, lng) < _kMinAnchorGapM);
-    if (nearbyToday) return;
+    await _addAutoCheckIn(lat, lng, sessionAtStop: sessionAtStop);
+  }
+
+  Future<void> _addAutoCheckIn(double lat, double lng, {int? sessionAtStop}) async {
+    final repo = ref.read(checkInRepositoryProvider);
+    final userId = repo.currentUserId;
+    if (userId == null) return;
+
+    if (sessionAtStop != null && _sessionId != sessionAtStop) return;
+
+    // Proximity check:
+    // If the current location is close enough to the day's last check-in/stamp, it should not be added.
+    try {
+      final now = DateTime.now();
+      final startOfToday = DateTime.utc(now.year, now.month, now.day).toIso8601String();
+
+      // Fetch latest check-in and stamp for today concurrently.
+      final (latestCheckIns, latestStamps) = await (
+        repo.client
+            .from('check_ins')
+            .select('lat, lng, visited_at')
+            .eq('user_id', userId)
+            .not('lat', 'is', null)
+            .not('lng', 'is', null)
+            .gte('visited_at', startOfToday)
+            .order('visited_at', ascending: false)
+            .limit(1),
+        repo.client
+            .from('stamps')
+            .select('lat, lng, visited_at')
+            .eq('user_id', userId)
+            .not('lat', 'is', null)
+            .not('lng', 'is', null)
+            .gte('visited_at', startOfToday)
+            .order('visited_at', ascending: false)
+            .limit(1),
+      ).wait;
+
+      Map<String, dynamic>? lastNode;
+
+      if (latestCheckIns.isNotEmpty && latestStamps.isNotEmpty) {
+        final ci = latestCheckIns.first;
+        final st = latestStamps.first;
+        final ciTime = DateTime.parse(ci['visited_at'] as String);
+        final stTime = DateTime.parse(st['visited_at'] as String);
+        lastNode = ciTime.isAfter(stTime) ? ci : st;
+      } else if (latestCheckIns.isNotEmpty) {
+        lastNode = latestCheckIns.first;
+      } else if (latestStamps.isNotEmpty) {
+        lastNode = latestStamps.first;
+      }
+
+      if (lastNode != null) {
+        final nodeLat = (lastNode['lat'] as num).toDouble();
+        final nodeLng = (lastNode['lng'] as num).toDouble();
+        final dist = Geolocator.distanceBetween(lat, lng, nodeLat, nodeLng);
+        if (dist < _kMinAnchorGapM) return;
+      }
+    } catch (e) {
+      debugPrint('[auto check-in] proximity check failed: $e');
+    }
+
+    if (sessionAtStop != null && _sessionId != sessionAtStop) return;
 
     var name = 'On the move';
     try {
@@ -121,8 +180,7 @@ class GpsNotifier extends _$GpsNotifier {
       if (results.isNotEmpty) name = results.first.name;
     } catch (_) {/* keep fallback */}
 
-    // Final session check after the place lookup (also async).
-    if (_sessionId != sessionAtStop) return;
+    if (sessionAtStop != null && _sessionId != sessionAtStop) return;
 
     final result = await repo.createCheckIn(
       CheckInDraft(

@@ -804,6 +804,11 @@ class _StoryViewState extends State<_StoryView> {
                   Text(DateFormat('MMM d · h:mm a').format(c.visitedAt),
                       style: const TextStyle(
                           color: Color(0xBFFFFFFF), fontSize: 13)),
+                  if (c.note != null && c.note!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(c.note!,
+                        style: const TextStyle(color: Colors.white, fontSize: 14)),
+                  ],
                 ],
               ),
             ),

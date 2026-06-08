@@ -257,22 +257,31 @@ class _StampDetailBody extends ConsumerWidget {
                       const SizedBox(height: 6),
                       Row(
                         children: [
-                          CircleAvatar(
-                            radius: 12,
-                            backgroundImage: stamp.avatarUrl != null
-                                ? CachedNetworkImageProvider(stamp.avatarUrl!)
-                                : null,
-                            child: stamp.avatarUrl == null
-                                ? const Icon(Icons.person, size: 12)
-                                : null,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            '@${stamp.username ?? "user"}',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => context.push('/profile/${stamp.userId}'),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                CircleAvatar(
+                                  radius: 12,
+                                  backgroundImage: stamp.avatarUrl != null
+                                      ? CachedNetworkImageProvider(stamp.avatarUrl!)
+                                      : null,
+                                  child: stamp.avatarUrl == null
+                                      ? const Icon(Icons.person, size: 12)
+                                      : null,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  '@${stamp.username ?? "user"}',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                           const Spacer(),
@@ -696,31 +705,34 @@ class _CommentTile extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Avatar (34px or 28px for reply)
-          Container(
-            width: isReply ? 28 : 34,
-            height: isReply ? 28 : 34,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              color: Z.surface2,
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: comment.avatarUrl != null
-                ? CachedNetworkImage(
-                    imageUrl: comment.avatarUrl!,
-                    fit: BoxFit.cover,
-                  )
-                : Center(
-                    child: Text(
-                      comment.username != null && comment.username!.isNotEmpty
-                          ? comment.username![0].toUpperCase()
-                          : '?',
-                      style: TextStyle(
-                        fontSize: isReply ? 11 : 13,
-                        fontWeight: FontWeight.bold,
-                        color: Z.textMuted,
+          GestureDetector(
+            onTap: () => context.push('/profile/${comment.userId}'),
+            child: Container(
+              width: isReply ? 28 : 34,
+              height: isReply ? 28 : 34,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Z.surface2,
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: comment.avatarUrl != null
+                  ? CachedNetworkImage(
+                      imageUrl: comment.avatarUrl!,
+                      fit: BoxFit.cover,
+                    )
+                  : Center(
+                      child: Text(
+                        comment.username != null && comment.username!.isNotEmpty
+                            ? comment.username![0].toUpperCase()
+                            : '?',
+                        style: TextStyle(
+                          fontSize: isReply ? 11 : 13,
+                          fontWeight: FontWeight.bold,
+                          color: Z.textMuted,
+                        ),
                       ),
                     ),
-                  ),
+            ),
           ),
           const SizedBox(width: 10),
           // Bubble content
@@ -738,12 +750,15 @@ class _CommentTile extends ConsumerWidget {
                   // Header: username + time
                   Row(
                     children: [
-                      Text(
-                        comment.username ?? 'User',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: Z.text,
+                      GestureDetector(
+                        onTap: () => context.push('/profile/${comment.userId}'),
+                        child: Text(
+                          comment.username ?? 'User',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: Z.text,
+                          ),
                         ),
                       ),
                       const Spacer(),

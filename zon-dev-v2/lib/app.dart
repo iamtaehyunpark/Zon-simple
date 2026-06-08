@@ -30,10 +30,6 @@ import 'features/map/presentation/place_detail_screen.dart';
 
 const kBrandPurple = Color(0xFF8B6EC4);
 
-// Backward-compat alias so existing map/timeline code compiles unchanged
-// until each file is updated.
-const kBrandGreen = kBrandPurple;
-
 class _RouterRefreshNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
 }
@@ -93,8 +89,19 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/checkin',
         name: 'checkin',
-        pageBuilder: (ctx, state) => MaterialPage(
+        pageBuilder: (ctx, state) => CustomTransitionPage(
+          key: state.pageKey,
           fullscreenDialog: true,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            const begin = Offset(0.0, 1.0);
+            const end = Offset.zero;
+            const curve = Curves.easeInOut;
+            final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            return SlideTransition(
+              position: animation.drive(tween),
+              child: child,
+            );
+          },
           child: CheckinEntry(
             lat: double.tryParse(state.uri.queryParameters['lat'] ?? ''),
             lng: double.tryParse(state.uri.queryParameters['lng'] ?? ''),
@@ -102,6 +109,9 @@ final _routerProvider = Provider<GoRouter>((ref) {
                 ? CheckinMode.stamp
                 : CheckinMode.checkIn,
             fromCheckInId: state.uri.queryParameters['fromCheckIn'],
+            visitedAt: state.uri.queryParameters['time'] != null
+                ? DateTime.tryParse(state.uri.queryParameters['time']!)
+                : null,
           ),
         ),
       ),

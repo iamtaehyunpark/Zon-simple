@@ -17,6 +17,7 @@ class CheckinEntry extends ConsumerStatefulWidget {
   // When set, the flow opens straight into the stamp editor pre-filled from
   // this existing check-in (promote-to-stamp as an editable step).
   final String? fromCheckInId;
+  final DateTime? visitedAt;
 
   const CheckinEntry({
     super.key,
@@ -24,6 +25,7 @@ class CheckinEntry extends ConsumerStatefulWidget {
     this.lng,
     this.mode = CheckinMode.checkIn,
     this.fromCheckInId,
+    this.visitedAt,
   });
 
   @override
@@ -45,7 +47,12 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
       } else {
         ref
             .read(checkinNotifierProvider.notifier)
-            .startCheckin(lat: widget.lat, lng: widget.lng, mode: widget.mode);
+            .startCheckin(
+              lat: widget.lat,
+              lng: widget.lng,
+              mode: widget.mode,
+              visitedAt: widget.visitedAt,
+            );
       }
     });
   }
@@ -172,7 +179,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
       error: (msg) => ErrorView(
         message: msg,
         onRetry: () => ref.read(checkinNotifierProvider.notifier).startCheckin(
-            lat: widget.lat, lng: widget.lng, mode: widget.mode),
+            lat: widget.lat, lng: widget.lng, mode: widget.mode, visitedAt: widget.visitedAt),
       ),
     );
 
@@ -236,6 +243,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
                               lat: widget.lat,
                               lng: widget.lng,
                               mode: widget.mode,
+                              visitedAt: widget.visitedAt,
                             );
                           },
                           child: const Icon(Icons.arrow_back, color: Z.text),

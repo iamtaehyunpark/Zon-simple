@@ -1,8 +1,11 @@
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart' show Geolocator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../../app.dart';
@@ -21,6 +24,7 @@ import '../../map/presentation/map_drawing.dart';
 import 'providers/timeline_provider.dart';
 
 const _kCheckinBlue = 0xFF2196F3;
+
 
 enum _NodeKind { checkIn, stamp, note }
 
@@ -71,10 +75,12 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   DayBundle? _bundle;
   DayBundle? _drawn;
   bool _isGeneratingDiary = false;
-  Map<int, int> _monthlyActivity = {};
-  DateTime? _activityMonth;
+  Map<String, int> _monthlyActivity = {};
+  final Set<String> _loadedMonths = {};
+  Set<String> _diaryDays = {};
 
   final _sheetController = DraggableScrollableController();
+  final _dateStripController = ScrollController();
   final Map<String, GlobalKey> _itemKeys = {};
 
   @override
@@ -91,6 +97,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       // Provider is fresh — build() already enqueued loadDay(today) via microtask.
     }
     _loadActivity(_day);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToSelectedDate();
+    });
   }
 
   bool get _isToday {
@@ -106,21 +115,153 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     });
     ref.read(timelineNotifierProvider.notifier).loadDay(d);
     _loadActivity(d);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToSelectedDate();
+    });
   }
 
   Future<void> _loadActivity(DateTime date) async {
-    final m = DateTime(date.year, date.month);
-    if (_activityMonth?.year == m.year && _activityMonth?.month == m.month) return;
-    final res = await ref.read(checkInRepositoryProvider).monthlyVisitCounts(m);
+    final checkInRepo = ref.read(checkInRepositoryProvider);
+    final now = DateTime.now();
+    
+    // Fetch diary dates
+    try {
+      final days = _slidableDays;
+      if (days.isNotEmpty) {
+        final firstDateStr = days.first.toIso8601String().substring(0, 10);
+        final diaryRes = await checkInRepo.client
+            .from('day_diaries')
+            .select('date')
+            .eq('user_id', checkInRepo.currentUserId ?? '')
+            .not('body', 'eq', '')
+            .gte('date', firstDateStr);
+
+        final diaryDays = {
+          for (final r in diaryRes as List)
+            r['date'] as String
+        };
+
+        if (mounted) {
+          setState(() {
+            _diaryDays = diaryDays;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[timeline] error loading diary activity: $e');
+    }
+    
+    // We always want to ensure the last 6 months are loaded, plus the active selected month.
+    final targetMonths = <DateTime>[];
+    for (int i = 0; i <= 6; i++) {
+      targetMonths.add(DateTime(now.year, now.month - i, 1));
+    }
+    final selectedMonth = DateTime(date.year, date.month, 1);
+    if (!targetMonths.any((m) => m.year == selectedMonth.year && m.month == selectedMonth.month)) {
+      targetMonths.add(selectedMonth);
+    }
+    
+    // Filter to only those months we haven't loaded yet
+    final toLoad = targetMonths.where((m) {
+      final key = '${m.year}-${m.month.toString().padLeft(2, '0')}';
+      return !_loadedMonths.contains(key);
+    }).toList();
+    
+    if (toLoad.isEmpty) return;
+    
+    final List<Map<int, int>> results = await Future.wait<Map<int, int>>(
+      toLoad.map((m) => checkInRepo.monthlyVisitCounts(m))
+    );
+    
+    final newActivity = <String, int>{..._monthlyActivity};
+    for (int i = 0; i < toLoad.length; i++) {
+      final m = toLoad[i];
+      final counts = results[i];
+      final monthKey = '${m.year}-${m.month.toString().padLeft(2, '0')}';
+      _loadedMonths.add(monthKey);
+      
+      counts.forEach((day, count) {
+        final dateKey = '$monthKey-${day.toString().padLeft(2, '0')}';
+        newActivity[dateKey] = count;
+      });
+    }
+    
     if (mounted) {
       setState(() {
-        _activityMonth = m;
-        _monthlyActivity = res;
+        _monthlyActivity = newActivity;
       });
     }
   }
 
+  @override
+  void dispose() {
+    _sheetController.dispose();
+    _dateStripController.dispose();
+    super.dispose();
+  }
+
+  void _jumpToToday() {
+    final now = DateTime.now();
+    _load(DateTime(now.year, now.month, now.day));
+  }
+
+  List<DateTime> get _slidableDays {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final days = <DateTime>[];
+    for (int i = 180; i >= 0; i--) {
+      days.add(today.subtract(Duration(days: i)));
+    }
+    if (_day.isBefore(days.first)) {
+      final diff = days.first.difference(_day).inDays;
+      for (int i = diff; i >= 1; i--) {
+        days.insert(0, _day.subtract(Duration(days: i)));
+      }
+      days.insert(0, _day);
+    }
+    return days;
+  }
+
+  void _scrollToSelectedDate() {
+    if (!_dateStripController.hasClients) return;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final days = _slidableDays;
+    final idx = days.indexWhere((d) =>
+        d.year == _day.year && d.month == _day.month && d.day == _day.day);
+    if (idx != -1) {
+      const itemWidth = 64.0;
+      final target = (idx * itemWidth) - (screenWidth / 2) + (itemWidth / 2);
+      final maxScroll = _dateStripController.position.maxScrollExtent;
+      final minScroll = _dateStripController.position.minScrollExtent;
+      final clampedTarget = target.clamp(minScroll, maxScroll);
+      
+      _dateStripController.animateTo(
+        clampedTarget,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOutCubic,
+      );
+    }
+  }
+
   void _reload() => ref.read(timelineNotifierProvider.notifier).loadDay(_day);
+
+  /// YYYY-MM-DD string for the currently displayed day.
+  String get _currentDateKey =>
+      '${_day.year}-${_day.month.toString().padLeft(2, '0')}-${_day.day.toString().padLeft(2, '0')}';
+
+  /// Update `_diaryDays` state and reload after the user saves a diary edit.
+  void _applyDiaryResult(String saved) {
+    if (mounted) {
+      setState(() {
+        if (saved.trim().isEmpty) {
+          _diaryDays.remove(_currentDateKey);
+        } else {
+          _diaryDays.add(_currentDateKey);
+        }
+      });
+    }
+    _reload();
+  }
 
   void _shift(int days) {
     final next = _day.add(Duration(days: days));
@@ -132,6 +273,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   Future<void> _pickDate() async {
     final picked = await showModalBottomSheet<DateTime>(
       context: context,
+      isScrollControlled: true,
       builder: (_) => _CalendarSheet(initial: _day),
     );
     if (picked != null) _load(DateTime(picked.year, picked.month, picked.day));
@@ -179,7 +321,57 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
           text: n.body,
         ),
     ]..sort((a, b) => a.time.compareTo(b.time));
-    return items;
+
+    // Proximity check:
+    // If the auto check-in is close enough to any manual check-in or stamp on the same day,
+    // or to any already-displayed auto check-in, do not show it in the list.
+    final filtered = <_TlItem>[];
+    for (final item in items) {
+      if (item.isAuto) {
+        // Check if close to any manual check-in or stamp today
+        bool closeToManual = false;
+        for (final other in items) {
+          if (!other.isAuto && !other.isNote) {
+            if (other.lat != null && other.lng != null && item.lat != null && item.lng != null) {
+              final dist = Geolocator.distanceBetween(
+                item.lat!,
+                item.lng!,
+                other.lat!,
+                other.lng!,
+              );
+              if (dist < 80) {
+                closeToManual = true;
+                break;
+              }
+            }
+          }
+        }
+        if (closeToManual) continue;
+
+        // Also check if close to any previously added auto check-in today to deduplicate
+        bool closeToPrevAuto = false;
+        for (final prev in filtered) {
+          if (prev.isAuto) {
+            if (prev.lat != null && prev.lng != null && item.lat != null && item.lng != null) {
+              final dist = Geolocator.distanceBetween(
+                item.lat!,
+                item.lng!,
+                prev.lat!,
+                prev.lng!,
+              );
+              if (dist < 80) {
+                closeToPrevAuto = true;
+                break;
+              }
+            }
+          }
+        }
+        if (closeToPrevAuto) continue;
+      }
+      filtered.add(item);
+    }
+
+    return filtered;
   }
 
   _TlItem? _itemById(String id) {
@@ -333,14 +525,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
   // Tap a node — highlight it (syncs the map), then navigate to detail for
   // check-ins and stamps.
-  void _onTapNode(_TlItem item) {
-    _highlight(item.id);
-    if (item.kind == _NodeKind.checkIn) {
-      context.push('/check-in/${item.id}');
-    } else if (item.kind == _NodeKind.stamp) {
-      context.push('/stamp/${item.id}');
-    }
-  }
+  void _onTapNode(_TlItem item) => _highlight(item.id);
 
   // Long-press → act on it: stamp opens its page; check-in/note opens the
   // inline editor.
@@ -370,7 +555,107 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     _reload();
   }
 
+  Future<void> _addPhotosInline(_TlItem item) async {
+    final picked = await ImagePicker().pickMultiImage();
+    if (picked.isEmpty) return;
+    final service = PhotoService();
+    final results = await Future.wait([
+      for (final x in picked) service.uploadFile(File(x.path)),
+    ]);
+    final urls = [for (final u in results) if (u != null) u];
+    await ref.read(checkInRepositoryProvider).addCheckInPhotos(item.id, urls);
+    _reload();
+  }
 
+  Future<void> _deletePhoto(String url) async {
+    await ref.read(checkInRepositoryProvider).deletePhotoByUrl(url);
+    _reload();
+  }
+
+  // Swipe-left to delete a check-in or note.
+  Future<void> _deleteItem(_TlItem item) async {
+    if (item.isNote) {
+      await ref.read(timelineNoteRepositoryProvider).delete(item.id);
+    } else if (item.kind == _NodeKind.checkIn) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete check-in?'),
+          content: Text('Remove "${item.name}" from your trace?'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      );
+      if (ok != true) return;
+      await ref.read(checkInRepositoryProvider).deleteCheckIn(item.id);
+    } else {
+      return;
+    }
+    if (_selectedId == item.id) _selectedId = null;
+    if (_expandedId == item.id) _expandedId = null;
+    _reload();
+  }
+
+  // Long-press drag of a note → reposition it.
+  void _onReorder(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _items.length) return;
+    final moved = _items[oldIndex];
+    if (moved.kind != _NodeKind.note) return; // Only allow notes to be reordered
+    
+    final list = [..._items];
+    list.removeAt(oldIndex);
+    
+    // Adjust newIndex if it's past the removed element
+    final adjustedNew = newIndex > oldIndex ? newIndex - 1 : newIndex;
+    final clampedNew = adjustedNew.clamp(0, list.length);
+    list.insert(clampedNew, moved);
+
+    final next = clampedNew + 1 < list.length ? list[clampedNew + 1] : null;
+    final prev = clampedNew - 1 >= 0 ? list[clampedNew - 1] : null;
+    final DateTime newTime;
+    
+    if (prev != null && next != null) {
+      final diffMs = next.time.difference(prev.time).inMilliseconds;
+      if (diffMs > 1000) {
+        newTime = prev.time.add(Duration(milliseconds: diffMs ~/ 2));
+      } else {
+        newTime = prev.time.add(const Duration(milliseconds: 500));
+      }
+    } else if (next != null) {
+      newTime = next.time.subtract(const Duration(minutes: 1));
+    } else if (prev != null) {
+      newTime = prev.time.add(const Duration(minutes: 1));
+    } else {
+      newTime = moved.time;
+    }
+    
+    _persistNoteTime(moved.id, newTime);
+  }
+
+  Future<void> _persistNoteTime(String id, DateTime t) async {
+    await ref.read(timelineNoteRepositoryProvider).setTime(id, t);
+    _reload();
+  }
+
+  // Edit a note's time from a time picker.
+  Future<void> _changeNoteTime(_TlItem item) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(item.time),
+    );
+    if (picked == null) return;
+    final t = DateTime(
+        _day.year, _day.month, _day.day, picked.hour, picked.minute);
+    await _persistNoteTime(item.id, t);
+  }
 
   void _moreCheckIn(_TlItem item) => _showCheckInDetail(item.id);
 
@@ -512,27 +797,8 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   }
 
   Future<void> _deleteCheckIn(CheckIn ci) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete check-in?'),
-        content: Text('Remove "${ci.placeName}" from your trace?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await ref.read(checkInRepositoryProvider).deleteCheckIn(ci.id);
-    if (_selectedId == ci.id) _selectedId = null;
-    _reload();
+    final item = _itemById(ci.id);
+    if (item != null) await _deleteItem(item);
   }
 
   // Promote = open the stamp editor pre-filled from the check-in (note, photos,
@@ -552,18 +818,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     // check-in/stamp — notes must appear after visits in the timeline.
     final now = DateTime.now();
     var at = DateTime(_day.year, _day.month, _day.day, now.hour, now.minute, now.second);
-    final bundle = _bundle;
-    if (bundle != null) {
-      DateTime? lastVisit;
-      for (final c in bundle.checkIns) {
-        if (lastVisit == null || c.visitedAt.isAfter(lastVisit)) lastVisit = c.visitedAt;
-      }
-      for (final s in bundle.stamps) {
-        if (lastVisit == null || s.visitedAt.isAfter(lastVisit)) lastVisit = s.visitedAt;
-      }
-      if (lastVisit != null && lastVisit.isAfter(at)) {
-        at = lastVisit.add(const Duration(minutes: 1));
-      }
+    final nonNotes = _items.where((i) => !i.isNote);
+    if (nonNotes.isNotEmpty && nonNotes.last.time.isAfter(at)) {
+      at = nonNotes.last.time.add(const Duration(minutes: 1));
     }
     await ref.read(timelineNoteRepositoryProvider).add(_day, text, at);
     _reload();
@@ -577,7 +834,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     );
     if (result == null) return;
     await ref.read(diaryRepositoryProvider).saveDiary(_day, result);
-    _reload();
+    _applyDiaryResult(result);
   }
 
   Future<void> _generateDiary() async {
@@ -671,7 +928,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       );
       if (saved == null) return;
       await ref.read(diaryRepositoryProvider).saveDiary(_day, saved);
-      _reload();
+      _applyDiaryResult(saved);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -687,22 +944,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
 
 
-  // ── Week strip helpers ────────────────────────────────────────────────────
-  // Returns the Monday of the current week for _day.
-  DateTime get _weekStart {
-    final wd = _day.weekday; // Mon=1..Sun=7
-    return _day.subtract(Duration(days: wd - 1));
-  }
-
-  List<DateTime> get _weekDays {
-    final start = _weekStart;
-    return List.generate(7, (i) => start.add(Duration(days: i)));
-  }
-
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(timelineNotifierProvider);
-    final weekDays = _weekDays;
 
     return Scaffold(
       backgroundColor: Z.surface0,
@@ -717,109 +961,159 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 children: [
                   // Date nav row
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
-                    child: Row(
-                      children: [
-                        _NavBtn(
-                            icon: Icons.chevron_left,
-                            onTap: () => _shift(-1)),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: _pickDate,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  _isToday
-                                      ? 'Today'
-                                      : DateFormat('MMM d').format(_day),
-                                  style: const TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w700,
-                                      color: Z.text),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: SizedBox(
+                      height: 40,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          // Center date display with chevron shifting buttons directly adjacent to it
+                          Row(
+                            mainAxisSize: MainAxisSize.max,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              GestureDetector(
+                                onTap: () => _shift(-1),
+                                behavior: HitTestBehavior.opaque,
+                                child: const Padding(
+                                  padding: EdgeInsets.all(8.0),
+                                  child: Icon(Icons.chevron_left, size: 22, color: Z.textMuted),
                                 ),
-                                const SizedBox(width: 5),
-                                const Icon(Icons.expand_more,
-                                    size: 16, color: Z.textMuted),
-                              ],
+                              ),
+                              const SizedBox(width: 4),
+                              GestureDetector(
+                                onTap: _pickDate,
+                                behavior: HitTestBehavior.opaque,
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _isToday
+                                          ? 'Today'
+                                          : DateFormat('MMM d').format(_day),
+                                      style: const TextStyle(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w700,
+                                          color: Z.text),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(Icons.expand_more,
+                                        size: 16, color: Z.textMuted),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              GestureDetector(
+                                onTap: _isToday ? null : () => _shift(1),
+                                behavior: HitTestBehavior.opaque,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Icon(
+                                    Icons.chevron_right,
+                                    size: 22,
+                                    color: _isToday ? Z.textFaint : Z.textMuted,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Right today button (always visible, disabled if already on today)
+                          Positioned(
+                            right: 0,
+                            child: TextButton(
+                              onPressed: _isToday ? null : _jumpToToday,
+                              style: TextButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                foregroundColor: Z.brand,
+                                disabledForegroundColor: Z.textFaint,
+                              ),
+                              child: const Text(
+                                'Today',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                        _NavBtn(
-                          icon: Icons.calendar_month,
-                          onTap: _pickDate,
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                  // Week strip
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 2, 12, 12),
-                    child: Row(
-                      children: weekDays.map((d) {
+                  // Slidable Date strip
+                  Container(
+                    height: 44,
+                    margin: const EdgeInsets.only(bottom: 4),
+                    child: ListView.builder(
+                      controller: _dateStripController,
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      itemCount: _slidableDays.length,
+                      itemBuilder: (ctx, idx) {
+                        final d = _slidableDays[idx];
                         final isSelected = d.day == _day.day &&
                             d.month == _day.month &&
                             d.year == _day.year;
-                        final isWeekend =
-                            d.weekday == DateTime.saturday ||
-                                d.weekday == DateTime.sunday;
-                        final dayLabel =
-                            DateFormat('E').format(d)[0]; // S/M/T/W/T/F/S
-                        final hasActivity = d.month == _activityMonth?.month &&
-                            d.year == _activityMonth?.year &&
-                            (_monthlyActivity[d.day] ?? 0) > 0;
-                        return Expanded(
+                        final dayLabel = DateFormat('E').format(d).substring(0, 3); // e.g. Mon, Tue
+                        final dateKey = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+                        final count = _monthlyActivity[dateKey] ?? 0;
+                        final hasNodes = count > 0;
+                        final hasDiary = _diaryDays.contains(dateKey);
+                        return SizedBox(
+                          width: 64,
                           child: GestureDetector(
                             onTap: () => _load(d),
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 150),
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 7),
+                              padding: const EdgeInsets.symmetric(vertical: 3),
                               decoration: BoxDecoration(
                                 color: isSelected ? Z.brand : null,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text(
                                     dayLabel,
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w600,
+                                      height: 0.9,
                                       color: isSelected
                                           ? Colors.white.withValues(alpha: 0.8)
-                                          : isWeekend
-                                              ? Z.textFaint
-                                              : Z.textMuted,
+                                          : hasNodes
+                                              ? Z.textMuted
+                                              : Z.textFaint,
                                     ),
                                   ),
-                                  const SizedBox(height: 2),
                                   Text(
                                     '${d.day}',
                                     style: TextStyle(
-                                      fontSize: 15,
+                                      fontSize: 14,
                                       fontWeight: isSelected
                                           ? FontWeight.w700
                                           : FontWeight.w400,
+                                      height: 1.0,
                                       color: isSelected
                                           ? Colors.white
-                                          : isWeekend
-                                              ? Z.textFaint
-                                              : Z.text,
+                                          : hasNodes
+                                              ? Z.text
+                                              : Z.textFaint,
                                     ),
                                   ),
-                                  // Activity dot
+                                  const SizedBox(height: 1),
+                                  // Activity dot (indicates diary existence)
                                   SizedBox(
-                                    height: 4,
-                                    child: !isSelected && hasActivity
+                                    height: 5,
+                                    child: hasDiary
                                         ? Center(
                                             child: Container(
                                               width: 4,
                                               height: 4,
                                               decoration: BoxDecoration(
                                                 shape: BoxShape.circle,
-                                                color: Z.brand
-                                                    .withValues(alpha: 0.65),
+                                                color: isSelected ? Colors.white : const Color(_kCheckinBlue),
                                               ),
                                             ),
                                           )
@@ -830,7 +1124,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                             ),
                           ),
                         );
-                      }).toList(),
+                      },
                     ),
                   ),
                 ],
@@ -853,12 +1147,11 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                 WidgetsBinding.instance
                     .addPostFrameCallback((_) => _maybeRedraw(bundle));
 
-                return ListView(
-                  padding: const EdgeInsets.only(bottom: 32),
+                return Column(
                   children: [
                     // ── Mini route map card ─────────────────────────
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
                       child: Container(
                         decoration: BoxDecoration(
                           border: Border.all(color: Z.outline),
@@ -914,45 +1207,121 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                       ),
                     ),
 
-                    // ── Timeline node list ──────────────────────────
                     const SizedBox(height: 4),
-                    for (int i = 0; i < _items.length; i++)
-                      _TimelineNode(
-                        item: _items[i],
-                        isLast: i == _items.length - 1,
-                        isSelected: _selectedId == _items[i].id,
-                        isExpanded: _expandedId == _items[i].id,
-                        onTap: () => _onTapNode(_items[i]),
-                        onLongPress: () => _onLongPressNode(_items[i]),
-                        onMore: () => _moreCheckIn(_items[i]),
-                        onPromote: _items[i].kind == _NodeKind.checkIn &&
-                                !_items[i].isAuto
-                            ? () => context
-                                .push('/checkin?fromCheckIn=${_items[i].id}')
-                            : null,
-                        itemKey: _itemKeys[_items[i].id],
-                        onSaveText: (text) => _saveText(_items[i], text),
-                      ),
+
+                    // ── Timeline node list ──────────────────────────
+                    Expanded(
+                      child: CustomScrollView(
+                        slivers: [
+                          SliverReorderableList(
+                            itemCount: _items.length,
+                      onReorderItem: _onReorder,
+                      itemBuilder: (ctx, i) {
+                        final item = _items[i];
+                        final isExpandable = !item.isStamp;
+                        final isEditing = isExpandable && _expandedId == item.id;
+
+                        Widget child = _TimelineNode(
+                          item: item,
+                          isLast: i == _items.length - 1,
+                          isSelected: _selectedId == item.id,
+                          isExpanded: isEditing,
+                          onTap: () => _onTapNode(item),
+                          onLongPress: () => _onLongPressNode(item),
+                          onMore: () => _moreCheckIn(item),
+                          onPromote: item.kind == _NodeKind.checkIn
+                              ? (item.isAuto
+                                  ? () => context.push(
+                                      '/checkin?lat=${item.lat}&lng=${item.lng}&time=${item.time.toIso8601String()}')
+                                  : () => context.push(
+                                      '/checkin?fromCheckIn=${item.id}'))
+                              : null,
+                          onAddPhotos: item.kind == _NodeKind.checkIn
+                              ? () => _addPhotosInline(item)
+                              : null,
+                          onDeletePhoto: item.kind == _NodeKind.checkIn
+                              ? (url) => _deletePhoto(url)
+                              : null,
+                          onChangeNoteTime: item.isNote
+                              ? () => _changeNoteTime(item)
+                              : null,
+                          onDeleteItem: item.kind != _NodeKind.stamp
+                              ? () => _deleteItem(item)
+                              : null,
+                          itemKey: _itemKeys[item.id],
+                          onSaveText: (text) => _saveText(item, text),
+                          trailing: item.isNote
+                              ? ReorderableDragStartListener(
+                                  index: i,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    color: Colors.transparent,
+                                    child: const Icon(Icons.drag_handle,
+                                        size: 20, color: Z.textMuted),
+                                  ),
+                                )
+                              : null,
+                        );
+
+                        if (!item.isStamp) {
+                          child = Dismissible(
+                            key: ValueKey('tl-${item.id}'),
+                            direction: item.kind == _NodeKind.stamp
+                                ? DismissDirection.none
+                                : DismissDirection.endToStart,
+                            background: Container(
+                              color: const Color(0xFFEF4444),
+                              alignment: Alignment.centerRight,
+                              padding: const EdgeInsets.only(right: 20),
+                              child: const Icon(Icons.delete_outline,
+                                  color: Colors.white, size: 24),
+                            ),
+                            confirmDismiss: (_) async {
+                              await _deleteItem(item);
+                              return false; // _reload handles UI update
+                            },
+                            child: child,
+                          );
+                        }
+
+                        return KeyedSubtree(
+                          key: ValueKey('tl-${item.id}'),
+                          child: child,
+                        );
+                      },
+                    ),
 
                     // ── Add note row ────────────────────────────────
-                    _AddNoteRow(onSubmit: _submitNote),
+                    SliverToBoxAdapter(
+                      child: _AddNoteRow(onSubmit: _submitNote),
+                    ),
 
                     // ── Divider ─────────────────────────────────────
-                    const Padding(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Divider(color: Z.outline),
+                    const SliverToBoxAdapter(
+                      child: Padding(
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Divider(color: Z.outline),
+                      ),
                     ),
 
                     // ── Diary card ──────────────────────────────────
-                    _DiaryCard(
-                      diary: _diary,
-                      generating: _isGeneratingDiary,
-                      onGenerate: _generateDiary,
-                      onEdit: _editDiary,
+                    SliverToBoxAdapter(
+                      child: _DiaryCard(
+                        diary: _diary,
+                        generating: _isGeneratingDiary,
+                        onGenerate: _generateDiary,
+                        onEdit: _editDiary,
+                      ),
+                    ),
+                    const SliverToBoxAdapter(
+                      child: SizedBox(height: 32),
                     ),
                   ],
-                );
+                ),
+              ),
+            ],
+          );
               },
             ),
           ),
@@ -962,21 +1331,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   }
 }
 
-// ── Nav button helper ─────────────────────────────────────────────────────────
-class _NavBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-  const _NavBtn({required this.icon, required this.onTap});
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: SizedBox(
-          width: 36,
-          height: 36,
-          child: Icon(icon, size: 22, color: Z.textMuted),
-        ),
-      );
-}
+
 
 // ── Timeline node — zon-cards.jsx TimelineNode ────────────────────────────────
 class _TimelineNode extends StatelessWidget {
@@ -988,6 +1343,11 @@ class _TimelineNode extends StatelessWidget {
   final VoidCallback onLongPress;
   final VoidCallback onMore;
   final VoidCallback? onPromote;
+  final VoidCallback? onAddPhotos;
+  final void Function(String url)? onDeletePhoto;
+  final VoidCallback? onChangeNoteTime;
+  final VoidCallback? onDeleteItem;
+  final Widget? trailing;
   final GlobalKey? itemKey;
   final Future<void> Function(String) onSaveText;
 
@@ -1000,6 +1360,11 @@ class _TimelineNode extends StatelessWidget {
     required this.onLongPress,
     required this.onMore,
     this.onPromote,
+    this.onAddPhotos,
+    this.onDeletePhoto,
+    this.onChangeNoteTime,
+    this.onDeleteItem,
+    this.trailing,
     this.itemKey,
     required this.onSaveText,
   });
@@ -1046,129 +1411,128 @@ class _TimelineNode extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
-      child: Row(
-        key: itemKey,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Left rail — 52px wide
-          SizedBox(
-            width: 52,
-            child: Column(
-              children: [
-                const SizedBox(height: 14),
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: meta.soft,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: meta.color, width: 2),
-                  ),
-                  child: Icon(meta.icon, size: 14, color: meta.color),
-                ),
-                if (!isLast)
-                  Container(
-                    width: 2,
-                    height: 40,
-                    color: Z.outline,
-                    margin: const EdgeInsets.only(top: 4),
-                  ),
-              ],
-            ),
-          ),
-          // Content
-          Expanded(
-            child: Padding(
-              padding:
-                  const EdgeInsets.fromLTRB(0, 12, 16, 16),
+      child: Container(
+        color: isSelected ? Z.brandSoft : Colors.transparent,
+        child: Row(
+          key: itemKey,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left rail — 52px wide
+            SizedBox(
+              width: 52,
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Time + KindChip
-                  Row(
-                    children: [
-                      Text(DateFormat('H:mm').format(item.time),
-                          style: const TextStyle(
-                              fontSize: 12,
-                              color: Z.textMuted,
-                              fontWeight: FontWeight.w500)),
-                      const SizedBox(width: 8),
-                      _KindChip(kindKey, meta.color, meta.soft, meta.label),
-                    ],
+                  const SizedBox(height: 14),
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: meta.soft,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: meta.color, width: 2),
+                    ),
+                    child: Icon(meta.icon, size: 14, color: meta.color),
                   ),
-                  const SizedBox(height: 4),
-                  // Place name
-                  if (!isNote && item.name.isNotEmpty)
-                    Text(item.name,
-                        style: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: Z.text)),
-                  // Text / note body
-                  if (item.text != null && item.text!.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(item.text!,
-                        style: TextStyle(
-                            fontSize: 14,
-                            color:
-                                isNote ? Z.note : Z.textMuted,
-                            height: 1.55,
-                            fontStyle: isNote
-                                ? FontStyle.italic
-                                : FontStyle.normal)),
-                  ],
-                  // Photo thumbs
-                  if (item.photoUrls.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: item.photoUrls
-                          .take(3)
-                          .map((url) => Container(
-                                width: 60,
-                                height: 60,
-                                margin:
-                                    const EdgeInsets.only(right: 6),
-                                decoration: BoxDecoration(
-                                    borderRadius:
-                                        BorderRadius.circular(8),
-                                    color: Z.surface2),
-                                clipBehavior: Clip.antiAlias,
-                                child: url.isNotEmpty
-                                    ? CachedNetworkImage(
-                                        imageUrl: url,
-                                        fit: BoxFit.cover)
-                                    : null,
-                              ))
-                          .toList(),
+                  if (!isLast)
+                    Container(
+                      width: 2,
+                      height: 40,
+                      color: Z.outline,
+                      margin: const EdgeInsets.only(top: 4),
                     ),
-                  ],
-                  // Promote CTA (check-in only, not auto, not promoted)
-                  if (item.kind == _NodeKind.checkIn &&
-                      !item.isAuto &&
-                      onPromote != null) ...[
-                    const SizedBox(height: 8),
-                    GestureDetector(
-                      onTap: onPromote,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                            color: Z.brandSoft,
-                            borderRadius:
-                                BorderRadius.circular(9999)),
-                        child: const Text('Promote to stamp →',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: Z.brand)),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
-          ),
-        ],
+            // Content
+            Expanded(
+              child: Padding(
+                padding:
+                    const EdgeInsets.fromLTRB(0, 12, 16, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Time + KindChip
+                    Row(
+                      children: [
+                        Text(DateFormat('H:mm').format(item.time),
+                            style: const TextStyle(
+                                fontSize: 12,
+                                color: Z.textMuted,
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(width: 8),
+                        _KindChip(kindKey, meta.color, meta.soft, meta.label),
+                        if (trailing != null) ...[
+                          const Spacer(),
+                          trailing!,
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    // Place name
+                    if (!isNote && item.name.isNotEmpty)
+                      Text(item.name,
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Z.text)),
+                    // Inline editor or static note text body
+                    // Inline editor or static note text body
+                    if (isExpanded) ...[
+                      const SizedBox(height: 6),
+                      _InlineNodeEditor(
+                        item: item,
+                        onSave: onSaveText,
+                        onChangeTime: item.isNote ? onChangeNoteTime : null,
+                        onMore: onMore,
+                        onPromote: onPromote,
+                        onAddPhotos: onAddPhotos,
+                        onDeletePhoto: onDeletePhoto,
+                      ),
+                    ] else ...[
+                      if (item.text != null && item.text!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(item.text!,
+                            style: TextStyle(
+                                fontSize: 14,
+                                color:
+                                    isNote ? Z.note : Z.textMuted,
+                                height: 1.55,
+                                fontStyle: isNote
+                                    ? FontStyle.italic
+                                    : FontStyle.normal)),
+                      ],
+                      // Photo thumbs (regular grid when not editing)
+                      if (item.photoUrls.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: item.photoUrls
+                              .take(3)
+                              .map((url) => Container(
+                                    width: 60,
+                                    height: 60,
+                                    margin:
+                                        const EdgeInsets.only(right: 6),
+                                    decoration: BoxDecoration(
+                                        borderRadius:
+                                            BorderRadius.circular(8),
+                                        color: Z.surface2),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: url.isNotEmpty
+                                        ? CachedNetworkImage(
+                                            imageUrl: url,
+                                            fit: BoxFit.cover)
+                                      : null,
+                                  ))
+                              .toList(),
+                        ),
+                      ],
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1195,6 +1559,225 @@ class _KindChip extends StatelessWidget {
               letterSpacing: 0.3),
         ),
       );
+}
+
+// ── Inline Node Editor ────────────────────────────────────────────────────────
+class _InlineNodeEditor extends StatefulWidget {
+  final _TlItem item;
+  final void Function(String text) onSave;
+  final VoidCallback? onChangeTime; // note only
+  final VoidCallback? onMore;
+  final VoidCallback? onPromote;
+  final VoidCallback? onAddPhotos;
+  final void Function(String url)? onDeletePhoto;
+
+  const _InlineNodeEditor({
+    required this.item,
+    required this.onSave,
+    this.onChangeTime,
+    this.onMore,
+    this.onPromote,
+    this.onAddPhotos,
+    this.onDeletePhoto,
+  });
+
+  @override
+  State<_InlineNodeEditor> createState() => _InlineNodeEditorState();
+}
+
+class _InlineNodeEditorState extends State<_InlineNodeEditor> {
+  late final TextEditingController _ctrl =
+      TextEditingController(text: widget.item.text ?? '');
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasPhotos = widget.item.photoUrls.isNotEmpty ||
+        (widget.item.kind == _NodeKind.checkIn && widget.onAddPhotos != null);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _ctrl,
+            autofocus: false,
+            minLines: 1,
+            maxLines: 4,
+            textInputAction: TextInputAction.done,
+            onSubmitted: (_) => widget.onSave(_ctrl.text.trim()),
+            style: const TextStyle(fontSize: 14, color: Z.text),
+            decoration: InputDecoration(
+              isDense: true,
+              filled: true,
+              fillColor: Z.surface1,
+              hintText: widget.item.isNote ? 'Edit note…' : 'Add a note…',
+              hintStyle: const TextStyle(color: Z.textMuted),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Z.outline, width: 1),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: Z.brand, width: 1.5),
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          if (hasPhotos) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 64,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  for (final url in widget.item.photoUrls)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Stack(
+                        children: [
+                          Container(
+                            width: 64,
+                            height: 64,
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              color: Z.surface2,
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: CachedNetworkImage(
+                              imageUrl: url,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                          if (widget.onDeletePhoto != null)
+                            Positioned(
+                              top: 2,
+                              right: 2,
+                              child: GestureDetector(
+                                onTap: () => widget.onDeletePhoto!(url),
+                                child: const CircleAvatar(
+                                  radius: 10,
+                                  backgroundColor: Colors.black54,
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 12,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  if (widget.onAddPhotos != null)
+                    GestureDetector(
+                      onTap: widget.onAddPhotos,
+                      child: Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Z.outline2, width: 1.5),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.add_a_photo_outlined,
+                          color: Z.textMuted,
+                          size: 20,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              if (widget.onChangeTime != null) ...[
+                const Icon(Icons.schedule_outlined, size: 16, color: Z.textMuted),
+                const SizedBox(width: 4),
+                Text(
+                  DateFormat('h:mm a').format(widget.item.time),
+                  style: const TextStyle(color: Z.textMuted, fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(width: 4),
+                TextButton(
+                  onPressed: widget.onChangeTime,
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    minimumSize: ui.Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: Z.brand,
+                  ),
+                  child: const Text('Change time', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
+              ],
+              if (widget.item.kind == _NodeKind.checkIn) ...[
+                if (!widget.item.isAuto && widget.onMore != null)
+                  TextButton.icon(
+                    onPressed: widget.onMore,
+                    icon: const Icon(Icons.more_horiz_outlined, size: 16),
+                    label: const Text('More'),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: ui.Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      foregroundColor: Z.brand,
+                    ),
+                  ),
+                if (!widget.item.isAuto && widget.onMore != null && widget.onPromote != null)
+                  const SizedBox(width: 8),
+                if (widget.onPromote != null)
+                  GestureDetector(
+                    onTap: widget.onPromote,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Z.brandSoft,
+                        borderRadius: BorderRadius.circular(9999),
+                      ),
+                      child: Text(
+                        widget.item.isAuto ? 'Promote to check-in →' : 'Promote to stamp →',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Z.brand,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+              const Spacer(),
+              ElevatedButton(
+                onPressed: () => widget.onSave(_ctrl.text.trim()),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Z.brand,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  minimumSize: ui.Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                child: const Text('Done', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Add note row ──────────────────────────────────────────────────────────────
@@ -1827,7 +2410,7 @@ class _CalendarSheetState extends ConsumerState<_CalendarSheet> {
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate:
                   const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 7, childAspectRatio: 0.8),
+                      crossAxisCount: 7, childAspectRatio: 1.0),
               itemCount: leadingBlanks + daysInMonth,
               itemBuilder: (ctx, i) {
                 if (i < leadingBlanks) return const SizedBox.shrink();

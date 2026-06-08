@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../core/photos/photo_service.dart';
+import '../../../data/models/enums.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/privacy_repository.dart';
 import '../../../data/repositories/location_sharing_repository.dart';
@@ -21,6 +23,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _usernameCtrl = TextEditingController();
   final _displayNameCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
+  String? _avatarUrl;
   bool _isPrivate = false;
   bool _isGhostMode = false;
   UserPrivacy _privacy = const UserPrivacy();
@@ -52,6 +55,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _usernameCtrl.text = p.username;
       _displayNameCtrl.text = p.displayName ?? '';
       _bioCtrl.text = p.bio ?? '';
+      _avatarUrl = p.avatarUrl;
       _isPrivate = p.isPrivate;
     });
     privacyRes.fold((_) {}, (pr) => _privacy = pr);
@@ -69,6 +73,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final url = await PhotoService().uploadFile(File(picked.path), bucket: 'avatars');
     if (url == null) return;
     await ref.read(profileRepositoryProvider).updateProfile({'avatar_url': url});
+    if (mounted) setState(() => _avatarUrl = url);
   }
 
   Future<void> _saveProfile() async {
@@ -139,6 +144,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         _Row(icon: Icons.person, label: 'Edit name & bio',
             onTap: _showEditProfile),
         _Row(icon: Icons.photo_camera, label: 'Change avatar',
+            avatarUrl: _avatarUrl,
             onTap: _pickAvatar),
       ]),
       _Section('PRIVACY', [
@@ -146,6 +152,52 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             sub: 'New followers must be approved',
             toggle: true, toggleValue: _isPrivate,
             onToggle: _setPrivateAccount),
+        _Row(
+          icon: Icons.lock,
+          label: 'Default stamp visibility',
+          customTrailing: SegmentedButton<StampVisibility>(
+            segments: const [
+              ButtonSegment(
+                value: StampVisibility.private,
+                icon: Icon(Icons.lock, size: 16),
+              ),
+              ButtonSegment(
+                value: StampVisibility.public,
+                icon: Icon(Icons.public, size: 16),
+              ),
+            ],
+            selected: {_privacy.defaultStampVisibility},
+            onSelectionChanged: (s) => _updatePrivacy(
+              {'default_stamp_visibility': s.first.name},
+              _privacy.copyWith(defaultStampVisibility: s.first),
+            ),
+            style: SegmentedButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+        ),
+        _Row(
+          icon: Icons.map,
+          label: 'Share my trail on the map',
+          sub: 'Let friends see your check-ins & route today',
+          toggle: true,
+          toggleValue: _privacy.locationSharingEnabled,
+          onToggle: (v) => _updatePrivacy(
+            {'location_sharing_enabled': v},
+            _privacy.copyWith(locationSharingEnabled: v),
+          ),
+        ),
+        _Row(
+          icon: Icons.track_changes,
+          label: 'Significant-change tracking',
+          sub: 'Track location in the background',
+          toggle: true,
+          toggleValue: _privacy.significantChangeEnabled,
+          onToggle: (v) => _updatePrivacy(
+            {'significant_change_enabled': v},
+            _privacy.copyWith(significantChangeEnabled: v),
+          ),
+        ),
         _Row(icon: Icons.visibility_off, label: 'Ghost mode',
             sub: 'Hide your live location from friends',
             toggle: true, toggleValue: _isGhostMode,
@@ -171,6 +223,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onToggle: (v) => _updatePrivacy(
                 {'photo_auto_suggest': v},
                 _privacy.copyWith(photoAutoSuggest: v))),
+        _Row(
+          icon: Icons.brightness_2,
+          label: 'Evening summary',
+          sub: 'Daily recap notification in the evening',
+          toggle: true,
+          toggleValue: _privacy.eveningSummaryEnabled,
+          onToggle: (v) => _updatePrivacy(
+            {'evening_summary_enabled': v},
+            _privacy.copyWith(eveningSummaryEnabled: v),
+          ),
+        ),
       ]),
       _Section('ACCOUNT', [
         _Row(icon: Icons.logout, label: 'Sign out', arrow: true,
@@ -197,11 +260,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     padding: const EdgeInsets.fromLTRB(6, 4, 16, 12),
                     child: Row(
                       children: [
-                        GestureDetector(
-                          onTap: () => Navigator.of(context).pop(),
-                          child: const SizedBox(width: 40, height: 40,
-                              child: Icon(Icons.arrow_back,
-                                  size: 24, color: Z.text)),
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          icon: const Icon(Icons.arrow_back,
+                              size: 24, color: Z.text),
                         ),
                         const SizedBox(width: 4),
                         const Text('Settings',
@@ -268,49 +330,59 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _buildRow(_Row r) {
-    return GestureDetector(
-      onTap: r.enabled == false ? null : r.onTap,
-      child: Opacity(
-        opacity: r.enabled == false ? 0.45 : 1.0,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-          child: Row(
-            children: [
-              // Icon badge
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: r.destructive
-                      ? const Color(0x1AEF4444)
-                      : Z.brandSoft,
-                  borderRadius: BorderRadius.circular(10),
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: r.enabled == false
+            ? null
+            : (r.toggle
+                ? () => r.onToggle?.call(!(r.toggleValue ?? false))
+                : r.onTap),
+        child: Opacity(
+          opacity: r.enabled == false ? 0.45 : 1.0,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+            child: Row(
+              children: [
+                // Icon badge
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: r.destructive
+                        ? const Color(0x1AEF4444)
+                        : Z.brandSoft,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: r.avatarUrl != null
+                      ? CachedNetworkImage(
+                          imageUrl: r.avatarUrl!,
+                          fit: BoxFit.cover,
+                        )
+                      : Icon(r.icon,
+                          size: 18,
+                          color: r.destructive ? Z.error : Z.brand),
                 ),
-                child: Icon(r.icon,
-                    size: 18,
-                    color: r.destructive ? Z.error : Z.brand),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(r.label,
-                        style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w500,
-                            color: r.destructive ? Z.error : Z.text)),
-                    if (r.sub != null)
-                      Text(r.sub!,
-                          style: const TextStyle(
-                              fontSize: 12, color: Z.textMuted)),
-                  ],
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(r.label,
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: r.destructive ? Z.error : Z.text)),
+                      if (r.sub != null)
+                        Text(r.sub!,
+                            style: const TextStyle(
+                                fontSize: 12, color: Z.textMuted)),
+                    ],
+                  ),
                 ),
-              ),
-              if (r.toggle)
-                GestureDetector(
-                  onTap: () => r.onToggle?.call(!(r.toggleValue ?? false)),
-                  child: AnimatedContainer(
+                if (r.toggle)
+                  AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     width: 48,
                     height: 28,
@@ -337,12 +409,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       ),
                     ),
-                  ),
-                )
-              else if (r.arrow)
-                const Icon(Icons.chevron_right,
-                    size: 20, color: Z.textFaint),
-            ],
+                  )
+                else if (r.customTrailing != null)
+                  r.customTrailing!
+                else if (r.arrow)
+                  const Icon(Icons.chevron_right,
+                      size: 20, color: Z.textFaint),
+              ],
+            ),
           ),
         ),
       ),
@@ -394,9 +468,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   onPressed: _savingProfile
                       ? null
                       : () async {
-                          await _saveProfile();
-                          if (mounted) Navigator.pop(context);
-                        },
+                           await _saveProfile();
+                           if (mounted) Navigator.pop(context);
+                         },
                   child: _savingProfile
                       ? const SizedBox(
                           width: 18,
@@ -427,10 +501,12 @@ class _Row {
   final bool toggle;
   final bool? toggleValue;
   final void Function(bool)? onToggle;
+  final Widget? customTrailing;
   final bool arrow;
   final bool destructive;
   final VoidCallback? onTap;
   final bool? enabled;
+  final String? avatarUrl;
 
   const _Row({
     required this.icon,
@@ -439,9 +515,11 @@ class _Row {
     this.toggle = false,
     this.toggleValue,
     this.onToggle,
+    this.customTrailing,
     this.arrow = false,
     this.destructive = false,
     this.onTap,
     this.enabled,
+    this.avatarUrl,
   });
 }

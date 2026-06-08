@@ -5,12 +5,17 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/models/user_profile.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/diary_repository.dart';
+import '../../../data/repositories/stamp_repository.dart';
 import '../../../shared/widgets/app_states.dart';
 import '../../../shared/utils/format.dart';
 import 'providers/profile_provider.dart';
 import '../../../core/auth/auth_provider.dart';
+import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import '../../../core/photos/photo_service.dart';
 
 // ── Profile Screen — zon-screens-sub.jsx ProfileScreen ───────────────────────
 class ProfileScreen extends ConsumerWidget {
@@ -47,8 +52,10 @@ class ProfileScreen extends ConsumerWidget {
                     FriendState.none) ==
                 FriendState.friends;
 
+        final tabCount = isOwnProfile ? 3 : 2;
+
         return DefaultTabController(
-          length: 3,
+          length: tabCount,
           child: Scaffold(
             backgroundColor: Z.surface0,
             body: Column(
@@ -82,6 +89,32 @@ class ProfileScreen extends ConsumerWidget {
                                           fontWeight: FontWeight.w700,
                                           color: Z.text)),
                                 ),
+                                if (isOwnProfile)
+                                  GestureDetector(
+                                    onTap: () => context.push('/activity'),
+                                    child: const SizedBox(
+                                      width: 40,
+                                      height: 40,
+                                      child: Icon(
+                                        Icons.notifications_outlined,
+                                        size: 22,
+                                        color: Z.text,
+                                      ),
+                                    ),
+                                  ),
+                                if (isOwnProfile)
+                                  GestureDetector(
+                                    onTap: () => context.push('/check-ins'),
+                                    child: const SizedBox(
+                                      width: 40,
+                                      height: 40,
+                                      child: Icon(
+                                        Icons.place_outlined,
+                                        size: 22,
+                                        color: Z.text,
+                                      ),
+                                    ),
+                                  ),
                                 GestureDetector(
                                   onTap: () => isOwnProfile
                                       ? context.push('/settings')
@@ -167,8 +200,18 @@ class ProfileScreen extends ConsumerWidget {
                               if (isOwnProfile)
                                 _OutlineBtn(
                                     label: 'Edit',
-                                    onTap: () =>
-                                        context.push('/settings'))
+                                    onTap: () {
+                                      showModalBottomSheet<void>(
+                                        context: context,
+                                        isScrollControlled: true,
+                                        backgroundColor: Z.surface1,
+                                        shape: const RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.vertical(
+                                              top: Radius.circular(24)),
+                                        ),
+                                        builder: (_) => _EditProfileSheet(profile: profile),
+                                      );
+                                    })
                               else
                                 _SocialButtons(targetId: targetId),
                             ],
@@ -176,7 +219,7 @@ class ProfileScreen extends ConsumerWidget {
                         ),
                         const Divider(height: 1, color: Z.outline),
 
-                        // Stats: Stamps · Places · Friends
+                        // Stats: Stamps · Friends · Followers
                         IntrinsicHeight(
                           child: Row(
                             children: [
@@ -185,36 +228,35 @@ class ProfileScreen extends ConsumerWidget {
                                   value: profile.stampCount),
                               _vDivider(),
                               _StatItem(
-                                  label: 'Places',
-                                  value: profile.stampCount,
-                                  onTap: isOwnProfile
-                                      ? () => context.push('/check-ins')
-                                      : null),
-                              _vDivider(),
-                              _StatItem(
                                   label: 'Friends',
                                   value: profile.friendCount,
                                   onTap: () => context
                                       .push('/profile/$targetId/friends')),
+                              _vDivider(),
+                              _StatItem(
+                                  label: 'Followers',
+                                  value: profile.followerCount,
+                                  onTap: () => context
+                                      .push('/profile/$targetId/followers')),
                             ],
                           ),
                         ),
                         const Divider(height: 1, color: Z.outline),
 
                         // Tab switcher: Stamps | Saved | Diaries
-                        const TabBar(
-                          labelStyle: TextStyle(
+                        TabBar(
+                          labelStyle: const TextStyle(
                               fontSize: 14, fontWeight: FontWeight.w700),
                           unselectedLabelStyle:
-                              TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
+                              const TextStyle(fontSize: 14, fontWeight: FontWeight.w400),
                           labelColor: Z.brand,
                           unselectedLabelColor: Z.textMuted,
                           indicatorColor: Z.brand,
                           indicatorWeight: 2.5,
                           tabs: [
-                            Tab(text: 'Stamps'),
-                            Tab(text: 'Saved'),
-                            Tab(text: 'Diaries'),
+                            const Tab(text: 'Stamps'),
+                            if (isOwnProfile) const Tab(text: 'Saved'),
+                            const Tab(text: 'Diaries'),
                           ],
                         ),
                       ],
@@ -233,12 +275,13 @@ class ProfileScreen extends ConsumerWidget {
                               targetId: targetId,
                               isOwnProfile: isOwnProfile),
                       // Saved
-                      !canView
-                          ? const _LockedGrid()
-                          : _StampsGrid(
-                              targetId: targetId,
-                              isOwnProfile: isOwnProfile,
-                              savedOnly: true),
+                      if (isOwnProfile)
+                        !canView
+                            ? const _LockedGrid()
+                            : _StampsGrid(
+                                targetId: targetId,
+                                isOwnProfile: isOwnProfile,
+                                savedOnly: true),
                       // Diaries
                       _DiariesTab(
                           userId: targetId,
@@ -311,52 +354,245 @@ class _OutlineBtn extends StatelessWidget {
       );
 }
 
+enum _FriendAction { unfriend }
+
 // ── Social buttons (Add Friend + Follow) ──────────────────────────────────────
-class _SocialButtons extends ConsumerWidget {
+class _SocialButtons extends ConsumerStatefulWidget {
   final String targetId;
   const _SocialButtons({required this.targetId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final fs = ref.watch(friendStateProvider(targetId)).valueOrNull ??
+  ConsumerState<_SocialButtons> createState() => _SocialButtonsState();
+}
+
+class _SocialButtonsState extends ConsumerState<_SocialButtons> {
+  bool _friendLoading = false;
+  bool _followLoading = false;
+
+  void _showRespondMenu(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.check_circle_outline),
+              title: const Text('Confirm'),
+              onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                Navigator.pop(ctx);
+                setState(() => _friendLoading = true);
+                try {
+                  final res = await ref
+                      .read(profileRepositoryProvider)
+                      .acceptFriendRequest(widget.targetId);
+                  res.fold(
+                    (err) {
+                      messenger.showSnackBar(
+                        SnackBar(content: Text('Failed to accept request: ${err.message}')),
+                      );
+                    },
+                    (_) {
+                      ref.invalidate(friendStateProvider(widget.targetId));
+                      ref.invalidate(friendRequestsProvider);
+                    },
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Error accepting request: $e')),
+                  );
+                } finally {
+                  if (mounted) setState(() => _friendLoading = false);
+                }
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.cancel_outlined),
+              title: const Text('Delete'),
+              onTap: () async {
+                final messenger = ScaffoldMessenger.of(context);
+                Navigator.pop(ctx);
+                setState(() => _friendLoading = true);
+                try {
+                  final res = await ref
+                      .read(profileRepositoryProvider)
+                      .denyFriendRequest(widget.targetId);
+                  res.fold(
+                    (err) {
+                      messenger.showSnackBar(
+                        SnackBar(content: Text('Failed to deny request: ${err.message}')),
+                      );
+                    },
+                    (_) {
+                      ref.invalidate(friendStateProvider(widget.targetId));
+                      ref.invalidate(friendRequestsProvider);
+                    },
+                  );
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Error denying request: $e')),
+                  );
+                } finally {
+                  if (mounted) setState(() => _friendLoading = false);
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fs = ref.watch(friendStateProvider(widget.targetId)).valueOrNull ??
         FriendState.none;
-    final fw = ref.watch(followStateProvider(targetId)).valueOrNull ??
+    final fw = ref.watch(followStateProvider(widget.targetId)).valueOrNull ??
         FollowState.none;
-    final notifier = ref.read(profileNotifierProvider(targetId).notifier);
+    final notifier = ref.read(profileNotifierProvider(widget.targetId).notifier);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         // Friend button
-        GestureDetector(
-          onTap: () {
-            if (fs == FriendState.none) notifier.sendFriendRequest();
-          },
-          child: Container(
-            height: 34,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              color: Z.brand,
-              borderRadius: BorderRadius.circular(9999),
+        if (fs == FriendState.friends)
+          PopupMenuButton<_FriendAction>(
+            enabled: !_friendLoading,
+            onSelected: (a) async {
+              if (a == _FriendAction.unfriend) {
+                final messenger = ScaffoldMessenger.of(context);
+                setState(() => _friendLoading = true);
+                try {
+                  await notifier.unfriend();
+                } catch (e) {
+                  messenger.showSnackBar(
+                    SnackBar(content: Text('Failed to unfriend: $e')),
+                  );
+                } finally {
+                  if (mounted) setState(() => _friendLoading = false);
+                }
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(
+                value: _FriendAction.unfriend,
+                child: Text('Unfriend'),
+              ),
+            ],
+            child: Container(
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: Z.surface2,
+                border: Border.all(color: Z.outline2, width: 1.5),
+                borderRadius: BorderRadius.circular(9999),
+              ),
+              alignment: Alignment.center,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: _friendLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Z.text,
+                        ),
+                      )
+                    : const Text(
+                        'Friends',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Z.text),
+                      ),
+              ),
             ),
-            alignment: Alignment.center,
-            child: Text(
-              fs == FriendState.friends
-                  ? 'Friends'
-                  : fs == FriendState.requestedByMe
-                      ? 'Requested'
-                      : '+ Friend',
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.white),
+          )
+        else
+          GestureDetector(
+            onTap: _friendLoading
+                ? null
+                : () async {
+                    final messenger = ScaffoldMessenger.of(context);
+                    if (fs == FriendState.none) {
+                      setState(() => _friendLoading = true);
+                      try {
+                        await notifier.sendFriendRequest();
+                      } catch (e) {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text('Failed to send friend request: $e')),
+                        );
+                      } finally {
+                        if (mounted) setState(() => _friendLoading = false);
+                      }
+                    } else if (fs == FriendState.requestedByMe) {
+                      setState(() => _friendLoading = true);
+                      try {
+                        await notifier.cancelFriendRequest();
+                      } catch (e) {
+                        messenger.showSnackBar(
+                          SnackBar(content: Text('Failed to cancel request: $e')),
+                        );
+                      } finally {
+                        if (mounted) setState(() => _friendLoading = false);
+                      }
+                    } else if (fs == FriendState.requestedByThem) {
+                      _showRespondMenu(context, ref);
+                    }
+                  },
+            child: Container(
+              height: 34,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: Z.brand,
+                borderRadius: BorderRadius.circular(9999),
+              ),
+              alignment: Alignment.center,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: _friendLoading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        fs == FriendState.requestedByMe
+                            ? 'Requested'
+                            : fs == FriendState.requestedByThem
+                                ? 'Respond'
+                                : '+ Friend',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white),
+                      ),
+              ),
             ),
           ),
-        ),
         const SizedBox(width: 7),
         // Follow button
         GestureDetector(
-          onTap: () => notifier.toggleFollow(targetId),
+          onTap: _followLoading
+              ? null
+              : () async {
+                  final messenger = ScaffoldMessenger.of(context);
+                  setState(() => _followLoading = true);
+                  try {
+                    await notifier.toggleFollow(widget.targetId);
+                  } catch (e) {
+                    messenger.showSnackBar(
+                      SnackBar(content: Text('Failed to update follow status: $e')),
+                    );
+                  } finally {
+                    if (mounted) setState(() => _followLoading = false);
+                  }
+                },
           child: Container(
             height: 34,
             padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -365,16 +601,28 @@ class _SocialButtons extends ConsumerWidget {
               borderRadius: BorderRadius.circular(9999),
             ),
             alignment: Alignment.center,
-            child: Text(
-              fw == FollowState.following
-                  ? 'Following'
-                  : fw == FollowState.requested
-                      ? 'Requested'
-                      : 'Follow',
-              style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Z.text),
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: _followLoading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Z.text,
+                      ),
+                    )
+                  : Text(
+                      fw == FollowState.following
+                          ? 'Following'
+                          : fw == FollowState.requested
+                              ? 'Requested'
+                              : 'Follow',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Z.text),
+                    ),
             ),
           ),
         ),
@@ -407,6 +655,11 @@ class _LockedGrid extends StatelessWidget {
       );
 }
 
+final _profileSavedStampsProvider = FutureProvider.autoDispose<List<Stamp>>((ref) async {
+  final res = await ref.watch(stampRepositoryProvider).getSavedStamps();
+  return res.fold((err) => throw err, (stamps) => stamps);
+});
+
 // ── Stamp grid (stamps tab + saved tab) ───────────────────────────────────────
 class _StampsGrid extends ConsumerWidget {
   final String targetId;
@@ -420,6 +673,34 @@ class _StampsGrid extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (savedOnly) {
+      final savedState = ref.watch(_profileSavedStampsProvider);
+      return savedState.when(
+        loading: () => const LoadingView(),
+        error: (e, _) => ErrorView(message: errorMessage(e)),
+        data: (stamps) {
+          if (stamps.isEmpty) {
+            return const EmptyView(
+              icon: Icons.bookmark_border,
+              message: 'No saved stamps yet',
+              subtitle: 'Stamps you bookmark show up here.',
+            );
+          }
+          return GridView.builder(
+            padding: EdgeInsets.zero,
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 2,
+                mainAxisSpacing: 2),
+            itemCount: stamps.length,
+            itemBuilder: (ctx, i) {
+              return _GridItem(stamp: stamps[i], isOwnProfile: isOwnProfile);
+            },
+          );
+        },
+      );
+    }
+
     final stampsState = ref.watch(
         profileStampsNotifierProvider(targetId, publicOnly: !isOwnProfile));
     return stampsState.when(
@@ -609,3 +890,215 @@ class _DiariesTabState extends ConsumerState<_DiariesTab>
     );
   }
 }
+
+// ── Edit Profile Sheet ────────────────────────────────────────────────────────
+class _EditProfileSheet extends ConsumerStatefulWidget {
+  final UserProfile profile;
+  const _EditProfileSheet({required this.profile});
+
+  @override
+  ConsumerState<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
+  late final TextEditingController _displayNameCtrl;
+  late final TextEditingController _bioCtrl;
+  String? _avatarUrl;
+  bool _uploadingAvatar = false;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _displayNameCtrl = TextEditingController(text: widget.profile.displayName ?? '');
+    _bioCtrl = TextEditingController(text: widget.profile.bio ?? '');
+    _avatarUrl = widget.profile.avatarUrl;
+  }
+
+  @override
+  void dispose() {
+    _displayNameCtrl.dispose();
+    _bioCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickAvatar() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+    setState(() => _uploadingAvatar = true);
+    try {
+      final url = await PhotoService().uploadFile(File(picked.path), bucket: 'avatars');
+      if (url != null) {
+        setState(() {
+          _avatarUrl = url;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload avatar: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
+
+  Future<void> _save() async {
+    setState(() => _saving = true);
+    final repo = ref.read(profileRepositoryProvider);
+    final res = await repo.updateProfile({
+      'display_name': _displayNameCtrl.text.trim(),
+      'bio': _bioCtrl.text.trim(),
+      'avatar_url': _avatarUrl,
+    });
+    
+    res.fold(
+      (err) {
+        if (mounted) {
+          setState(() => _saving = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to save profile: ${err.message}')),
+          );
+        }
+      },
+      (updatedProfile) {
+        if (mounted) {
+          ref.invalidate(profileNotifierProvider(widget.profile.id));
+          Navigator.pop(context);
+        }
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Edit Profile',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: Z.text),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: Stack(
+                  children: [
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Z.outline,
+                      backgroundImage: _avatarUrl != null
+                          ? CachedNetworkImageProvider(_avatarUrl!)
+                          : null,
+                      child: _avatarUrl == null
+                          ? const Icon(Icons.person, size: 40, color: Z.textMuted)
+                          : null,
+                    ),
+                    if (_uploadingAvatar)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.black38,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    Positioned(
+                      bottom: 0,
+                      right: 0,
+                      child: GestureDetector(
+                        onTap: _uploadingAvatar || _saving ? null : _pickAvatar,
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: const BoxDecoration(
+                            color: Z.brand,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.camera_alt,
+                            size: 16,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              TextField(
+                controller: _displayNameCtrl,
+                style: const TextStyle(fontSize: 14, color: Z.text),
+                decoration: const InputDecoration(
+                  labelText: 'Display name',
+                  labelStyle: TextStyle(color: Z.textMuted),
+                  border: OutlineInputBorder(),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Z.brand, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _bioCtrl,
+                maxLines: 3,
+                style: const TextStyle(fontSize: 14, color: Z.text),
+                decoration: const InputDecoration(
+                  labelText: 'Bio',
+                  labelStyle: TextStyle(color: Z.textMuted),
+                  border: OutlineInputBorder(),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Z.brand, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: _saving || _uploadingAvatar ? null : _save,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Z.brand,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Z.brandSoft,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text(
+                          'Save',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+

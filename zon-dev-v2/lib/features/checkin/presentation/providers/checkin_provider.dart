@@ -68,6 +68,7 @@ class CheckinState with _$CheckinState {
 @riverpod
 class CheckinNotifier extends _$CheckinNotifier {
   CheckinMode _mode = CheckinMode.checkIn;
+  DateTime? _visitedAt;
 
   @override
   CheckinState build() => const CheckinState.idle();
@@ -76,8 +77,10 @@ class CheckinNotifier extends _$CheckinNotifier {
     double? lat,
     double? lng,
     CheckinMode mode = CheckinMode.checkIn,
+    DateTime? visitedAt,
   }) async {
     _mode = mode;
+    _visitedAt = visitedAt;
     state = const CheckinState.locating();
     try {
       double resolvedLat = lat ?? 0;
@@ -211,7 +214,11 @@ class CheckinNotifier extends _$CheckinNotifier {
       final urls = await _uploadAll(photoService, current.draft.photoPaths);
       final res = await ref
           .read(checkInRepositoryProvider)
-          .createCheckIn(current.draft, photoUrls: urls);
+          .createCheckIn(
+            current.draft,
+            photoUrls: urls,
+            visitedAt: _visitedAt,
+          );
       res.fold(
         (err) => state = CheckinState.error(err.message),
         (ci) {

@@ -29,6 +29,35 @@ class UserTagField extends ConsumerStatefulWidget {
 class _UserTagFieldState extends ConsumerState<UserTagField> {
   final Map<String, String> _names = {}; // id -> username
 
+  @override
+  void initState() {
+    super.initState();
+    _loadNames();
+  }
+
+  @override
+  void didUpdateWidget(UserTagField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.taggedUserIds != oldWidget.taggedUserIds) {
+      _loadNames();
+    }
+  }
+
+  Future<void> _loadNames() async {
+    final ids = widget.taggedUserIds.where((id) => !_names.containsKey(id)).toList();
+    if (ids.isEmpty) return;
+    try {
+      final profiles = await ref.read(profileRepositoryProvider).getProfilesByIds(ids);
+      if (mounted) {
+        setState(() {
+          for (final p in profiles) {
+            _names[p.id] = p.username;
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
   Future<void> _pick() async {
     final picked = await showModalBottomSheet<UserProfile>(
       context: context,

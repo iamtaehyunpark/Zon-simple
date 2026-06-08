@@ -23,25 +23,41 @@ class ProfileNotifier extends _$ProfileNotifier {
   }
 
   Future<void> toggleFollow(String targetUserId) async {
-    await ref.read(profileRepositoryProvider).follow(targetUserId);
-    await _fetch(userId);
-    ref.invalidate(followStateProvider(targetUserId));
+    final res = await ref.read(profileRepositoryProvider).follow(targetUserId);
+    await res.fold(
+      (err) async => throw err,
+      (_) async {
+        await _fetch(userId);
+        ref.invalidate(followStateProvider(targetUserId));
+      },
+    );
   }
 
   Future<void> sendFriendRequest() async {
-    await ref.read(profileRepositoryProvider).sendFriendRequest(userId);
-    ref.invalidate(friendStateProvider(userId));
+    final res = await ref.read(profileRepositoryProvider).sendFriendRequest(userId);
+    res.fold(
+      (err) => throw err,
+      (_) => ref.invalidate(friendStateProvider(userId)),
+    );
   }
 
   Future<void> cancelFriendRequest() async {
-    await ref.read(profileRepositoryProvider).removeFriendship(userId);
-    ref.invalidate(friendStateProvider(userId));
+    final res = await ref.read(profileRepositoryProvider).removeFriendship(userId);
+    res.fold(
+      (err) => throw err,
+      (_) => ref.invalidate(friendStateProvider(userId)),
+    );
   }
 
   Future<void> unfriend() async {
-    await ref.read(profileRepositoryProvider).removeFriendship(userId);
-    await _fetch(userId);
-    ref.invalidate(friendStateProvider(userId));
+    final res = await ref.read(profileRepositoryProvider).removeFriendship(userId);
+    await res.fold(
+      (err) async => throw err,
+      (_) async {
+        await _fetch(userId);
+        ref.invalidate(friendStateProvider(userId));
+      },
+    );
   }
 }
 
