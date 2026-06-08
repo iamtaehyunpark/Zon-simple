@@ -99,3 +99,5 @@ android/key.properties
 # Hive local DB
 **/*.hive
 **/*.lock
+
+.agent/
