@@ -63,6 +63,7 @@ class MapScreen extends ConsumerStatefulWidget {
 
 class _MapScreenState extends ConsumerState<MapScreen> {
   MapboxMap? _map;
+  bool _styleLoaded = false;
 
   // Own data — always "today"
   List<Stamp> _myStamps = [];
@@ -323,7 +324,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   bool _hasCenteredOnUser = false;
 
   void _centerOnUserInitial(geo.Position pos) {
-    if (_hasCenteredOnUser || _map == null) return;
+    if (_hasCenteredOnUser || _map == null || !_styleLoaded) return;
     _hasCenteredOnUser = true;
     _map?.flyTo(
       CameraOptions(
@@ -653,6 +654,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   _updateFriendScreenPositions();
                 },
                 onStyleLoadedListener: (styleLoadedEventData) {
+                  _styleLoaded = true;
                   final posVal = ref.read(gpsNotifierProvider).valueOrNull;
                   if (posVal != null) {
                     _centerOnUserInitial(posVal);

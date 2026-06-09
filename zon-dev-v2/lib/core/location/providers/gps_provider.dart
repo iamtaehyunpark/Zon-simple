@@ -64,12 +64,33 @@ class GpsNotifier extends _$GpsNotifier {
 
     sessionPath.clear();
     bool isFirstPosition = true;
+
+    // Fetch initial current position to resolve location immediately
+    service.currentPosition().then((position) {
+      if (position != null && _sub != null) {
+        state = AsyncValue.data(position);
+        _lastLat = position.latitude;
+        _lastLng = position.longitude;
+        if (sessionPath.isEmpty) {
+          sessionPath.add([position.longitude, position.latitude]);
+        }
+        if (isFirstPosition) {
+          isFirstPosition = false;
+          _addAutoCheckIn(position.latitude, position.longitude);
+        }
+      }
+    }).catchError((e) {
+      debugPrint('[GpsNotifier] failed to fetch initial position: $e');
+    });
+
     _sub = service.startTracking().listen(
       (position) {
         state = AsyncValue.data(position);
         _lastLat = position.latitude;
         _lastLng = position.longitude;
-        sessionPath.add([position.longitude, position.latitude]);
+        if (sessionPath.isEmpty || sessionPath.last[0] != position.longitude || sessionPath.last[1] != position.latitude) {
+          sessionPath.add([position.longitude, position.latitude]);
+        }
         ref.read(locationBatcherProvider).add(RawLocationEvent(
           id: _uuid.v4(),
           userId: '',

@@ -86,17 +86,27 @@ Future<void> upsertLine(
       await map.style.setStyleSourceProperty(sourceId, 'data', data);
       return;
     }
-  } catch (_) {/* fall through to full add */}
-  await map.style.addSource(GeoJsonSource(id: sourceId, data: data));
-  await map.style.addLayer(LineLayer(
-    id: layerId,
-    sourceId: sourceId,
-    lineColor: color,
-    lineWidth: 4.0,
-    lineOpacity: 0.75,
-    lineCap: LineCap.ROUND,
-    lineJoin: LineJoin.ROUND,
-  ));
+  } catch (_) {}
+  try {
+    await map.style.addSource(GeoJsonSource(id: sourceId, data: data));
+  } catch (_) {
+    try {
+      await map.style.setStyleSourceProperty(sourceId, 'data', data);
+    } catch (_) {}
+  }
+  try {
+    if (!(await map.style.styleLayerExists(layerId))) {
+      await map.style.addLayer(LineLayer(
+        id: layerId,
+        sourceId: sourceId,
+        lineColor: color,
+        lineWidth: 4.0,
+        lineOpacity: 0.75,
+        lineCap: LineCap.ROUND,
+        lineJoin: LineJoin.ROUND,
+      ));
+    }
+  } catch (_) {}
 }
 
 /// Remove a polyline previously drawn with [drawLine] / [upsertLine].
