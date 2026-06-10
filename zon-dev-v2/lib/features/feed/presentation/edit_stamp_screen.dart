@@ -47,20 +47,29 @@ class _EditStampScreenState extends ConsumerState<EditStampScreen> {
     final repo = ref.read(stampRepositoryProvider);
     final stampRes = await repo.getStamp(widget.stampId);
     final photos = await repo.getStampPhotos(widget.stampId);
-    stampRes.fold((_) {}, (s) {
-      _placeCtrl.text = s.placeName;
-      _captionCtrl.text = s.caption ?? '';
-      _tags = List.of(s.sensoryTags);
-      _visibility = s.visibility;
-      _lat = s.lat;
-      _lng = s.lng;
-    });
-    if (mounted) {
-      setState(() {
-        _existing = photos;
-        _loading = false;
-      });
-    }
+    stampRes.fold(
+      (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to load stamp: ${e.message}')));
+          Navigator.of(context).pop();
+        }
+      },
+      (s) {
+        _placeCtrl.text = s.placeName;
+        _captionCtrl.text = s.caption ?? '';
+        _tags = List.of(s.sensoryTags);
+        _visibility = s.visibility;
+        _lat = s.lat;
+        _lng = s.lng;
+        if (mounted) {
+          setState(() {
+            _existing = photos;
+            _loading = false;
+          });
+        }
+      },
+    );
   }
 
   Future<void> _addPhotos() async {

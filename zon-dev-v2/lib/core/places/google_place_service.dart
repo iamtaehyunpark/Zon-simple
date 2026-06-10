@@ -15,7 +15,11 @@ class GooglePlaceService implements PlaceService {
       : _apiKey = dotenv.env['GOOGLE_PLACES_API_KEY'] ?? '',
         _dio = Dio(BaseOptions(
           baseUrl: 'https://maps.googleapis.com/maps/api/place/',
-        ));
+        )) {
+    if (_apiKey.isEmpty) {
+      debugPrint('[GooglePlaceService] GOOGLE_PLACES_API_KEY missing from .env — place search disabled');
+    }
+  }
 
 
   @override

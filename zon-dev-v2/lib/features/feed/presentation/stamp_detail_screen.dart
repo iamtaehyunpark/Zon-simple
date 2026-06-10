@@ -531,22 +531,30 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
       body: text,
       parentId: replyTarget?.id,
     );
-    await res.fold((_) async {}, (comment) async {
-      final targets = {..._mentionIds};
-      if (replyTarget != null) targets.add(replyTarget.userId);
-      for (final t in targets) {
-        await repo.notifyMention(
-          targetUserId: t,
-          stampId: widget.stampId,
-          commentId: comment.id,
-        );
-      }
-    });
-    _ctrl.clear();
-    _mentionIds.clear();
-    _clearReply();
-    ref.invalidate(stampCommentsProvider(widget.stampId));
-    ref.invalidate(stampDetailProvider(widget.stampId));
+    await res.fold(
+      (e) async {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to post comment: ${e.message}')));
+        }
+      },
+      (comment) async {
+        final targets = {..._mentionIds};
+        if (replyTarget != null) targets.add(replyTarget.userId);
+        for (final t in targets) {
+          await repo.notifyMention(
+            targetUserId: t,
+            stampId: widget.stampId,
+            commentId: comment.id,
+          );
+        }
+        _ctrl.clear();
+        _mentionIds.clear();
+        _clearReply();
+        ref.invalidate(stampCommentsProvider(widget.stampId));
+        ref.invalidate(stampDetailProvider(widget.stampId));
+      },
+    );
     if (mounted) setState(() => _sending = false);
   }
 

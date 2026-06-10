@@ -51,14 +51,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ref.read(privacyRepositoryProvider).getMyPrivacy(),
       locRepo.getGhostMode(),
     ).wait;
-    profileRes.fold((_) {}, (p) {
-      _usernameCtrl.text = p.username;
-      _displayNameCtrl.text = p.displayName ?? '';
-      _bioCtrl.text = p.bio ?? '';
-      _avatarUrl = p.avatarUrl;
-      _isPrivate = p.isPrivate;
-    });
-    privacyRes.fold((_) {}, (pr) => _privacy = pr);
+    profileRes.fold(
+      (e) => debugPrint('[Settings] profile load error: ${e.message}'),
+      (p) {
+        _usernameCtrl.text = p.username;
+        _displayNameCtrl.text = p.displayName ?? '';
+        _bioCtrl.text = p.bio ?? '';
+        _avatarUrl = p.avatarUrl;
+        _isPrivate = p.isPrivate;
+      },
+    );
+    privacyRes.fold(
+      (e) => debugPrint('[Settings] privacy load error: ${e.message}'),
+      (pr) => _privacy = pr,
+    );
     if (mounted) {
       setState(() {
         _isGhostMode = ghostMode;
@@ -217,11 +223,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ]),
       _Section('NOTIFICATIONS', [
         _Row(icon: Icons.favorite, label: 'Likes',
-            toggle: true, toggleValue: true, onToggle: (_) {}),
+            toggle: true, toggleValue: _privacy.notifyLikes,
+            onToggle: (v) => _updatePrivacy(
+                {'notify_likes': v},
+                _privacy.copyWith(notifyLikes: v))),
         _Row(icon: Icons.chat_bubble, label: 'Comments & mentions',
-            toggle: true, toggleValue: true, onToggle: (_) {}),
+            toggle: true, toggleValue: _privacy.notifyComments,
+            onToggle: (v) => _updatePrivacy(
+                {'notify_comments': v},
+                _privacy.copyWith(notifyComments: v))),
         _Row(icon: Icons.person_add, label: 'Friend requests',
-            toggle: true, toggleValue: true, onToggle: (_) {}),
+            toggle: true, toggleValue: _privacy.notifyFriendRequests,
+            onToggle: (v) => _updatePrivacy(
+                {'notify_friend_requests': v},
+                _privacy.copyWith(notifyFriendRequests: v))),
         _Row(icon: Icons.photo_camera, label: 'Photo check-in suggestions',
             toggle: true, toggleValue: _privacy.photoAutoSuggest,
             onToggle: (v) => _updatePrivacy(

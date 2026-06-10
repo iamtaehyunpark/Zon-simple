@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/user_profile.dart';
@@ -55,7 +56,9 @@ class _UserTagFieldState extends ConsumerState<UserTagField> {
           }
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[UserTagField] failed to load tagged user names: $e');
+    }
   }
 
   Future<void> _pick() async {

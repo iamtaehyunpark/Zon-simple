@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/friend_location.dart';
@@ -51,7 +52,9 @@ class LocationSharingRepository with BaseRepository {
         'heading': heading,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[LocationSharing] upsertMyLocation failed: $e');
+    }
   }
 
   // ── Reading ───────────────────────────────────────────────────────────────
@@ -71,7 +74,8 @@ class LocationSharingRepository with BaseRepository {
           if (DateTime.parse(r['updated_at'] as String).isAfter(cutoff))
             _fromRow(r),
       ];
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[LocationSharing] getFriendLocations failed: $e');
       return [];
     }
   }

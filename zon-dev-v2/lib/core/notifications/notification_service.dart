@@ -71,7 +71,9 @@ class NotificationService {
         'platform': Platform.isIOS ? 'ios' : 'android',
         'updated_at': DateTime.now().toIso8601String(),
       });
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[NotificationService] FCM token registration failed: $e');
+    }
   }
 
   Future<void> sendLocalNotification({
@@ -97,16 +99,47 @@ class NotificationService {
     );
   }
 
-  void _handleForegroundMessage(RemoteMessage message) {
+  Future<void> _handleForegroundMessage(RemoteMessage message) async {
     final data = message.data;
+    final type = data['type'] as String?;
+    if (!await _isTypeEnabled(type)) return;
     final title = message.notification?.title ?? 'ZON';
     final body = message.notification?.body ?? '';
-    // Encode route as payload so local notification can deep-link on tap
     sendLocalNotification(
       title: title,
       body: body,
       payload: _routeForData(data),
     );
+  }
+
+  /// Checks user_privacy to decide whether to surface a foreground notification.
+  /// Defaults to true on any error so notifications are never silently blocked.
+  Future<bool> _isTypeEnabled(String? type) async {
+    if (type == null) return true;
+    if (type != 'like' && type != 'comment' && type != 'mention' &&
+        type != 'friend_request' && type != 'friend_accepted') {
+      return true;
+    }
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return true;
+      final row = await Supabase.instance.client
+          .from('user_privacy')
+          .select('notify_likes, notify_comments, notify_friend_requests')
+          .eq('user_id', userId)
+          .maybeSingle();
+      if (row == null) return true;
+      return switch (type) {
+        'like' => row['notify_likes'] as bool? ?? true,
+        'comment' || 'mention' => row['notify_comments'] as bool? ?? true,
+        'friend_request' || 'friend_accepted' =>
+          row['notify_friend_requests'] as bool? ?? true,
+        _ => true,
+      };
+    } catch (e) {
+      debugPrint('[NotificationService] preference check failed: $e');
+      return true;
+    }
   }
 
   void _onLocalNotificationTapped(NotificationResponse response) {
@@ -123,6 +156,9 @@ class NotificationService {
 
   String _routeForData(Map<String, dynamic> data) {
     final type = data['type'] as String?;
+    final stampId = data['stamp_id'] as String?;
+    final checkInId = data['check_in_id'] as String?;
+    final userId = data['actor_id'] as String?;
     return switch (type) {
       'significant_change_nudge' => () {
           final lat = data['lat'] as String?;
@@ -134,6 +170,18 @@ class NotificationService {
         }(),
       'photo_add_suggestion' => '/photo-suggestions',
       'evening_summary' => '/timeline',
+      'like' || 'comment' || 'mention' => stampId != null
+          ? '/stamp/$stampId'
+          : '/activity',
+      'tag' => stampId != null
+          ? '/stamp/$stampId'
+          : checkInId != null
+              ? '/check-in/$checkInId'
+              : '/activity',
+      'follow' || 'friend_request' => '/activity',
+      'follow_accepted' || 'friend_accepted' => userId != null
+          ? '/profile/$userId'
+          : '/activity',
       _ => '/feed',
     };
   }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/places/place_models.dart';
@@ -82,7 +83,9 @@ class _PlaceSearchFieldState extends ConsumerState<PlaceSearchField> {
       final svc = ref.read(placeServiceForProvider(widget.lat, widget.lng));
       _nearby = await svc.nearby(widget.lat, widget.lng);
       if (_nearby.isNotEmpty) _coordName = _nearby.first.name;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[PlaceSearchField] nearby lookup failed: $e');
+    }
     _loadingNearby = false;
     if (mounted) _rebuild();
   }
@@ -104,7 +107,9 @@ class _PlaceSearchFieldState extends ConsumerState<PlaceSearchField> {
     try {
       final svc = ref.read(placeServiceForProvider(widget.lat, widget.lng));
       _searchResults = await svc.search(query, widget.lat, widget.lng);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[PlaceSearchField] search failed: $e');
+    }
     _searching = false;
     if (mounted) _rebuild();
   }

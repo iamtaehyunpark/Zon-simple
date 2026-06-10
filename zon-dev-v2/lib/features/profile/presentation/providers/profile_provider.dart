@@ -98,11 +98,14 @@ class ProfileStampsNotifier extends _$ProfileStampsNotifier {
         userId,
         publicOnly: publicOnly,
         offset: _offset);
-    result.fold((_) {}, (stamps) {
-      _offset += stamps.length;
-      _hasMore = stamps.length == _pageSize;
-      state = AsyncValue.data([...current, ...stamps]);
-    });
+    result.fold(
+      (e) => state = AsyncValue.error(e, StackTrace.current),
+      (stamps) {
+        _offset += stamps.length;
+        _hasMore = stamps.length == _pageSize;
+        state = AsyncValue.data([...current, ...stamps]);
+      },
+    );
     _loadingMore = false;
   }
 }

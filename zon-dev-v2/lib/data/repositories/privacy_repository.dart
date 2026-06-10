@@ -15,6 +15,9 @@ class UserPrivacy {
   final bool significantChangeEnabled;
   final bool photoAutoSuggest;
   final bool eveningSummaryEnabled;
+  final bool notifyLikes;
+  final bool notifyComments;
+  final bool notifyFriendRequests;
 
   const UserPrivacy({
     this.defaultStampVisibility = StampVisibility.private,
@@ -22,6 +25,9 @@ class UserPrivacy {
     this.significantChangeEnabled = true,
     this.photoAutoSuggest = true,
     this.eveningSummaryEnabled = true,
+    this.notifyLikes = true,
+    this.notifyComments = true,
+    this.notifyFriendRequests = true,
   });
 
   UserPrivacy copyWith({
@@ -30,6 +36,9 @@ class UserPrivacy {
     bool? significantChangeEnabled,
     bool? photoAutoSuggest,
     bool? eveningSummaryEnabled,
+    bool? notifyLikes,
+    bool? notifyComments,
+    bool? notifyFriendRequests,
   }) =>
       UserPrivacy(
         defaultStampVisibility:
@@ -41,6 +50,9 @@ class UserPrivacy {
         photoAutoSuggest: photoAutoSuggest ?? this.photoAutoSuggest,
         eveningSummaryEnabled:
             eveningSummaryEnabled ?? this.eveningSummaryEnabled,
+        notifyLikes: notifyLikes ?? this.notifyLikes,
+        notifyComments: notifyComments ?? this.notifyComments,
+        notifyFriendRequests: notifyFriendRequests ?? this.notifyFriendRequests,
       );
 }
 
@@ -98,5 +110,8 @@ class PrivacyRepository with BaseRepository {
             r['significant_change_enabled'] as bool? ?? true,
         photoAutoSuggest: r['photo_auto_suggest'] as bool? ?? true,
         eveningSummaryEnabled: r['evening_summary_enabled'] as bool? ?? true,
+        notifyLikes: r['notify_likes'] as bool? ?? true,
+        notifyComments: r['notify_comments'] as bool? ?? true,
+        notifyFriendRequests: r['notify_friend_requests'] as bool? ?? true,
       );
 }

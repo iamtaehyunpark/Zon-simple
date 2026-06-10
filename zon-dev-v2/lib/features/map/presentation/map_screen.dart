@@ -392,7 +392,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           Point(coordinates: Position(fl.lng, fl.lat)),
         );
         positions[fl.userId] = Offset(sc.x, sc.y);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[MapScreen] pixelForCoordinate failed for ${fl.userId}: $e');
+      }
     }
     _friendScreenPosNotifier.value = positions;
   }
