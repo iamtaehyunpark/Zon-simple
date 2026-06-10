@@ -8,6 +8,10 @@ class PlaceResult {
   final double lng;
   final List<String> categories;
   final String externalSource; // 'kakao' | 'google_places'
+  final String? phone;
+  final String? website;
+  final bool? isOpenNow;
+  final String? placeUrl; // provider web URL (Kakao map link, etc.)
 
   const PlaceResult({
     required this.placeId,
@@ -17,6 +21,10 @@ class PlaceResult {
     required this.lng,
     this.categories = const [],
     required this.externalSource,
+    this.phone,
+    this.website,
+    this.isOpenNow,
+    this.placeUrl,
   });
 
   Map<String, dynamic> toJson() => {

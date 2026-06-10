@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/photos/photo_service.dart';
+import '../../../core/places/place_models.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/repositories/stamp_repository.dart';
 import '../../../shared/widgets/place_search_field.dart';
@@ -27,6 +28,9 @@ class _EditStampScreenState extends ConsumerState<EditStampScreen> {
   StampVisibility _visibility = StampVisibility.private;
   double _lat = 0;
   double _lng = 0;
+  String? _externalPlaceId;
+  String? _externalSource;
+  bool _placeChanged = false;
   bool _loading = true;
   bool _saving = false;
 
@@ -62,6 +66,8 @@ class _EditStampScreenState extends ConsumerState<EditStampScreen> {
         _visibility = s.visibility;
         _lat = s.lat;
         _lng = s.lng;
+        _externalPlaceId = s.externalPlaceId;
+        _externalSource = s.externalSource;
         if (mounted) {
           setState(() {
             _existing = photos;
@@ -98,14 +104,19 @@ class _EditStampScreenState extends ConsumerState<EditStampScreen> {
         ? remaining.first.url
         : (newUrls.isNotEmpty ? newUrls.first : null);
 
-    await repo.updateStamp(widget.stampId, {
+    final updates = {
       'place_name': _placeCtrl.text.trim(),
       'normalized_place_name': _placeCtrl.text.trim().toLowerCase(),
       'caption': _captionCtrl.text.trim(),
       'sensory_tags': _tags,
       'visibility': _visibility.name,
       'cover_photo_url': cover,
-    });
+      if (_placeChanged) ...{
+        'external_place_id': _externalPlaceId,
+        'external_source': _externalSource,
+      },
+    };
+    await repo.updateStamp(widget.stampId, updates);
 
     if (mounted) {
       setState(() => _saving = false);
@@ -148,6 +159,11 @@ class _EditStampScreenState extends ConsumerState<EditStampScreen> {
                     lng: _lng,
                     labelText: 'Place name',
                     onChanged: (_) => setState(() {}),
+                    onPlaceSelected: (place) => setState(() {
+                      _placeChanged = true;
+                      _externalPlaceId = place?.placeId;
+                      _externalSource = place?.externalSource;
+                    }),
                   ),
                   const SizedBox(height: 16),
                   TextField(

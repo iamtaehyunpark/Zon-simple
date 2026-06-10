@@ -101,6 +101,21 @@ class KakaoPlaceService implements PlaceService {
     }
   }
 
+  @override
+  Future<PlaceResult?> getDetail(
+      String placeId, String name, double lat, double lng) async {
+    // Kakao has no REST "get by ID" endpoint — keyword-search and match by ID.
+    try {
+      final results =
+          await _query('keyword.json', {'query': name}, lat, lng, useRadius: false);
+      final match =
+          results.where((e) => e.place.placeId == placeId).firstOrNull;
+      return match?.place;
+    } catch (_) {
+      return null;
+    }
+  }
+
   ({PlaceResult place, int distance}) _fromDoc(dynamic doc) {
     final m = doc as Map;
     final lng = double.tryParse(m['x']?.toString() ?? '') ?? 0;
@@ -108,6 +123,7 @@ class KakaoPlaceService implements PlaceService {
     final road = m['road_address_name'] as String?;
     final jibun = m['address_name'] as String?;
     final category = m['category_name'] as String?;
+    final rawPhone = m['phone'] as String?;
     final place = PlaceResult(
       placeId: m['id']?.toString() ?? (m['place_name'] as String? ?? ''),
       name: m['place_name'] as String? ?? '',
@@ -118,6 +134,8 @@ class KakaoPlaceService implements PlaceService {
           ? category.split(' > ')
           : const [],
       externalSource: 'kakao',
+      phone: (rawPhone != null && rawPhone.isNotEmpty) ? rawPhone : null,
+      placeUrl: m['place_url'] as String?,
     );
     final distance = int.tryParse(m['distance']?.toString() ?? '') ?? 1 << 30;
     return (place: place, distance: distance);

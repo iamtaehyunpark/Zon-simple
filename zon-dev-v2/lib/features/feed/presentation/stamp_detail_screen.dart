@@ -234,25 +234,36 @@ class _StampDetailBody extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.location_on, size: 16, color: Colors.white),
-                          const SizedBox(width: 4),
-                          Expanded(
-                            child: Text(
-                              stamp.placeName,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                      GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: stamp.externalPlaceId != null
+                            ? () => context.push(
+                                '/place/${Uri.encodeComponent(stamp.externalPlaceId!)}')
+                            : null,
+                        child: Row(
+                          children: [
+                            const Icon(Icons.location_on,
+                                size: 16, color: Colors.white),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                stamp.placeName,
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: Colors.white54,
+                                  decorationThickness: 1,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          _VisibilityBadge(stamp.visibility),
-                        ],
+                            const SizedBox(width: 8),
+                            _VisibilityBadge(stamp.visibility),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 6),
                       Row(

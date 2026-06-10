@@ -19,6 +19,9 @@ class PlaceSearchField extends ConsumerStatefulWidget {
   final double lng;
   final String labelText;
   final ValueChanged<String>? onChanged;
+  // Fires with the full PlaceResult when a search result is selected,
+  // or null when the "use coordinate / custom name" top option is chosen.
+  final ValueChanged<PlaceResult?>? onPlaceSelected;
 
   const PlaceSearchField({
     super.key,
@@ -27,6 +30,7 @@ class PlaceSearchField extends ConsumerStatefulWidget {
     required this.lng,
     this.labelText = 'Place',
     this.onChanged,
+    this.onPlaceSelected,
   });
 
   @override
@@ -130,11 +134,12 @@ class _PlaceSearchFieldState extends ConsumerState<PlaceSearchField> {
 
   void _rebuild() => _overlay?.markNeedsBuild();
 
-  void _select(String name) {
+  void _select(String name, [PlaceResult? place]) {
     widget.controller.text = name;
     widget.controller.selection =
         TextSelection.fromPosition(TextPosition(offset: name.length));
     widget.onChanged?.call(name);
+    widget.onPlaceSelected?.call(place);
     _focusNode.unfocus();
   }
 
@@ -171,7 +176,7 @@ class _PlaceSearchFieldState extends ConsumerState<PlaceSearchField> {
                 children: [
                   // ── Top: coordinate / custom option ──────────────────────
                   InkWell(
-                    onTap: () => _select(topLabel),
+                    onTap: () => _select(topLabel, null),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 11),
@@ -214,7 +219,7 @@ class _PlaceSearchFieldState extends ConsumerState<PlaceSearchField> {
                   else
                     for (final place in listItems)
                       InkWell(
-                        onTap: () => _select(place.name),
+                        onTap: () => _select(place.name, place),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(
                               horizontal: 14, vertical: 10),

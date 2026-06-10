@@ -65,6 +65,45 @@ class GooglePlaceService implements PlaceService {
     }
   }
 
+  @override
+  Future<PlaceResult?> getDetail(
+      String placeId, String name, double lat, double lng) async {
+    if (_apiKey.isEmpty) return null;
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        'details/json',
+        queryParameters: {
+          'place_id': placeId,
+          'fields':
+              'name,formatted_phone_number,website,opening_hours,geometry,formatted_address',
+          'language': 'ko',
+          'key': _apiKey,
+        },
+      );
+      final r = res.data?['result'] as Map<String, dynamic>?;
+      if (r == null) return null;
+      final loc = (r['geometry'] as Map?)
+          ?.cast<String, dynamic>()['location'] as Map?;
+      final openNow =
+          (r['opening_hours'] as Map?)?['open_now'] as bool?;
+      return PlaceResult(
+        placeId: placeId,
+        name: r['name'] as String? ?? name,
+        address: r['formatted_address'] as String?,
+        lat: loc != null ? (loc['lat'] as num).toDouble() : lat,
+        lng: loc != null ? (loc['lng'] as num).toDouble() : lng,
+        categories: const [],
+        externalSource: 'google_places',
+        phone: r['formatted_phone_number'] as String?,
+        website: r['website'] as String?,
+        isOpenNow: openNow,
+      );
+    } catch (e) {
+      debugPrint('[GooglePlaces] getDetail error: $e');
+      return null;
+    }
+  }
+
   List<PlaceResult> _parse(Map<String, dynamic>? data) {
     final results = data?['results'] as List? ?? [];
     return results.map((r) {

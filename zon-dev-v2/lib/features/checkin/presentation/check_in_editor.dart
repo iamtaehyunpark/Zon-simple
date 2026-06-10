@@ -65,6 +65,11 @@ class _CheckInEditorBodyState extends State<CheckInEditorBody> {
                   lng: _draft.lng,
                   labelText: 'Place name',
                   onChanged: (v) => _update(_draft.copyWith(placeName: v)),
+                  onPlaceSelected: (place) => _update(_draft.copyWith(
+                    placeName: place?.name ?? _placeCtrl.text,
+                    externalPlaceId: place?.placeId,
+                    externalSource: place?.externalSource,
+                  )),
                 ),
                 const SizedBox(height: 16),
                 TextField(

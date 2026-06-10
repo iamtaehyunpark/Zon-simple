@@ -414,21 +414,28 @@ class StampCard extends ConsumerWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                children: [
-                                  const Icon(Icons.location_on,
-                                      size: 14, color: Colors.white),
-                                  const SizedBox(width: 5),
-                                  Flexible(
-                                    child: Text(stamp.placeName,
-                                        style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w700,
-                                            color: Colors.white),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis),
-                                  ),
-                                ],
+                              GestureDetector(
+                                behavior: HitTestBehavior.opaque,
+                                onTap: stamp.externalPlaceId != null
+                                    ? () => context.push(
+                                        '/place/${Uri.encodeComponent(stamp.externalPlaceId!)}')
+                                    : null,
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.location_on,
+                                        size: 14, color: Colors.white),
+                                    const SizedBox(width: 5),
+                                    Flexible(
+                                      child: Text(stamp.placeName,
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ],
+                                ),
                               ),
                               if (stamp.username != null)
                                 Text('@${stamp.username}',

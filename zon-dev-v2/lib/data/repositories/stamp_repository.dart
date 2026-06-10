@@ -111,23 +111,57 @@ class StampRepository with BaseRepository {
 
   Future<Either<AppException, List<Stamp>>> getStampsForPlace(
     String externalPlaceId, {
-    int limit = 30,
+    int limit = 50,
   }) async {
     try {
       final data = await client
           .from('stamps')
-          .select()
+          .select('*, profiles!user_id(username, avatar_url)')
           .eq('external_place_id', externalPlaceId)
           .eq('visibility', 'public')
           .order('visited_at', ascending: false)
           .limit(limit);
       final stamps = (data as List)
-          .map((r) => _fromRow(r as Map<String, dynamic>))
+          .map((r) => _fromRow(_flattenProfile(r as Map<String, dynamic>)))
           .toList();
       return right(stamps);
     } catch (e) {
       return left(NetworkError(e.toString()));
     }
+  }
+
+  Future<Either<AppException, List<Stamp>>> getFriendStampsForPlace(
+    String externalPlaceId,
+  ) async {
+    try {
+      final uid = userId;
+      if (uid == null) return left(const AuthError('Unauthorized'));
+      final followingIds = await getFollowingIds(uid);
+      if (followingIds.isEmpty) return right([]);
+      final data = await client
+          .from('stamps')
+          .select('*, profiles!user_id(username, avatar_url)')
+          .eq('external_place_id', externalPlaceId)
+          .eq('visibility', 'public')
+          .inFilter('user_id', followingIds)
+          .order('visited_at', ascending: false)
+          .limit(30);
+      return right((data as List)
+          .map((r) => _fromRow(_flattenProfile(r as Map<String, dynamic>)))
+          .toList());
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+  static Map<String, dynamic> _flattenProfile(Map<String, dynamic> row) {
+    final profile = row['profiles'] as Map<String, dynamic>?;
+    if (profile == null) return row;
+    return {
+      ...row,
+      'username': profile['username'],
+      'avatar_url': profile['avatar_url'],
+    };
   }
 
   Future<Either<AppException, List<Stamp>>> getFeedStamps({

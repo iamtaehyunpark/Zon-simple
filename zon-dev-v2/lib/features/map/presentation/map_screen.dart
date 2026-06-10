@@ -1581,7 +1581,18 @@ class _StampSheet extends StatelessWidget {
                 child: Text('@${stamp.username}',
                     style: TextStyle(color: Colors.grey[600], fontSize: 13)),
               ),
-            Text(stamp.placeName, style: Theme.of(context).textTheme.titleLarge),
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: stamp.externalPlaceId != null
+                  ? () {
+                      Navigator.pop(context);
+                      context.push(
+                          '/place/${Uri.encodeComponent(stamp.externalPlaceId!)}');
+                    }
+                  : null,
+              child: Text(stamp.placeName,
+                  style: Theme.of(context).textTheme.titleLarge),
+            ),
             const SizedBox(height: 4),
             Text(DateFormat('EEE, MMM d').format(stamp.visitedAt),
                 style: const TextStyle(color: Colors.grey)),
@@ -1662,8 +1673,18 @@ class _CheckInSheet extends StatelessWidget {
                     color: Color(isMine ? _kCheckinBlue : _kFollowedCheckinPink)),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(checkIn.placeName,
-                      style: Theme.of(context).textTheme.titleLarge),
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: checkIn.externalPlaceId != null
+                        ? () {
+                            Navigator.pop(context);
+                            context.push(
+                                '/place/${Uri.encodeComponent(checkIn.externalPlaceId!)}');
+                          }
+                        : null,
+                    child: Text(checkIn.placeName,
+                        style: Theme.of(context).textTheme.titleLarge),
+                  ),
                 ),
               ],
             ),

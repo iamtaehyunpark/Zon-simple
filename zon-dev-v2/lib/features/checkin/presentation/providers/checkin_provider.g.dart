@@ -6,7 +6,7 @@ part of 'checkin_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$checkinNotifierHash() => r'1de293065064c086a4a2e0ecb3c60bf41d9fb293';
+String _$checkinNotifierHash() => r'bb20b69c7b4fb40491be45e251ae15c860a40c00';
 
 /// See also [CheckinNotifier].
 @ProviderFor(CheckinNotifier)

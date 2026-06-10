@@ -323,7 +323,7 @@ final friendRequestsProvider =
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef FriendRequestsRef = AutoDisposeFutureProviderRef<List<UserProfile>>;
-String _$profileNotifierHash() => r'3d82fa3ad6a9f36d5f010cc44c377378c5757f98';
+String _$profileNotifierHash() => r'd417e2067bcb9f9b58a63713a31e72128b246066';
 
 abstract class _$ProfileNotifier
     extends BuildlessAutoDisposeNotifier<AsyncValue<UserProfile?>> {
@@ -471,7 +471,7 @@ class _ProfileNotifierProviderElement
 }
 
 String _$profileStampsNotifierHash() =>
-    r'9a054010a5a948c975e14075b1207a12c4ef777f';
+    r'cc5cd0fc24acd9e0b93a4d9f3d0fc69000cc6de4';
 
 abstract class _$ProfileStampsNotifier
     extends BuildlessAutoDisposeNotifier<AsyncValue<List<Stamp>>> {

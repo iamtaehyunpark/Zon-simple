@@ -118,10 +118,23 @@ class _CheckInDetailBody extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // Place name
-                Text(
-                  checkIn.placeName,
-                  style: const TextStyle(
-                      fontSize: 24, fontWeight: FontWeight.w800),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: checkIn.externalPlaceId != null
+                      ? () => context.push(
+                          '/place/${Uri.encodeComponent(checkIn.externalPlaceId!)}')
+                      : null,
+                  child: Text(
+                    checkIn.placeName,
+                    style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
+                        decoration: checkIn.externalPlaceId != null
+                            ? TextDecoration.underline
+                            : null,
+                        decorationColor: Colors.black26,
+                        decorationThickness: 1),
+                  ),
                 ),
                 const SizedBox(height: 6),
 

@@ -6,7 +6,7 @@ part of 'place_service_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$placeServiceForHash() => r'f12fd6a031cd475adea3e95b6d23078e605b67ee';
+String _$placeServiceForHash() => r'2cdfddbeec6fb67d6f8392b3ea642f5cf0442d52';
 
 /// Copied from Dart SDK
 class _SystemHash {
