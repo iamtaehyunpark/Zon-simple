@@ -357,15 +357,18 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   void _centerOnUserInitial(geo.Position pos) {
     if (_hasCenteredOnUser || _map == null || !_styleLoaded) return;
     _hasCenteredOnUser = true;
-    _map?.flyTo(
-      CameraOptions(
-        center: Point(
-          coordinates: Position(pos.longitude, pos.latitude),
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _map?.flyTo(
+        CameraOptions(
+          center: Point(
+            coordinates: Position(pos.longitude, pos.latitude),
+          ),
+          zoom: 14.0,
         ),
-        zoom: 14.0,
-      ),
-      MapAnimationOptions(duration: 800),
-    );
+        MapAnimationOptions(duration: 800),
+      );
+    });
   }
 
   // ── Friend avatar overlay ─────────────────────────────────────────────────
