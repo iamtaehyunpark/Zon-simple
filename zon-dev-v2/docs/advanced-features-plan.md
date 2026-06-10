@@ -1,7 +1,7 @@
 # ZON — Advanced Features Plan ("Perfecting the MVP") 
 
 > Living document. Tracks the multi-phase build-out of the advanced feature set on top
-> of the working MVP. Update the **Status** column as work lands. Started 2026-06-04. Last updated 2026-06-07.
+> of the working MVP. Update the **Status** column as work lands. Started 2026-06-04. Last updated 2026-06-10.
 
 ## Goal
 
@@ -356,3 +356,43 @@ Autonomous quality/UX pass on top of the feature work (branch `feature/advanced-
 - **Tests:** real unit tests for `compactCount` + `errorMessage` (`test/unit/`).
 - `flutter analyze` = 0 issues; `flutter test` green throughout.
 - **Still device-only:** visual/interaction QA needs `flutter run --release`.
+
+---
+
+## Phase 15 — Flutter UI Redesign + Bug-Fix Pass (2026-06-10)
+
+Branch: `feature/flutter-ui-redesign`
+
+### 15a — GPS reliability fixes
+
+- ☑ `GpsNotifier.sessionStartedAt: DateTime?` — recorded at `startTracking()`; exposed so the map can split today's route into pre-session (recorded) + live-session without double-counting flushed breadcrumbs
+- ☑ `LocationBatcher.flush()` called immediately on `stopTracking()` — trace appears on timeline as soon as a session ends, not only after the 5-min batch timer
+- ☑ `batchUserId` read once from `Supabase.auth.currentUser?.id` at session start instead of from `checkInRepositoryProvider` — avoids creating a short-lived autoDispose provider that thrashes the Riverpod graph; events are silently dropped if `batchUserId == null`
+
+### 15b — Map: total daily distance stat
+
+- ☑ `_refreshTodayRoute()` in `MapScreen` — fetches today's `raw_location_events` from the DB on load and when a new session starts
+- ☑ `_todayDistanceKm` getter — sums breadcrumbs in `_todayRoute` with `capturedAt < sessionStartedAt` (pre-session leg) + `_sessionDistanceKm` (live leg); replaces the prior session-only stat that reset to 0 on every app open
+- ☑ Header stat changed from `_sessionDistanceKm` → `_todayDistanceKm`
+
+### 15c — Code quality DRY-up
+
+- ☑ `ProfileRepository._joinedProfiles()` — extracted helper for follow/follower/following joined-row mapping (3 call sites)
+- ☑ `CheckinNotifier._onPromoted()` — extracted helper for promote-result fold (2 call sites)
+- ☑ `_SocialButtonsState._run()` — extracted helper for social mutations with loading flag + snackbar error (all friend/follow buttons unified)
+- ☑ `ActivityScreen._respondFriend()` / `_respondFollow()` — extracted helpers for friend/follow request accept/decline actions
+- ☑ `PhotoSuggestionScreen._stateOverlay()` / `_busy()` / `_emptyState()` — extracted helpers to clean up `build()` method
+- ☑ `TimelineScreen._nearestLocated()` — extracted helper for auto-anchor dedup scan; simplified 50-line block to ~8 lines
+
+### 15d — Bug fixes
+
+- ☑ `app.dart`: `_notifSub` stored and cancelled in `dispose()` — memory leak fix (stream subscription was never unsubscribed)
+- ☑ `check_in_repository.dart`: `isoDate()` helper used instead of `.substring(0, 10)` for date RPC param; explicit type cast fixed for `getMyCheckIns` response
+- ☑ `stamp_repository.dart`: haversine longitude delta now uses `math.cos(lat * math.pi / 180)` — previously used `3.14159 / 180 * lat` which is degrees, not radians
+- ☑ `profile_screen.dart`: `stamp.visibility == StampVisibility.private` replaces `stamp.visibility.name == 'private'` — proper enum comparison
+- ☑ `feed_screen.dart`: hardcoded `Color(0xFFEF4444)` for like icon replaced with `Z.error` theme token; `if (!context.mounted) return` guard added before `ref.invalidate` after `context.push`
+- ☑ `settings_screen.dart`: `_saveProfile()` now folds `Either` result to show success vs error snackbar; `MediaQuery.of` uses correct bottom-sheet context (was capturing outer widget context)
+- ☑ `checkin_entry.dart`: `if (!mounted) return` guard added in `completeStamp` post-frame callback
+- ☑ `activity_screen.dart`: friend/follow request handlers use extracted helpers with proper `if (!mounted)` guards
+- ☑ `app_theme.dart`: removed backward-compat `AppColors extends Z {}` alias (no callers)
+- ☑ `app_exception.dart`: removed unused `LocationError`, `PhotoError`, `NotFoundError` classes

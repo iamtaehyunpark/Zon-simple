@@ -1,9 +1,8 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/repositories/profile_repository.dart';
+import '../../../shared/widgets/user_tile.dart';
 
 class UserSearchScreen extends ConsumerStatefulWidget {
   const UserSearchScreen({super.key});
@@ -64,22 +63,7 @@ class _UserSearchScreenState extends ConsumerState<UserSearchScreen> {
       ),
       body: ListView.builder(
         itemCount: _results.length,
-        itemBuilder: (ctx, i) {
-          final u = _results[i];
-          return ListTile(
-            leading: CircleAvatar(
-              backgroundImage: u.avatarUrl != null
-                  ? CachedNetworkImageProvider(u.avatarUrl!)
-                  : null,
-              child: u.avatarUrl == null ? const Icon(Icons.person) : null,
-            ),
-            title: Text(u.displayName?.isNotEmpty == true
-                ? u.displayName!
-                : u.username),
-            subtitle: Text('@${u.username}'),
-            onTap: () => context.push('/profile/${u.id}'),
-          );
-        },
+        itemBuilder: (ctx, i) => UserTile(user: _results[i]),
       ),
     );
   }

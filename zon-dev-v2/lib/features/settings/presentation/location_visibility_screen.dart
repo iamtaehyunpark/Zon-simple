@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/location_sharing_repository.dart';
+import '../../../shared/widgets/app_states.dart';
 
 class LocationVisibilityScreen extends ConsumerStatefulWidget {
   const LocationVisibilityScreen({super.key});
@@ -64,19 +65,11 @@ class _LocationVisibilityScreenState
     return Scaffold(
       appBar: AppBar(title: const Text('Who can see my location')),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const LoadingView()
           : _friends.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.people_outline,
-                          size: 64, color: Colors.grey[300]),
-                      const SizedBox(height: 12),
-                      Text('No friends yet',
-                          style: TextStyle(color: Colors.grey[600])),
-                    ],
-                  ),
+              ? const EmptyView(
+                  icon: Icons.people_outline,
+                  message: 'No friends yet',
                 )
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

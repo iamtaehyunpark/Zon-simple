@@ -11,8 +11,10 @@ import '../../../app.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/models/friend_location.dart';
+import '../../../data/models/raw_location_event.dart';
 import '../../../data/repositories/stamp_repository.dart';
 import '../../../data/repositories/check_in_repository.dart';
+import '../../../data/repositories/location_repository.dart';
 import '../../../data/repositories/location_sharing_repository.dart';
 import '../../../core/location/providers/gps_provider.dart';
 import '../../../core/places/place_service_provider.dart' show placeServiceForProvider;
@@ -107,6 +109,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   Timer? _legendTimer;
   bool _showLegend = false;
 
+  // Today's recorded GPS breadcrumbs (from the DB), refreshed on load and when
+  // a new session starts. Used for the "km today" stat alongside the live path.
+  List<RawLocationEvent> _todayRoute = const [];
+  DateTime? _seenSessionStart;
+
+  Future<void> _refreshTodayRoute() async {
+    final res =
+        await ref.read(locationRepositoryProvider).getRouteForDay(DateTime.now());
+    if (!mounted) return;
+    final route = res.getOrElse((_) => <RawLocationEvent>[])
+      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
+    setState(() => _todayRoute = route);
+  }
+
   double get _sessionDistanceKm {
     final path = ref.read(gpsNotifierProvider.notifier).sessionPath;
     if (path.length < 2) return 0.0;
@@ -117,6 +133,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       totalMeters += geo.Geolocator.distanceBetween(p1[1], p1[0], p2[1], p2[0]);
     }
     return totalMeters / 1000.0;
+  }
+
+  /// Total distance travelled today: the day's recorded route *before* the
+  /// current session, plus the live session path. Splitting at the session
+  /// start avoids double-counting breadcrumbs the batcher already flushed.
+  double get _todayDistanceKm {
+    final startedAt = ref.read(gpsNotifierProvider.notifier).sessionStartedAt;
+    double meters = 0.0;
+    for (int i = 0; i < _todayRoute.length - 1; i++) {
+      final a = _todayRoute[i], b = _todayRoute[i + 1];
+      if (startedAt != null && !b.capturedAt.isBefore(startedAt)) break;
+      meters += geo.Geolocator.distanceBetween(a.lat, a.lng, b.lat, b.lng);
+    }
+    return meters / 1000.0 + _sessionDistanceKm;
   }
 
   (DateTime, DateTime) _filterRange() {
@@ -196,6 +226,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _loading = false;
     });
     _updateLayers();
+    _refreshTodayRoute();
   }
 
   void _toggleSaved() {
@@ -540,10 +571,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
     if (kind == 'checkin' || kind == 'fcheckin') {
-      final checkIn = _find(_myCheckIns, (c) => c.id == id) ??
-          _find(_followedCheckIns, (c) => c.id == id);
+      final mine = _find(_myCheckIns, (c) => c.id == id);
+      final checkIn = mine ?? _find(_followedCheckIns, (c) => c.id == id);
       if (checkIn == null) return;
-      final isMine = _find(_myCheckIns, (c) => c.id == id) != null;
+      final isMine = mine != null;
       showModalBottomSheet<void>(
         context: context,
         builder: (ctx) => _CheckInSheet(
@@ -616,6 +647,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _maybeBroadcast(pos);
       if (!_nearbyLoaded && !_nearbyLoading) {
         _loadNearbyPlaces();
+      }
+      // A new session started → the just-ended one is now in the DB; refresh so
+      // its distance moves into today's prior-route total.
+      final startedAt = ref.read(gpsNotifierProvider.notifier).sessionStartedAt;
+      if (startedAt != null && startedAt != _seenSessionStart) {
+        _seenSessionStart = startedAt;
+        _refreshTodayRoute();
       }
     });
 
@@ -864,7 +902,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     const Text('📍', style: TextStyle(fontSize: 13)),
                     const SizedBox(width: 6),
                     Text(
-                      '${_myStamps.length} stamps  ·  ${_sessionDistanceKm.toStringAsFixed(1)} km today',
+                      '${_myStamps.length} stamps  ·  ${_todayDistanceKm.toStringAsFixed(1)} km today',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,

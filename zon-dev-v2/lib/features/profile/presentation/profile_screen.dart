@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/models/enums.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/diary_repository.dart';
@@ -444,6 +445,25 @@ class _SocialButtonsState extends ConsumerState<_SocialButtons> {
     );
   }
 
+  /// Run a social mutation with a loading flag, surfacing failures as a snackbar.
+  Future<void> _run(
+    Future<void> Function() action,
+    String errorLabel, {
+    required bool friend,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => friend ? _friendLoading = true : _followLoading = true);
+    try {
+      await action();
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('$errorLabel: $e')));
+    } finally {
+      if (mounted) {
+        setState(() => friend ? _friendLoading = false : _followLoading = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final fs = ref.watch(friendStateProvider(widget.targetId)).valueOrNull ??
@@ -459,19 +479,9 @@ class _SocialButtonsState extends ConsumerState<_SocialButtons> {
         if (fs == FriendState.friends)
           PopupMenuButton<_FriendAction>(
             enabled: !_friendLoading,
-            onSelected: (a) async {
+            onSelected: (a) {
               if (a == _FriendAction.unfriend) {
-                final messenger = ScaffoldMessenger.of(context);
-                setState(() => _friendLoading = true);
-                try {
-                  await notifier.unfriend();
-                } catch (e) {
-                  messenger.showSnackBar(
-                    SnackBar(content: Text('Failed to unfriend: $e')),
-                  );
-                } finally {
-                  if (mounted) setState(() => _friendLoading = false);
-                }
+                _run(notifier.unfriend, 'Failed to unfriend', friend: true);
               }
             },
             itemBuilder: (_) => [
@@ -514,30 +524,13 @@ class _SocialButtonsState extends ConsumerState<_SocialButtons> {
           GestureDetector(
             onTap: _friendLoading
                 ? null
-                : () async {
-                    final messenger = ScaffoldMessenger.of(context);
+                : () {
                     if (fs == FriendState.none) {
-                      setState(() => _friendLoading = true);
-                      try {
-                        await notifier.sendFriendRequest();
-                      } catch (e) {
-                        messenger.showSnackBar(
-                          SnackBar(content: Text('Failed to send friend request: $e')),
-                        );
-                      } finally {
-                        if (mounted) setState(() => _friendLoading = false);
-                      }
+                      _run(notifier.sendFriendRequest,
+                          'Failed to send friend request', friend: true);
                     } else if (fs == FriendState.requestedByMe) {
-                      setState(() => _friendLoading = true);
-                      try {
-                        await notifier.cancelFriendRequest();
-                      } catch (e) {
-                        messenger.showSnackBar(
-                          SnackBar(content: Text('Failed to cancel request: $e')),
-                        );
-                      } finally {
-                        if (mounted) setState(() => _friendLoading = false);
-                      }
+                      _run(notifier.cancelFriendRequest,
+                          'Failed to cancel request', friend: true);
                     } else if (fs == FriendState.requestedByThem) {
                       _showRespondMenu(context, ref);
                     }
@@ -580,19 +573,8 @@ class _SocialButtonsState extends ConsumerState<_SocialButtons> {
         GestureDetector(
           onTap: _followLoading
               ? null
-              : () async {
-                  final messenger = ScaffoldMessenger.of(context);
-                  setState(() => _followLoading = true);
-                  try {
-                    await notifier.toggleFollow(widget.targetId);
-                  } catch (e) {
-                    messenger.showSnackBar(
-                      SnackBar(content: Text('Failed to update follow status: $e')),
-                    );
-                  } finally {
-                    if (mounted) setState(() => _followLoading = false);
-                  }
-                },
+              : () => _run(() => notifier.toggleFollow(widget.targetId),
+                  'Failed to update follow status', friend: false),
           child: Container(
             height: 34,
             padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -774,7 +756,7 @@ class _GridItem extends StatelessWidget {
                           fontSize: 10, color: Z.textMuted)),
                 ),
           // Private stamp lock badge
-          if (isOwnProfile && stamp.visibility.name == 'private')
+          if (isOwnProfile && stamp.visibility == StampVisibility.private)
             Positioned(
               top: 5,
               right: 5,

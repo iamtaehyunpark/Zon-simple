@@ -329,56 +329,30 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     final filtered = <_TlItem>[];
     for (int i = 0; i < items.length; i++) {
       final item = items[i];
-      if (item.isAuto) {
-        // Find nearest preceding location-based item
-        _TlItem? prevLoc;
-        for (int j = i - 1; j >= 0; j--) {
-          if (!items[j].isNote && items[j].lat != null && items[j].lng != null) {
-            prevLoc = items[j];
-            break;
-          }
+      if (item.isAuto && item.lat != null && item.lng != null) {
+        final prev = _nearestLocated(items, i - 1, -1);
+        final next = _nearestLocated(items, i + 1, 1);
+        bool within80(_TlItem? o) => o != null &&
+            Geolocator.distanceBetween(item.lat!, item.lng!, o.lat!, o.lng!) < 80;
+        // Skip an auto pin hugging the preceding location node (continuous
+        // stay) or an immediately following manual/stamp node (duplicate entry).
+        if (within80(prev) || (next != null && !next.isAuto && within80(next))) {
+          continue;
         }
-
-        // Find nearest succeeding location-based item
-        _TlItem? nextLoc;
-        for (int j = i + 1; j < items.length; j++) {
-          if (!items[j].isNote && items[j].lat != null && items[j].lng != null) {
-            nextLoc = items[j];
-            break;
-          }
-        }
-
-        bool shouldSkip = false;
-        if (prevLoc != null && item.lat != null && item.lng != null) {
-          final dist = Geolocator.distanceBetween(
-            item.lat!,
-            item.lng!,
-            prevLoc.lat!,
-            prevLoc.lng!,
-          );
-          if (dist < 80) {
-            shouldSkip = true;
-          }
-        }
-
-        if (!shouldSkip && nextLoc != null && !nextLoc.isAuto && item.lat != null && item.lng != null) {
-          final dist = Geolocator.distanceBetween(
-            item.lat!,
-            item.lng!,
-            nextLoc.lat!,
-            nextLoc.lng!,
-          );
-          if (dist < 80) {
-            shouldSkip = true;
-          }
-        }
-
-        if (shouldSkip) continue;
       }
       filtered.add(item);
     }
 
     return filtered;
+  }
+
+  /// First non-note, located item scanning from [start] by [step] (±1).
+  _TlItem? _nearestLocated(List<_TlItem> items, int start, int step) {
+    for (int j = start; j >= 0 && j < items.length; j += step) {
+      final it = items[j];
+      if (!it.isNote && it.lat != null && it.lng != null) return it;
+    }
+    return null;
   }
 
   _TlItem? _itemById(String id) {
@@ -394,16 +368,38 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     _redraw(b);
   }
 
+  /// The day's trace polyline: raw GPS breadcrumbs merged with every located
+  /// node (check-ins, auto anchors — including ones hidden from the list — and
+  /// stamps), ordered by time. Makes the timeline trace follow real movement
+  /// like the live map, instead of straight pin-to-pin segments.
+  List<List<double>> _traceCoords(DayBundle b) {
+    final points = <(DateTime, double, double)>[
+      for (final e in b.route) (e.capturedAt, e.lng, e.lat),
+      for (final c in b.checkIns) (c.visitedAt, c.lng, c.lat),
+      for (final s in b.stamps) (s.visitedAt, s.lng, s.lat),
+    ]..sort((x, y) => x.$1.compareTo(y.$1));
+
+    // Drop consecutive duplicate coordinates to keep the line lean.
+    final coords = <List<double>>[];
+    for (final p in points) {
+      if (coords.isEmpty || coords.last[0] != p.$2 || coords.last[1] != p.$3) {
+        coords.add([p.$2, p.$3]);
+      }
+    }
+    return coords;
+  }
+
   Future<void> _redraw(DayBundle b) async {
     final map = _map;
     if (map == null) return;
     final items = _buildItems(b);
     final located = items.where((i) => i.hasLocation).toList();
 
-    // Trace = the day's located nodes (check-ins, auto anchors, stamps) joined
-    // in time order. (Auto anchors sample movement, so this follows the path.)
-    final coords = [for (final i in located) [i.lng!, i.lat!]];
-    await drawLine(map, coords, kBrandPurple.toARGB32(), idPrefix: 'tl-path');
+    // Trace = the day's raw GPS breadcrumbs merged with every located node, so
+    // the line follows actual movement (like the live map) and still threads
+    // through each check-in / anchor / stamp.
+    await drawLine(map, _traceCoords(b), kBrandPurple.toARGB32(),
+        idPrefix: 'tl-path');
 
     await drawPins(
       map,
@@ -1277,7 +1273,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                                 ? DismissDirection.none
                                 : DismissDirection.endToStart,
                             background: Container(
-                              color: const Color(0xFFEF4444),
+                              color: Z.error,
                               alignment: Alignment.centerRight,
                               padding: const EdgeInsets.only(right: 20),
                               child: const Icon(Icons.delete_outline,

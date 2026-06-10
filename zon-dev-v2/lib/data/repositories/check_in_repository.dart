@@ -88,7 +88,7 @@ class CheckInRepository with BaseRepository {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
       final data = await client.rpc('check_ins_for_local_day', params: {
-        'p_date': date.toIso8601String().substring(0, 10),
+        'p_date': isoDate(date),
       });
       return right((data as List)
           .map((r) => _fromRow(r as Map<String, dynamic>))
@@ -134,7 +134,7 @@ class CheckInRepository with BaseRepository {
           .eq('user_id', userId)
           .order('visited_at', ascending: false)
           .range(offset, offset + limit - 1);
-      return right(data.map(_fromRow).toList());
+      return right((data as List).map((r) => _fromRow(r as Map<String, dynamic>)).toList());
     } catch (e) {
       return left(NetworkError(e.toString()));
     }

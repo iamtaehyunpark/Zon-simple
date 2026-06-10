@@ -78,15 +78,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _saveProfile() async {
     setState(() => _savingProfile = true);
-    await ref.read(profileRepositoryProvider).updateProfile({
+    final res = await ref.read(profileRepositoryProvider).updateProfile({
       'username': _usernameCtrl.text.trim(),
       'display_name': _displayNameCtrl.text.trim(),
       'bio': _bioCtrl.text.trim(),
     });
     if (mounted) {
       setState(() => _savingProfile = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Profile saved')));
+      res.fold(
+        (e) => ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: ${e.message}'))),
+        (_) => ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text('Profile saved'))),
+      );
     }
   }
 
@@ -430,9 +434,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       backgroundColor: Z.surface1,
       shape: const RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
-      builder: (_) => Padding(
+      builder: (sheetCtx) => Padding(
         padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom),
+            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
           child: Column(

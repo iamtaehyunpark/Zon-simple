@@ -67,6 +67,7 @@ class FeedScreen extends ConsumerWidget {
                               badge: unread > 0,
                               onTap: () async {
                                 await context.push('/activity');
+                                if (!context.mounted) return;
                                 ref.invalidate(unreadNotificationCountProvider);
                                 ref.invalidate(followRequestsProvider);
                                 ref.invalidate(friendRequestsProvider);
@@ -484,7 +485,7 @@ class StampCard extends ConsumerWidget {
                       _ActionBtn(
                         icon: stamp.isLiked ? Icons.favorite : Icons.favorite_border,
                         count: stamp.likeCount,
-                        color: stamp.isLiked ? const Color(0xFFEF4444) : Z.textMuted,
+                        color: stamp.isLiked ? Z.error : Z.textMuted,
                         onTap: () => ref
                             .read(feedNotifierProvider.notifier)
                             .toggleLike(stamp.id),

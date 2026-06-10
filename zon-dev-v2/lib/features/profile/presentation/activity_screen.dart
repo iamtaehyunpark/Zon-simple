@@ -1,8 +1,10 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fpdart/fpdart.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import '../../../core/errors/app_exception.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../data/repositories/notification_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -54,6 +56,29 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
       context.push('/stamp/${n.stampId}');
     } else if (n.actorId != null) {
       context.push('/profile/${n.actorId}');
+    }
+  }
+
+  Future<void> _respondFriend(
+      Future<Either<AppException, Unit>> Function() action) async {
+    final res = await action();
+    if (!mounted) return;
+    res.fold(
+      (e) => ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message))),
+      (_) => ref.invalidate(friendRequestsProvider),
+    );
+  }
+
+  Future<void> _respondFollow(Future<void> Function() action) async {
+    try {
+      await action();
+      if (mounted) ref.invalidate(followRequestsProvider);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.toString())));
+      }
     }
   }
 
@@ -134,18 +159,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                                     '@${r.username} sent you a friend request',
                                 time: '',
                                 isRequest: true,
-                                onAccept: () async {
-                                  await ref
-                                      .read(profileRepositoryProvider)
-                                      .acceptFriendRequest(r.id);
-                                  ref.invalidate(friendRequestsProvider);
-                                },
-                                onDecline: () async {
-                                  await ref
-                                      .read(profileRepositoryProvider)
-                                      .denyFriendRequest(r.id);
-                                  ref.invalidate(friendRequestsProvider);
-                                },
+                                onAccept: () => _respondFriend(() => ref
+                                    .read(profileRepositoryProvider)
+                                    .acceptFriendRequest(r.id)),
+                                onDecline: () => _respondFriend(() => ref
+                                    .read(profileRepositoryProvider)
+                                    .denyFriendRequest(r.id)),
                               ),
                             const Divider(
                                 height: 6, color: Z.surface0),
@@ -173,18 +192,12 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                                     '@${r.username} wants to follow you',
                                 time: '',
                                 isRequest: true,
-                                onAccept: () async {
-                                  await ref
-                                      .read(profileRepositoryProvider)
-                                      .approveFollow(r.id);
-                                  ref.invalidate(followRequestsProvider);
-                                },
-                                onDecline: () async {
-                                  await ref
-                                      .read(profileRepositoryProvider)
-                                      .denyFollow(r.id);
-                                  ref.invalidate(followRequestsProvider);
-                                },
+                                onAccept: () => _respondFollow(() => ref
+                                    .read(profileRepositoryProvider)
+                                    .approveFollow(r.id)),
+                                onDecline: () => _respondFollow(() => ref
+                                    .read(profileRepositoryProvider)
+                                    .denyFollow(r.id)),
                               ),
                             const Divider(height: 6, color: Z.surface0),
                           ],

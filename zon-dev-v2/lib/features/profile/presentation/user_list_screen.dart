@@ -1,10 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../shared/widgets/app_states.dart';
+import '../../../shared/widgets/user_tile.dart';
 
 /// Followers, following, or friends list for a user.
 class UserListScreen extends ConsumerStatefulWidget {
@@ -69,24 +68,7 @@ class _UserListScreenState extends ConsumerState<UserListScreen> {
                 )
               : ListView.builder(
                   itemCount: _users.length,
-                  itemBuilder: (ctx, i) {
-                    final u = _users[i];
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundImage: u.avatarUrl != null
-                            ? CachedNetworkImageProvider(u.avatarUrl!)
-                            : null,
-                        child: u.avatarUrl == null
-                            ? const Icon(Icons.person)
-                            : null,
-                      ),
-                      title: Text(u.displayName?.isNotEmpty == true
-                          ? u.displayName!
-                          : u.username),
-                      subtitle: Text('@${u.username}'),
-                      onTap: () => context.push('/profile/${u.id}'),
-                    );
-                  },
+                  itemBuilder: (ctx, i) => UserTile(user: _users[i]),
                 ),
     );
   }

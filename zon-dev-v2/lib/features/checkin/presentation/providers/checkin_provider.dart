@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:fpdart/fpdart.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../../../core/errors/app_exception.dart';
 import '../../../../data/models/stamp.dart';
 import '../../../../data/models/check_in.dart';
 import '../../../../data/models/enums.dart';
@@ -253,14 +255,7 @@ class CheckinNotifier extends _$CheckinNotifier {
           sensoryTags: d.sensoryTags,
           taggedUserIds: d.taggedUserIds,
         );
-        promo.fold(
-          (err) => state = CheckinState.error(err.message),
-          (stampId) {
-            ref.invalidate(feedNotifierProvider);
-            ref.invalidate(timelineNotifierProvider);
-            state = CheckinState.completeStamp(stampId);
-          },
-        );
+        _onPromoted(promo);
         return;
       }
 
@@ -287,17 +282,23 @@ class CheckinNotifier extends _$CheckinNotifier {
             sensoryTags: d.sensoryTags,
             taggedUserIds: d.taggedUserIds,
           );
-          promo.fold(
-            (err) => state = CheckinState.error(err.message),
-            (stampId) {
-              ref.invalidate(feedNotifierProvider);
-              ref.invalidate(timelineNotifierProvider);
-              state = CheckinState.completeStamp(stampId);
-            },
-          );
+          _onPromoted(promo);
         },
       );
     }
+  }
+
+  /// Apply a promote-to-stamp result: surface the error, or invalidate the
+  /// feed/timeline and finish on the new stamp id.
+  void _onPromoted(Either<AppException, String> promo) {
+    promo.fold(
+      (err) => state = CheckinState.error(err.message),
+      (stampId) {
+        ref.invalidate(feedNotifierProvider);
+        ref.invalidate(timelineNotifierProvider);
+        state = CheckinState.completeStamp(stampId);
+      },
+    );
   }
 
   Future<List<String>> _uploadAll(PhotoService service, List<String> paths) async {

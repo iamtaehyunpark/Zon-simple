@@ -17,3 +17,9 @@ enum LocationSource {
 }
 
 enum StampVisibility { private, public }
+
+/// Preset "vibe" tags offered when creating or editing a stamp.
+const kSensoryTags = <String>[
+  'Cozy', 'Lively', 'Quiet', 'Scenic', 'Crowded',
+  'Romantic', 'Family-friendly', 'Trendy', 'Historic', 'Hidden gem',
+];

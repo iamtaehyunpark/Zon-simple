@@ -18,11 +18,6 @@ class EditStampScreen extends ConsumerStatefulWidget {
 }
 
 class _EditStampScreenState extends ConsumerState<EditStampScreen> {
-  static const _sensoryOptions = [
-    'Cozy', 'Lively', 'Quiet', 'Scenic', 'Crowded',
-    'Romantic', 'Family-friendly', 'Trendy', 'Historic', 'Hidden gem',
-  ];
-
   final _placeCtrl = TextEditingController();
   final _captionCtrl = TextEditingController();
   List<({String id, String url})> _existing = [];
@@ -203,7 +198,7 @@ class _EditStampScreenState extends ConsumerState<EditStampScreen> {
                   Wrap(
                     spacing: 8,
                     runSpacing: 4,
-                    children: _sensoryOptions.map((tag) {
+                    children: kSensoryTags.map((tag) {
                       final selected = _tags.contains(tag);
                       return FilterChip(
                         label: Text(tag),

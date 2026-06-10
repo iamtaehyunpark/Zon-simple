@@ -155,6 +155,3 @@ class AppTheme {
     );
   }
 }
-
-// Keep backward-compat name
-class AppColors extends Z {}

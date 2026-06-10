@@ -134,11 +134,7 @@ class ProfileRepository with BaseRepository {
           .select('profiles!follows_follower_id_fkey(*)')
           .eq('following_id', userId)
           .eq('status', 'pending');
-      return [
-        for (final r in data)
-          if (r['profiles'] != null)
-            _fromRow(r['profiles'] as Map<String, dynamic>)
-      ];
+      return _joinedProfiles(data);
     } catch (_) {
       return [];
     }
@@ -187,11 +183,7 @@ class ProfileRepository with BaseRepository {
           .select('profiles!follows_follower_id_fkey(*)')
           .eq('following_id', userId)
           .eq('status', 'accepted');
-      return [
-        for (final r in data)
-          if (r['profiles'] != null)
-            _fromRow(r['profiles'] as Map<String, dynamic>)
-      ];
+      return _joinedProfiles(data);
     } catch (_) {
       return [];
     }
@@ -205,11 +197,7 @@ class ProfileRepository with BaseRepository {
           .select('profiles!follows_following_id_fkey(*)')
           .eq('follower_id', userId)
           .eq('status', 'accepted');
-      return [
-        for (final r in data)
-          if (r['profiles'] != null)
-            _fromRow(r['profiles'] as Map<String, dynamic>)
-      ];
+      return _joinedProfiles(data);
     } catch (_) {
       return [];
     }
@@ -353,6 +341,13 @@ class ProfileRepository with BaseRepository {
       return [];
     }
   }
+
+  /// Map rows carrying a nested `profiles` join into [UserProfile]s.
+  List<UserProfile> _joinedProfiles(List<Map<String, dynamic>> rows) => [
+        for (final r in rows)
+          if (r['profiles'] != null)
+            _fromRow(r['profiles'] as Map<String, dynamic>)
+      ];
 
   UserProfile _fromRow(Map<String, dynamic> row) {
     return UserProfile(

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/enums.dart';
+import 'editor_save_bar.dart';
 import 'photo_strip.dart';
 import 'user_tag_field.dart';
 
@@ -28,11 +29,6 @@ class _StampEditorBodyState extends ConsumerState<StampEditorBody> {
   late TextEditingController _captionCtrl;
   late TextEditingController _placeNameCtrl;
   late StampDraft _draft;
-
-  static const _sensoryOptions = [
-    'Cozy', 'Lively', 'Quiet', 'Scenic', 'Crowded',
-    'Romantic', 'Family-friendly', 'Trendy', 'Historic', 'Hidden gem',
-  ];
 
   @override
   void initState() {
@@ -130,7 +126,7 @@ class _StampEditorBodyState extends ConsumerState<StampEditorBody> {
                 Wrap(
                   spacing: 8,
                   runSpacing: 4,
-                  children: _sensoryOptions.map((tag) {
+                  children: kSensoryTags.map((tag) {
                     final selected = _draft.sensoryTags.contains(tag);
                     return FilterChip(
                       label: Text(tag),
@@ -186,18 +182,10 @@ class _StampEditorBodyState extends ConsumerState<StampEditorBody> {
             ),
           ),
         ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-              16, 8, 16, MediaQuery.of(context).padding.bottom + 16),
-          child: SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: FilledButton(
-              onPressed:
-                  _placeNameCtrl.text.trim().isEmpty ? null : widget.onSave,
-              child: const Text('Save Stamp'),
-            ),
-          ),
+        EditorSaveBar(
+          label: 'Save Stamp',
+          enabled: _placeNameCtrl.text.trim().isNotEmpty,
+          onSave: widget.onSave,
         ),
       ],
     );

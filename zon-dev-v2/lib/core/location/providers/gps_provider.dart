@@ -10,6 +10,7 @@ import '../../../data/models/check_in.dart';
 import '../../../data/models/raw_location_event.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/repositories/check_in_repository.dart';
+import '../../supabase/supabase_provider.dart';
 
 part 'gps_provider.g.dart';
 
@@ -26,6 +27,11 @@ class GpsNotifier extends _$GpsNotifier {
   /// In-memory path (lng,lat) of this foreground session — the live map line.
   final List<List<double>> sessionPath = [];
 
+  /// When the current foreground session began. Lets the map count today's
+  /// total distance as (prior recorded route) + (this live session) without
+  /// double-counting the session's already-flushed breadcrumbs.
+  DateTime? sessionStartedAt;
+
   double? _lastLat;
   double? _lastLng;
   static const _uuid = Uuid();
@@ -37,7 +43,7 @@ class GpsNotifier extends _$GpsNotifier {
   int _sessionId = 0;
 
   // Skip a new auto anchor only if today already has a check-in this close.
-  static const double _kMinAnchorGapM = 80;
+  static const double _kMinAnchorGapM = 50;
 
   @override
   AsyncValue<Position?> build() {
@@ -63,7 +69,12 @@ class GpsNotifier extends _$GpsNotifier {
     _sessionId++;
 
     sessionPath.clear();
+    sessionStartedAt = DateTime.now();
     bool isFirstPosition = true;
+
+    // Read userId directly from Supabase auth — avoids creating a temporary
+    // autoDispose checkInRepositoryProvider that thrashes the Riverpod graph.
+    final batchUserId = ref.read(supabaseClientProvider).auth.currentUser?.id;
 
     // Fetch initial current position to resolve location immediately
     service.currentPosition().then((position) {
@@ -91,15 +102,17 @@ class GpsNotifier extends _$GpsNotifier {
         if (sessionPath.isEmpty || sessionPath.last[0] != position.longitude || sessionPath.last[1] != position.latitude) {
           sessionPath.add([position.longitude, position.latitude]);
         }
-        ref.read(locationBatcherProvider).add(RawLocationEvent(
-          id: _uuid.v4(),
-          userId: '',
-          lat: position.latitude,
-          lng: position.longitude,
-          accuracyM: position.accuracy,
-          source: LocationSource.gps,
-          capturedAt: DateTime.now(),
-        ));
+        if (batchUserId != null) {
+          ref.read(locationBatcherProvider).add(RawLocationEvent(
+            id: _uuid.v4(),
+            userId: batchUserId,
+            lat: position.latitude,
+            lng: position.longitude,
+            accuracyM: position.accuracy,
+            source: LocationSource.gps,
+            capturedAt: DateTime.now(),
+          ));
+        }
 
         if (isFirstPosition) {
           isFirstPosition = false;
@@ -119,6 +132,10 @@ class GpsNotifier extends _$GpsNotifier {
     // incremented and _anchorPath will abort without writing.
     final sessionAtStop = _sessionId;
     await sub.cancel();
+    // Persist the session's queued GPS breadcrumbs now, so the timeline's trace
+    // reflects the full session as soon as it ends — not only after the 5-min
+    // batch timer. Events stay queued in Hive if this flush fails.
+    await ref.read(locationBatcherProvider).flush();
     await _anchorPath(sessionAtStop);
   }
 

@@ -45,9 +45,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
       if (widget.fromCheckInId != null) {
         _startFromCheckIn(widget.fromCheckInId!);
       } else {
-        ref
-            .read(checkinNotifierProvider.notifier)
-            .startCheckin(
+        ref.read(checkinNotifierProvider.notifier).startCheckin(
               lat: widget.lat,
               lng: widget.lng,
               mode: widget.mode,
@@ -101,7 +99,12 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
     final results = await ref
         .read(checkinNotifierProvider.notifier)
         .searchPlaces(lat, lng, q);
-    if (mounted) setState(() { _searchResults = results; _searching = false; });
+    if (mounted) {
+      setState(() {
+        _searchResults = results;
+        _searching = false;
+      });
+    }
   }
 
   @override
@@ -111,14 +114,16 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
         widget.mode == CheckinMode.stamp || widget.fromCheckInId != null;
 
     Widget mainContent = checkinState.when(
-      idle: () => const Center(child: CircularProgressIndicator(color: Z.brand)),
+      idle: () =>
+          const Center(child: CircularProgressIndicator(color: Z.brand)),
       locating: () => const Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             CircularProgressIndicator(color: Z.brand),
             SizedBox(height: 16),
-            Text('Finding your location...', style: TextStyle(color: Z.textMuted)),
+            Text('Finding your location...',
+                style: TextStyle(color: Z.textMuted)),
           ],
         ),
       ),
@@ -154,7 +159,8 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
             ref.read(checkinNotifierProvider.notifier).updateStampDraft(d),
         onSave: () => ref.read(checkinNotifierProvider.notifier).save(),
       ),
-      saving: () => const Center(child: CircularProgressIndicator(color: Z.brand)),
+      saving: () =>
+          const Center(child: CircularProgressIndicator(color: Z.brand)),
       completeCheckIn: (checkIn) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted && _savedCheckIn == null) {
@@ -170,6 +176,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
       },
       completeStamp: (stampId) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
           ref.read(checkinNotifierProvider.notifier).reset();
           context.pop();
           context.push('/stamp/$stampId');
@@ -179,7 +186,10 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
       error: (msg) => ErrorView(
         message: msg,
         onRetry: () => ref.read(checkinNotifierProvider.notifier).startCheckin(
-            lat: widget.lat, lng: widget.lng, mode: widget.mode, visitedAt: widget.visitedAt),
+            lat: widget.lat,
+            lng: widget.lng,
+            mode: widget.mode,
+            visitedAt: widget.visitedAt),
       ),
     );
 
@@ -234,17 +244,20 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
                   orElse: () => false,
                 )) ...[
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     child: Row(
                       children: [
                         GestureDetector(
                           onTap: () {
-                            ref.read(checkinNotifierProvider.notifier).startCheckin(
-                              lat: widget.lat,
-                              lng: widget.lng,
-                              mode: widget.mode,
-                              visitedAt: widget.visitedAt,
-                            );
+                            ref
+                                .read(checkinNotifierProvider.notifier)
+                                .startCheckin(
+                                  lat: widget.lat,
+                                  lng: widget.lng,
+                                  mode: widget.mode,
+                                  visitedAt: widget.visitedAt,
+                                );
                           },
                           child: const Icon(Icons.arrow_back, color: Z.text),
                         ),
@@ -298,7 +311,8 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
                               color: Z.surface2,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.close, size: 16, color: Z.textMuted),
+                            child: const Icon(Icons.close,
+                                size: 16, color: Z.textMuted),
                           ),
                         ),
                       ],
@@ -308,7 +322,8 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
                 // Step body
                 Expanded(
                   child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(24)),
                     child: mainContent,
                   ),
                 ),
@@ -366,7 +381,8 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
                   onPressed: () {
                     ref.read(checkinNotifierProvider.notifier).reset();
                     context.pop();
-                    context.push('/checkin?mode=stamp&fromCheckIn=${checkIn.id}');
+                    context
+                        .push('/checkin?mode=stamp&fromCheckIn=${checkIn.id}');
                   },
                   child: const Text('Make it a stamp →'),
                 ),
@@ -383,7 +399,8 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
                   },
                   child: const Text(
                     'View in Timeline',
-                    style: TextStyle(color: Z.text, fontWeight: FontWeight.w600),
+                    style:
+                        TextStyle(color: Z.text, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -397,7 +414,8 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
                   },
                   child: const Text(
                     'Done',
-                    style: TextStyle(color: Z.textMuted, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                        color: Z.textMuted, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -407,6 +425,23 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
       ),
     );
   }
+}
+
+/// Pick a category emoji for a place from keywords in its name (and address).
+String _placeEmoji(ExternalPlace place) {
+  final name = place.name.toLowerCase();
+  if (place.address?.contains('Café') == true || name.contains('coffee')) {
+    return '☕';
+  }
+  if (name.contains('park') || name.contains('river')) return '🌿';
+  if (name.contains('market') || name.contains('store')) return '🏬';
+  if (name.contains('pasta') ||
+      name.contains('pizza') ||
+      name.contains('restaurant')) {
+    return '🍝';
+  }
+  if (name.contains('music') || name.contains('records')) return '🎵';
+  return '📍';
 }
 
 class _PlaceSelectionBody extends StatelessWidget {
@@ -459,12 +494,14 @@ class _PlaceSelectionBody extends StatelessWidget {
                       child: SizedBox(
                         width: 20,
                         height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Z.brand),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Z.brand),
                       ),
                     )
                   : searchCtrl.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear, size: 18, color: Z.textMuted),
+                          icon: const Icon(Icons.clear,
+                              size: 18, color: Z.textMuted),
                           onPressed: () {
                             searchCtrl.clear();
                             onSearch('');
@@ -566,8 +603,8 @@ class _PlaceSelectionBody extends StatelessWidget {
                   )),
                   child: Container(
                     margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                     decoration: BoxDecoration(
                       color: Z.brandSoft,
                       border: Border.all(color: Z.outline),
@@ -588,7 +625,8 @@ class _PlaceSelectionBody extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           '${s.visitedAt.day}/${s.visitedAt.month}/${s.visitedAt.year}',
-                          style: const TextStyle(fontSize: 11, color: Z.textMuted),
+                          style:
+                              const TextStyle(fontSize: 11, color: Z.textMuted),
                         ),
                       ],
                     ),
@@ -606,24 +644,14 @@ class _PlaceSelectionBody extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 20),
             itemBuilder: (ctx, i) {
               final place = displayPlaces[i];
-              String emoji = '📍';
-              if (place.address?.contains('Café') == true || place.name.toLowerCase().contains('coffee')) {
-                emoji = '☕';
-              } else if (place.name.toLowerCase().contains('park') || place.name.toLowerCase().contains('river')) {
-                emoji = '🌿';
-              } else if (place.name.toLowerCase().contains('market') || place.name.toLowerCase().contains('store')) {
-                emoji = '🏬';
-              } else if (place.name.toLowerCase().contains('pasta') || place.name.toLowerCase().contains('pizza') || place.name.toLowerCase().contains('restaurant')) {
-                emoji = '🍝';
-              } else if (place.name.toLowerCase().contains('music') || place.name.toLowerCase().contains('records')) {
-                emoji = '🎵';
-              }
-              
+              final emoji = _placeEmoji(place);
+
               return GestureDetector(
                 onTap: () => onSelectPlace(place),
                 behavior: HitTestBehavior.opaque,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: const BoxDecoration(
                     border: Border(bottom: BorderSide(color: Z.outline)),
                   ),
@@ -650,7 +678,8 @@ class _PlaceSelectionBody extends StatelessWidget {
                               const SizedBox(height: 2),
                               Text(
                                 place.address!,
-                                style: const TextStyle(fontSize: 12, color: Z.textMuted),
+                                style: const TextStyle(
+                                    fontSize: 12, color: Z.textMuted),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),

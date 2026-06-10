@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -223,12 +224,14 @@ class ZonApp extends ConsumerStatefulWidget {
 }
 
 class _ZonAppState extends ConsumerState<ZonApp> with WidgetsBindingObserver {
+  StreamSubscription<String>? _notifSub;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // Route the app when a notification is tapped
-    notificationRouteStream.stream.listen((route) {
+    _notifSub = notificationRouteStream.stream.listen((route) {
       final router = ref.read(_routerProvider);
       router.go(route);
     });
@@ -238,6 +241,7 @@ class _ZonAppState extends ConsumerState<ZonApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _notifSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

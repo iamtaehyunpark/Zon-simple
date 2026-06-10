@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:fpdart/fpdart.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -52,7 +53,7 @@ class StampRepository with BaseRepository {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
       final data = await client.rpc('stamps_for_local_day', params: {
-        'p_date': day.toIso8601String().substring(0, 10),
+        'p_date': isoDate(day),
       });
       return right((data as List)
           .map((r) => _fromRow(r as Map<String, dynamic>))
@@ -370,7 +371,7 @@ Future<Either<AppException, List<Stamp>>> getUserStamps(
     try {
       // Haversine approximation: 1 degree lat ≈ 111km
       final latDelta = radiusKm / 111.0;
-      final lngDelta = radiusKm / (111.0 * (3.14159 / 180 * lat).abs().clamp(0.01, 1));
+      final lngDelta = radiusKm / (111.0 * math.cos(lat * math.pi / 180).abs().clamp(0.01, 1.0));
       final data = await client
           .from('place_stats')
           .select()
