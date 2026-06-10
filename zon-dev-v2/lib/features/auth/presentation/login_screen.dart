@@ -72,7 +72,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 style: TextStyle(
                   fontSize: 64,
                   fontWeight: FontWeight.w900,
-                  color: kBrandGreen,
+                  color: kBrandPurple,
                   letterSpacing: -2,
                 ),
               ),
@@ -114,7 +114,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               if (_loading) ...[
                 const SizedBox(height: 24),
-                const CircularProgressIndicator(color: kBrandGreen),
+                const CircularProgressIndicator(color: kBrandPurple),
               ],
               const Spacer(),
               const Text(

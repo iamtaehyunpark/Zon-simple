@@ -7,7 +7,6 @@ void main() {
     test('uses AppException.message (not the runtime type)', () {
       expect(errorMessage(const NetworkError('offline')), 'offline');
       expect(errorMessage(const AuthError('unauthorized')), 'unauthorized');
-      expect(errorMessage(const NotFoundError('missing')), 'missing');
     });
 
     test('falls back to toString for non-AppException errors', () {

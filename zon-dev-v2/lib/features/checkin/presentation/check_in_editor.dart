@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/models/enums.dart';
 import '../../../shared/widgets/place_search_field.dart';
+import 'editor_save_bar.dart';
 import 'photo_strip.dart';
 import 'user_tag_field.dart';
 
@@ -110,17 +111,10 @@ class _CheckInEditorBodyState extends State<CheckInEditorBody> {
             ),
           ),
         ),
-        Padding(
-          padding: EdgeInsets.fromLTRB(
-              16, 8, 16, MediaQuery.of(context).padding.bottom + 16),
-          child: SizedBox(
-            width: double.infinity,
-            height: 52,
-            child: FilledButton(
-              onPressed: _placeCtrl.text.trim().isEmpty ? null : widget.onSave,
-              child: const Text('Check in'),
-            ),
-          ),
+        EditorSaveBar(
+          label: 'Check in',
+          enabled: _placeCtrl.text.trim().isNotEmpty,
+          onSave: widget.onSave,
         ),
       ],
     );

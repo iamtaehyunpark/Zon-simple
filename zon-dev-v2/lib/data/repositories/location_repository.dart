@@ -62,7 +62,7 @@ class LocationRepository with BaseRepository {
       if (userId == null) return left(const AuthError('Unauthorized'));
       final data = await client.rpc('route_events_for_day', params: {
         'p_user_id': userId,
-        'p_date': date.toIso8601String().substring(0, 10),
+        'p_date': isoDate(date),
       });
       return right(
         (data as List).map((r) => _fromRow(r)).toList(),

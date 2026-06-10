@@ -86,17 +86,27 @@ Future<void> upsertLine(
       await map.style.setStyleSourceProperty(sourceId, 'data', data);
       return;
     }
-  } catch (_) {/* fall through to full add */}
-  await map.style.addSource(GeoJsonSource(id: sourceId, data: data));
-  await map.style.addLayer(LineLayer(
-    id: layerId,
-    sourceId: sourceId,
-    lineColor: color,
-    lineWidth: 4.0,
-    lineOpacity: 0.75,
-    lineCap: LineCap.ROUND,
-    lineJoin: LineJoin.ROUND,
-  ));
+  } catch (_) {}
+  try {
+    await map.style.addSource(GeoJsonSource(id: sourceId, data: data));
+  } catch (_) {
+    try {
+      await map.style.setStyleSourceProperty(sourceId, 'data', data);
+    } catch (_) {}
+  }
+  try {
+    if (!(await map.style.styleLayerExists(layerId))) {
+      await map.style.addLayer(LineLayer(
+        id: layerId,
+        sourceId: sourceId,
+        lineColor: color,
+        lineWidth: 4.0,
+        lineOpacity: 0.75,
+        lineCap: LineCap.ROUND,
+        lineJoin: LineJoin.ROUND,
+      ));
+    }
+  } catch (_) {}
 }
 
 /// Remove a polyline previously drawn with [drawLine] / [upsertLine].
@@ -118,6 +128,37 @@ Future<void> drawHighlight(MapboxMap map, MapPin? pin, int color) async {
     circleColor: 0x00000000,
     circleStrokeWidth: 4.0,
     circleStrokeColor: color,
+  ));
+}
+
+/// Render hot-place sized circles (Phase C). [places] is a list of records
+/// with lat/lng/hotScore/id/name. Radius ∝ log(hotScore+1), clamped 8–32pt.
+Future<void> drawHotPlaces(
+  MapboxMap map,
+  List<({String id, String name, double lat, double lng, double hotScore})>
+      places, {
+  int color = 0xCC8B6EC4,
+}) async {
+  const sourceId = 'hot-places-source';
+  const layerId = 'hot-places-layer';
+  await _remove(map, sourceId, layerId);
+  if (places.isEmpty) return;
+  final features = places
+      .map((p) =>
+          '{"type":"Feature","properties":{"id":"${p.id}","kind":"hot",'
+          '"name":"${_esc(p.name)}","hotScore":${p.hotScore}},'
+          '"geometry":{"type":"Point","coordinates":[${p.lng},${p.lat}]}}')
+      .join(',');
+  final geojson = '{"type":"FeatureCollection","features":[$features]}';
+  await map.style.addSource(GeoJsonSource(id: sourceId, data: geojson));
+  await map.style.addLayer(CircleLayer(
+    id: layerId,
+    sourceId: sourceId,
+    circleColor: color,
+    circleOpacity: 0.55,
+    circleRadius: 12.0, // visual base; individual sizes via data-driven props TBD
+    circleStrokeWidth: 1.5,
+    circleStrokeColor: 0xFFFFFFFF,
   ));
 }
 

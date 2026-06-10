@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -26,8 +27,9 @@ import 'features/profile/presentation/activity_screen.dart';
 import 'features/feed/presentation/saved_stamps_screen.dart';
 import 'features/photo_import/presentation/photo_suggestion_screen.dart';
 import 'features/settings/presentation/location_visibility_screen.dart';
+import 'features/map/presentation/place_detail_screen.dart';
 
-const kBrandGreen = Color(0xFF1D9E75);
+const kBrandPurple = Color(0xFF8B6EC4);
 
 class _RouterRefreshNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
@@ -40,7 +42,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
   ref.listen(authStateStreamProvider, (_, __) => notifier.notify());
 
   return GoRouter(
-    initialLocation: '/feed',
+    initialLocation: '/map',
     refreshListenable: notifier,
     redirect: (ctx, state) {
       final isLoggedIn = Supabase.instance.client.auth.currentUser != null;
@@ -51,7 +53,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
 
       // Authenticated: keep users off /login and the bare '/' that the OAuth
       // deep-link callback resolves to (we define no '/' route).
-      if (loc == '/login' || loc == '/') return '/feed';
+      if (loc == '/login' || loc == '/') return '/map';
       return null;
     },
     routes: [
@@ -88,8 +90,19 @@ final _routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/checkin',
         name: 'checkin',
-        pageBuilder: (ctx, state) => MaterialPage(
+        pageBuilder: (ctx, state) => CustomTransitionPage(
+          key: state.pageKey,
           fullscreenDialog: true,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            const begin = Offset(0.0, 1.0);
+            const end = Offset.zero;
+            const curve = Curves.easeInOut;
+            final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
+            return SlideTransition(
+              position: animation.drive(tween),
+              child: child,
+            );
+          },
           child: CheckinEntry(
             lat: double.tryParse(state.uri.queryParameters['lat'] ?? ''),
             lng: double.tryParse(state.uri.queryParameters['lng'] ?? ''),
@@ -97,6 +110,9 @@ final _routerProvider = Provider<GoRouter>((ref) {
                 ? CheckinMode.stamp
                 : CheckinMode.checkIn,
             fromCheckInId: state.uri.queryParameters['fromCheckIn'],
+            visitedAt: state.uri.queryParameters['time'] != null
+                ? DateTime.tryParse(state.uri.queryParameters['time']!)
+                : null,
           ),
         ),
       ),
@@ -173,6 +189,12 @@ final _routerProvider = Provider<GoRouter>((ref) {
         builder: (_, __) => const LocationVisibilityScreen(),
       ),
       GoRoute(
+        path: '/place/:id',
+        name: 'place-detail',
+        builder: (ctx, state) =>
+            PlaceDetailScreen(placeId: state.pathParameters['id']!),
+      ),
+      GoRoute(
         path: '/profile/:id/friends',
         name: 'friends',
         builder: (ctx, state) => UserListScreen(
@@ -202,12 +224,14 @@ class ZonApp extends ConsumerStatefulWidget {
 }
 
 class _ZonAppState extends ConsumerState<ZonApp> with WidgetsBindingObserver {
+  StreamSubscription<String>? _notifSub;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     // Route the app when a notification is tapped
-    notificationRouteStream.stream.listen((route) {
+    _notifSub = notificationRouteStream.stream.listen((route) {
       final router = ref.read(_routerProvider);
       router.go(route);
     });
@@ -217,6 +241,7 @@ class _ZonAppState extends ConsumerState<ZonApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _notifSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -253,102 +278,327 @@ class _ZonAppState extends ConsumerState<ZonApp> with WidgetsBindingObserver {
     return MaterialApp.router(
       title: 'ZON',
       routerConfig: router,
-      theme: AppTheme.theme(kBrandGreen),
+      theme: AppTheme.theme,
     );
   }
 }
 
-class MainShell extends StatelessWidget {
+
+// ── ZON Main Shell — custom tab bar + FAB menu matching zon-primitives.jsx ────
+class MainShell extends StatefulWidget {
   final Widget child;
   const MainShell({super.key, required this.child});
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
 
-  int _locationIndex(BuildContext context) {
-    final location = GoRouterState.of(context).uri.toString();
-    if (location.startsWith('/map')) return 1;
-    if (location.startsWith('/timeline')) return 3;
-    if (location.startsWith('/profile')) return 4;
-    return 0;
-  }
+class _MainShellState extends State<MainShell>
+    with SingleTickerProviderStateMixin {
+  bool _fabOpen = false;
+  late final AnimationController _ctrl;
 
-  // FAB offers the two distinct entry points: a lightweight check-in (trace
-  // log) vs. a full stamp (a check-in promoted to a post).
-  void _showCreateMenu(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(Icons.location_on, color: kBrandGreen),
-              title: const Text('Check in here'),
-              subtitle: const Text('Log a visit — quick, private'),
-              onTap: () {
-                Navigator.pop(ctx);
-                context.push('/checkin?mode=checkin');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.auto_awesome, color: kBrandGreen),
-              title: const Text('Create stamp'),
-              subtitle: const Text('A post with photos, caption & vibe'),
-              onTap: () {
-                Navigator.pop(ctx);
-                context.push('/checkin?mode=stamp');
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library_outlined,
-                  color: kBrandGreen),
-              title: const Text('Photo check-in'),
-              subtitle: const Text('Import geotagged photos from your library'),
-              onTap: () {
-                Navigator.pop(ctx);
-                context.push('/photo-suggestions');
-              },
-            ),
-          ],
-        ),
-      ),
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 240),
     );
   }
 
   @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _toggleFab() {
+    setState(() => _fabOpen = !_fabOpen);
+    _fabOpen ? _ctrl.forward() : _ctrl.reverse();
+  }
+
+  void _closeFab() {
+    if (!_fabOpen) return;
+    setState(() => _fabOpen = false);
+    _ctrl.reverse();
+  }
+
+  Animation<double> _itemAnim(int i) => CurvedAnimation(
+        parent: _ctrl,
+        curve: Interval(i * 0.15, (i * 0.15 + 0.65).clamp(0, 1),
+            curve: Curves.easeOut),
+      );
+
+  String _activeTab(BuildContext ctx) {
+    final loc = GoRouterState.of(ctx).uri.toString();
+    if (loc.startsWith('/map')) return 'map';
+    if (loc.startsWith('/timeline')) return 'timeline';
+    if (loc.startsWith('/profile')) return 'profile';
+    return 'feed';
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final idx = _locationIndex(context);
+    final active = _activeTab(context);
+    final bottomPad = MediaQuery.of(context).padding.bottom;
+
     return Scaffold(
-      body: child,
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: idx,
-        onTap: (i) {
-          switch (i) {
-            case 0:
-              context.go('/feed');
-            case 1:
-              context.go('/map');
-            case 3:
-              context.go('/timeline');
-            case 4:
-              context.go('/profile');
-          }
-        },
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Feed'),
-          BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'),
-          BottomNavigationBarItem(icon: SizedBox.shrink(), label: ''),
-          BottomNavigationBarItem(
-              icon: Icon(Icons.calendar_month), label: 'Timeline'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+      backgroundColor: Z.surface0,
+      body: Stack(
+        children: [
+          // Main screen content — leave room for tab bar (83 + system pad)
+          Positioned.fill(
+            bottom: 83 + bottomPad,
+            child: widget.child,
+          ),
+
+          // FAB backdrop overlay
+          if (_fabOpen)
+            Positioned.fill(
+              child: GestureDetector(
+                onTap: _closeFab,
+                behavior: HitTestBehavior.opaque,
+                child: const ColoredBox(color: Color(0x2E1A1714)),
+              ),
+            ),
+
+          // FAB expand menu — pill items above tab bar
+          if (_fabOpen)
+            Positioned(
+              bottom: 83 + bottomPad + 12,
+              left: 0,
+              right: 0,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _FabMenuItem(
+                    anim: _itemAnim(2),
+                    icon: Icons.location_on,
+                    label: 'Check in',
+                    onTap: () { _closeFab(); context.push('/checkin?mode=checkin'); },
+                  ),
+                  const SizedBox(height: 10),
+                  _FabMenuItem(
+                    anim: _itemAnim(1),
+                    icon: Icons.photo_camera,
+                    label: 'Photo check-in',
+                    onTap: () { _closeFab(); context.push('/photo-suggestions'); },
+                  ),
+                  const SizedBox(height: 10),
+                  _FabMenuItem(
+                    anim: _itemAnim(0),
+                    icon: Icons.workspace_premium,
+                    label: 'Create stamp',
+                    onTap: () { _closeFab(); context.push('/checkin?mode=stamp'); },
+                  ),
+                ],
+              ),
+            ),
+
+          // Tab bar — fixed at bottom
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: _ZonTabBar(
+              active: active,
+              fabOpen: _fabOpen,
+              bottomPad: bottomPad,
+              onTab: (id) {
+                _closeFab();
+                switch (id) {
+                  case 'map':      context.go('/map');
+                  case 'feed':     context.go('/feed');
+                  case 'timeline': context.go('/timeline');
+                  case 'profile':  context.go('/profile');
+                }
+              },
+              onFab: _toggleFab,
+            ),
+          ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showCreateMenu(context),
-        backgroundColor: kBrandGreen,
-        tooltip: 'Create',
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
+}
+
+/// FAB pill menu item — matches FabMenu in zon-primitives.jsx
+class _FabMenuItem extends StatelessWidget {
+  final Animation<double> anim;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  const _FabMenuItem({
+    required this.anim,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: anim,
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, 0.35), end: Offset.zero)
+            .animate(anim),
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 80),
+            padding: const EdgeInsets.fromLTRB(14, 10, 20, 10),
+            decoration: BoxDecoration(
+              color: Z.surface1,
+              borderRadius: BorderRadius.circular(9999),
+              boxShadow: const [
+                BoxShadow(
+                    color: Color(0x23000000),
+                    blurRadius: 20,
+                    offset: Offset(0, 6)),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: const BoxDecoration(
+                    color: Z.brandSoft,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(icon, size: 19, color: Z.brand),
+                ),
+                const SizedBox(width: 12),
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Z.text)),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Custom 5-tab bar matching TabBar in zon-primitives.jsx:
+///   Map | Feed | [FAB +52px elevated] | Days | Me
+class _ZonTabBar extends StatelessWidget {
+  final String active;
+  final bool fabOpen;
+  final double bottomPad;
+  final void Function(String) onTab;
+  final VoidCallback onFab;
+  const _ZonTabBar({
+    required this.active,
+    required this.fabOpen,
+    required this.bottomPad,
+    required this.onTab,
+    required this.onFab,
+  });
+
+  static const _tabs = [
+    _TabDef('map',      Icons.map,           Icons.map_outlined,           'Map'),
+    _TabDef('feed',     Icons.article,       Icons.article_outlined,       'Feed'),
+    _TabDef('_fab',     Icons.add,           Icons.add,                    ''),
+    _TabDef('timeline', Icons.calendar_today,Icons.calendar_today_outlined,'Days'),
+    _TabDef('profile',  Icons.person,        Icons.person_outline,         'Me'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 83 + bottomPad,
+      decoration: const BoxDecoration(
+        color: Z.surface1,
+        border: Border(top: BorderSide(color: Z.outline)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: _tabs.map((tab) {
+          if (tab.id == '_fab') {
+            return Expanded(
+              child: GestureDetector(
+                onTap: onFab,
+                behavior: HitTestBehavior.opaque,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Transform.translate(
+                        offset: const Offset(0, -20),
+                        child: AnimatedRotation(
+                          turns: fabOpen ? 0.125 : 0,
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOut,
+                          child: Container(
+                            width: 52,
+                            height: 52,
+                            decoration: const BoxDecoration(
+                              color: Z.brand,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Color(0x738B6EC4),
+                                  blurRadius: 18,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(Icons.add,
+                                color: Colors.white, size: 26),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }
+          final isActive = active == tab.id;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => onTab(tab.id),
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      isActive ? tab.iconFilled : tab.iconOutline,
+                      size: 24,
+                      color: isActive ? Z.brand : Z.textMuted,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      tab.label,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: isActive ? Z.brand : Z.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+class _TabDef {
+  final String id;
+  final IconData iconFilled;
+  final IconData iconOutline;
+  final String label;
+  const _TabDef(this.id, this.iconFilled, this.iconOutline, this.label);
 }

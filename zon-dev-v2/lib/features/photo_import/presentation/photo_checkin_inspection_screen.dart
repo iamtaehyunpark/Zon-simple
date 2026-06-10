@@ -7,6 +7,7 @@ import '../../../core/photos/photo_service.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/repositories/check_in_repository.dart';
 import '../../../shared/widgets/place_search_field.dart';
+import '../../timeline/presentation/providers/timeline_provider.dart';
 
 // ── Shared data model ─────────────────────────────────────────────────────────
 
@@ -160,6 +161,7 @@ class _PhotoCheckInInspectionScreenState
         if (mounted) setState(() => _uploadedGroups++);
       }
 
+      ref.invalidate(timelineNotifierProvider);
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {

@@ -28,7 +28,7 @@ class GpsService {
     return Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
         accuracy: LocationAccuracy.high,
-        distanceFilter: 50,
+        distanceFilter: 30,
       ),
     );
   }

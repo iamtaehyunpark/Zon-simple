@@ -12,72 +12,29 @@ import 'core/notifications/notification_service.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Load .env
-  try {
-    await dotenv.load();
-  } catch (e) {
-    debugPrint('Error loading .env file: $e');
-  }
+  await dotenv.load();
 
-  // Set Mapbox token
-  try {
-    final mapboxToken = dotenv.env['MAPBOX_TOKEN'];
-    if (mapboxToken != null && mapboxToken.isNotEmpty) {
-      MapboxOptions.setAccessToken(mapboxToken);
-    } else {
-      debugPrint('Warning: MAPBOX_TOKEN is missing or empty.');
-    }
-  } catch (e) {
-    debugPrint('Error setting Mapbox token: $e');
-  }
+  final mapboxToken = dotenv.env['MAPBOX_TOKEN'] ?? '';
+  assert(mapboxToken.isNotEmpty, 'MAPBOX_TOKEN is missing in .env');
+  MapboxOptions.setAccessToken(mapboxToken);
 
-  // Initialize Hive
-  try {
-    await Hive.initFlutter();
-  } catch (e) {
-    debugPrint('Error initializing Hive: $e');
-  }
+  await Hive.initFlutter();
 
-  // Initialize Supabase
-  try {
-    final supabaseUrl = dotenv.env['SUPABASE_URL'];
-    final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
-    if (supabaseUrl != null && supabaseAnonKey != null) {
-      await Supabase.initialize(
-        url: supabaseUrl,
-        anonKey: supabaseAnonKey,
-        // OAuth is handled in-app via flutter_web_auth_2 + getSessionFromUrl
-        // (see LoginScreen), so disable the built-in deep-link observer to
-        // avoid a second, failing exchange of the same one-time auth code.
-        authOptions:
-            const FlutterAuthClientOptions(detectSessionInUri: false),
-      );
-    } else {
-      debugPrint('Warning: SUPABASE_URL or SUPABASE_ANON_KEY is missing.');
-    }
-  } catch (e) {
-    debugPrint('Error initializing Supabase: $e');
-  }
+  await Supabase.initialize(
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
+    // OAuth is handled in-app via flutter_web_auth_2 + getSessionFromUrl
+    // (see LoginScreen), so disable the built-in deep-link observer to
+    // avoid a second, failing exchange of the same one-time auth code.
+    authOptions: const FlutterAuthClientOptions(detectSessionInUri: false),
+  );
 
-  // Initialize Firebase with explicit options so it doesn't depend on the
-  // GoogleService-Info.plist being bundled into the iOS target.
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    debugPrint('Warning: Firebase initialization failed. Error: $e');
-  }
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // Initialize notifications (non-blocking)
-  try {
-    NotificationService().initialize().catchError((e) {
-      debugPrint('Notification initialization error: $e');
-    });
-  } catch (e) {
-    debugPrint('Error starting notification service: $e');
-  }
+  // Notifications are optional — APNs may not be configured on first run.
+  NotificationService().initialize().catchError((e) {
+    debugPrint('NotificationService init: $e');
+  });
 
   runApp(const ProviderScope(child: ZonApp()));
 }
-

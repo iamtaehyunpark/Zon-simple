@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:fpdart/fpdart.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -9,6 +10,29 @@ import '../../core/auth/auth_provider.dart';
 import 'base_repository.dart';
 
 part 'stamp_repository.g.dart';
+
+/// Lightweight place record from the place_stats view.
+class PlaceStat {
+  final String placeId;
+  final String name;
+  final double lat;
+  final double lng;
+  final int stampCount;
+  final int visitorCount;
+  final double hotScore;
+  final DateTime? lastVisit;
+  const PlaceStat({
+    required this.placeId,
+    required this.name,
+    required this.lat,
+    required this.lng,
+    required this.stampCount,
+    required this.visitorCount,
+    required this.hotScore,
+    this.lastVisit,
+  });
+}
+
 
 @riverpod
 StampRepository stampRepository(StampRepositoryRef ref) => StampRepository(
@@ -29,7 +53,7 @@ class StampRepository with BaseRepository {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
       final data = await client.rpc('stamps_for_local_day', params: {
-        'p_date': day.toIso8601String().substring(0, 10),
+        'p_date': isoDate(day),
       });
       return right((data as List)
           .map((r) => _fromRow(r as Map<String, dynamic>))
@@ -38,6 +62,29 @@ class StampRepository with BaseRepository {
       return left(NetworkError(e.toString()));
     }
   }
+
+  Future<Either<AppException, List<Stamp>>> getMyStampsForRange({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    try {
+      final userId = this.userId;
+      if (userId == null) return left(const AuthError('Unauthorized'));
+      final data = await client
+          .from('stamps')
+          .select()
+          .eq('user_id', userId)
+          .gte('visited_at', from.toIso8601String())
+          .lt('visited_at', to.toIso8601String())
+          .order('visited_at', ascending: false);
+      return right((data as List)
+          .map((r) => _fromRow(r as Map<String, dynamic>))
+          .toList());
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
 
   /// Public stamps from people the user follows within [from, to) (map layer).
   Future<Either<AppException, List<Stamp>>> getFollowingStamps({
@@ -57,6 +104,27 @@ class StampRepository with BaseRepository {
           .lt('visited_at', to.toIso8601String())
           .order('visited_at', ascending: false);
       return right(data.map(_fromRow).toList());
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+  Future<Either<AppException, List<Stamp>>> getStampsForPlace(
+    String externalPlaceId, {
+    int limit = 30,
+  }) async {
+    try {
+      final data = await client
+          .from('stamps')
+          .select()
+          .eq('external_place_id', externalPlaceId)
+          .eq('visibility', 'public')
+          .order('visited_at', ascending: false)
+          .limit(limit);
+      final stamps = (data as List)
+          .map((r) => _fromRow(r as Map<String, dynamic>))
+          .toList();
+      return right(stamps);
     } catch (e) {
       return left(NetworkError(e.toString()));
     }
@@ -112,7 +180,7 @@ Future<Either<AppException, List<Stamp>>> getUserStamps(
   Future<Either<AppException, Stamp>> getStamp(String id) async {
     try {
       final data = await client
-          .from('stamps')
+          .from('v_feed_stamps')
           .select()
           .eq('id', id)
           .single();
@@ -276,6 +344,61 @@ Future<Either<AppException, List<Stamp>>> getUserStamps(
       return left(NetworkError(e.toString()));
     }
   }
+
+  /// Global trending places from the place_stats view (Phase C / Feed Trending).
+  Future<Either<AppException, List<PlaceStat>>> getTrendingPlaces({
+    int limit = 30,
+  }) async {
+    try {
+      final data = await client
+          .from('place_stats')
+          .select()
+          .order('hot_score', ascending: false)
+          .limit(limit);
+      return right((data as List).map(_placeStatFromRow).toList());
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+  /// Nearby hot places from the place_stats view (Phase E).
+  Future<Either<AppException, List<PlaceStat>>> getNearbyHotPlaces(
+    double lat,
+    double lng, {
+    double radiusKm = 5,
+    int limit = 20,
+  }) async {
+    try {
+      // Haversine approximation: 1 degree lat ≈ 111km
+      final latDelta = radiusKm / 111.0;
+      final lngDelta = radiusKm / (111.0 * math.cos(lat * math.pi / 180).abs().clamp(0.01, 1.0));
+      final data = await client
+          .from('place_stats')
+          .select()
+          .gte('lat', lat - latDelta)
+          .lte('lat', lat + latDelta)
+          .gte('lng', lng - lngDelta)
+          .lte('lng', lng + lngDelta)
+          .order('hot_score', ascending: false)
+          .limit(limit);
+      return right((data as List).map(_placeStatFromRow).toList());
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
+  static PlaceStat _placeStatFromRow(dynamic r) => PlaceStat(
+        placeId: r['external_place_id'] as String? ?? '',
+        name: r['place_name'] as String? ?? 'Unknown',
+        lat: (r['lat'] as num).toDouble(),
+        lng: (r['lng'] as num).toDouble(),
+        stampCount: (r['stamp_count'] as num).toInt(),
+        visitorCount: (r['visitor_count'] as num).toInt(),
+        hotScore: (r['hot_score'] as num? ?? 0).toDouble(),
+        lastVisit: r['last_visit'] != null
+            ? DateTime.parse(r['last_visit'] as String)
+            : null,
+      );
 
   Future<Either<AppException, List<Stamp>>> nearbyStamps(
     double lat,

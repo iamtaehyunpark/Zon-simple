@@ -52,6 +52,28 @@ class DiaryRepository with BaseRepository {
     return (result.data as Map<String, dynamic>?)?['diary'] as String? ?? '';
   }
 
+  Future<List<({DateTime date, String body})>> getDiaries() async {
+    final uid = userId;
+    if (uid == null) return [];
+    try {
+      final rows = await client
+          .from('day_diaries')
+          .select('date, body')
+          .eq('user_id', uid)
+          .order('date', ascending: false)
+          .limit(60);
+      return [
+        for (final r in rows as List)
+          (
+            date: DateTime.parse(r['date'] as String),
+            body: (r['body'] as String?) ?? '',
+          ),
+      ].where((e) => e.body.isNotEmpty).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   Future<void> saveDiary(DateTime date, String body) async {
     final uid = userId;
     if (uid == null) return;

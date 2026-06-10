@@ -75,7 +75,9 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
     for (final asset in assets) {
       final latLng = await asset.latlngAsync();
       if (latLng == null ||
-          (latLng.latitude == 0.0 && latLng.longitude == 0.0)) { continue; }
+          (latLng.latitude == 0.0 && latLng.longitude == 0.0)) {
+        continue;
+      }
 
       final photoTime = asset.createDateTime;
       final last = groups.isEmpty ? null : groups.last;
@@ -147,6 +149,42 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
     return 'Photo location';
   }
 
+  /// Full-screen state view shown instead of the grid, or null when the grid
+  /// should render (photos loaded and not mid-analysis).
+  Widget? _stateOverlay() {
+    if (_loading) return _busy('Scanning your photos for locations...');
+    if (_analyzing) {
+      return _busy('Analyzing photos…', style: const TextStyle(fontSize: 16));
+    }
+    if (_photos.isEmpty) return _emptyState();
+    return null;
+  }
+
+  Widget _busy(String text, {TextStyle? style}) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 16),
+            Text(text, style: style),
+          ],
+        ),
+      );
+
+  Widget _emptyState() => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.photo_library_outlined, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No geotagged photos found', style: TextStyle(fontSize: 18)),
+            SizedBox(height: 8),
+            Text('Photos need location data to appear here.',
+                style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -164,171 +202,123 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
             ),
         ],
       ),
-      body: _loading
-          ? const Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('Scanning your photos for locations...'),
-                ],
-              ),
-            )
-          : _analyzing
-              ? const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CircularProgressIndicator(),
-                      SizedBox(height: 16),
-                      Text('Analyzing photos…',
-                          style: TextStyle(fontSize: 16)),
-                    ],
-                  ),
-                )
-              : _photos.isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.photo_library_outlined,
-                              size: 64, color: Colors.grey),
-                          SizedBox(height: 16),
-                          Text('No geotagged photos found',
-                              style: TextStyle(fontSize: 18)),
-                          SizedBox(height: 8),
-                          Text(
-                            'Photos need location data to appear here.',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ],
+      body: _stateOverlay() ??
+          Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline,
+                        size: 16, color: Colors.grey),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${_photos.length} photos with location data from the past 30 days',
+                        style:
+                            const TextStyle(color: Colors.grey, fontSize: 13),
                       ),
-                    )
-                  : Column(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.info_outline,
-                                  size: 16, color: Colors.grey),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '${_photos.length} photos with location data from the past 30 days',
-                                  style: const TextStyle(
-                                      color: Colors.grey, fontSize: 13),
-                                ),
-                              ),
-                              TextButton(
-                                onPressed: () {
-                                  setState(() {
-                                    if (_selected.length == _photos.length) {
-                                      _selected.clear();
-                                    } else {
-                                      _selected.addAll(_photos.map((p) => p.id));
-                                    }
-                                  });
-                                },
-                                child: Text(
-                                  _selected.length == _photos.length
-                                      ? 'Deselect all'
-                                      : 'Select all',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Expanded(
-                          child: GridView.builder(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              crossAxisSpacing: 4,
-                              mainAxisSpacing: 4,
-                            ),
-                            itemCount: _photos.length,
-                            itemBuilder: (ctx, i) {
-                              final asset = _photos[i];
-                              final isSelected = _selected.contains(asset.id);
-                              return GestureDetector(
-                                onTap: () => setState(() {
-                                  if (isSelected) {
-                                    _selected.remove(asset.id);
-                                  } else {
-                                    _selected.add(asset.id);
-                                  }
-                                }),
-                                child: Stack(
-                                  fit: StackFit.expand,
-                                  children: [
-                                    FutureBuilder<
-                                        ImageProvider?>(
-                                      future: _thumbProvider(asset),
-                                      builder: (ctx, snap) {
-                                        if (snap.data == null) {
-                                          return Container(
-                                              color: Colors.grey[200]);
-                                        }
-                                        return Image(
-                                          image: snap.data!,
-                                          fit: BoxFit.cover,
-                                        );
-                                      },
-                                    ),
-                                    if (isSelected)
-                                      Container(
-                                        color: kBrandGreen.withValues(alpha: 0.5),
-                                        child: const Icon(Icons.check_circle,
-                                            color: Colors.white, size: 32),
-                                      ),
-                                    Positioned(
-                                      bottom: 4,
-                                      left: 4,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 4, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black54,
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          DateFormat('MMM d')
-                                              .format(asset.createDateTime),
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 10),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          if (_selected.length == _photos.length) {
+                            _selected.clear();
+                          } else {
+                            _selected.addAll(_photos.map((p) => p.id));
+                          }
+                        });
+                      },
+                      child: Text(
+                        _selected.length == _photos.length
+                            ? 'Deselect all'
+                            : 'Select all',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: GridView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 4,
+                    mainAxisSpacing: 4,
+                  ),
+                  itemCount: _photos.length,
+                  itemBuilder: (ctx, i) {
+                    final asset = _photos[i];
+                    final isSelected = _selected.contains(asset.id);
+                    return GestureDetector(
+                      onTap: () => setState(() {
+                        if (isSelected) {
+                          _selected.remove(asset.id);
+                        } else {
+                          _selected.add(asset.id);
+                        }
+                      }),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          FutureBuilder<ImageProvider?>(
+                            future: _thumbProvider(asset),
+                            builder: (ctx, snap) {
+                              if (snap.data == null) {
+                                return Container(color: Colors.grey[200]);
+                              }
+                              return Image(
+                                image: snap.data!,
+                                fit: BoxFit.cover,
                               );
                             },
                           ),
-                        ),
-                        if (_selected.isNotEmpty)
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(
-                                16,
-                                8,
-                                16,
-                                MediaQuery.of(context).padding.bottom + 16),
-                            child: SizedBox(
-                              width: double.infinity,
-                              height: 52,
-                              child: FilledButton(
-                                onPressed: _analyzing ? null : _importSelected,
-                                child: Text(
-                                    'Review ${_selected.length} photo${_selected.length == 1 ? '' : 's'}'),
+                          if (isSelected)
+                            Container(
+                              color: kBrandPurple.withValues(alpha: 0.5),
+                              child: const Icon(Icons.check_circle,
+                                  color: Colors.white, size: 32),
+                            ),
+                          Positioned(
+                            bottom: 4,
+                            left: 4,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                DateFormat('MMM d')
+                                    .format(asset.createDateTime),
+                                style: const TextStyle(
+                                    color: Colors.white, fontSize: 10),
                               ),
                             ),
                           ),
-                      ],
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
+              if (_selected.isNotEmpty)
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                      16, 8, 16, MediaQuery.of(context).padding.bottom + 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: FilledButton(
+                      onPressed: _analyzing ? null : _importSelected,
+                      child: Text(
+                          'Review ${_selected.length} photo${_selected.length == 1 ? '' : 's'}'),
                     ),
+                  ),
+                ),
+            ],
+          ),
     );
   }
 }

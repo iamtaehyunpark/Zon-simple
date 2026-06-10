@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:fpdart/fpdart.dart';
 import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+import '../../../../core/errors/app_exception.dart';
 import '../../../../data/models/stamp.dart';
 import '../../../../data/models/check_in.dart';
 import '../../../../data/models/enums.dart';
@@ -68,6 +70,7 @@ class CheckinState with _$CheckinState {
 @riverpod
 class CheckinNotifier extends _$CheckinNotifier {
   CheckinMode _mode = CheckinMode.checkIn;
+  DateTime? _visitedAt;
 
   @override
   CheckinState build() => const CheckinState.idle();
@@ -76,8 +79,10 @@ class CheckinNotifier extends _$CheckinNotifier {
     double? lat,
     double? lng,
     CheckinMode mode = CheckinMode.checkIn,
+    DateTime? visitedAt,
   }) async {
     _mode = mode;
+    _visitedAt = visitedAt;
     state = const CheckinState.locating();
     try {
       double resolvedLat = lat ?? 0;
@@ -211,7 +216,11 @@ class CheckinNotifier extends _$CheckinNotifier {
       final urls = await _uploadAll(photoService, current.draft.photoPaths);
       final res = await ref
           .read(checkInRepositoryProvider)
-          .createCheckIn(current.draft, photoUrls: urls);
+          .createCheckIn(
+            current.draft,
+            photoUrls: urls,
+            visitedAt: _visitedAt,
+          );
       res.fold(
         (err) => state = CheckinState.error(err.message),
         (ci) {
@@ -246,14 +255,7 @@ class CheckinNotifier extends _$CheckinNotifier {
           sensoryTags: d.sensoryTags,
           taggedUserIds: d.taggedUserIds,
         );
-        promo.fold(
-          (err) => state = CheckinState.error(err.message),
-          (stampId) {
-            ref.invalidate(feedNotifierProvider);
-            ref.invalidate(timelineNotifierProvider);
-            state = CheckinState.completeStamp(stampId);
-          },
-        );
+        _onPromoted(promo);
         return;
       }
 
@@ -280,17 +282,23 @@ class CheckinNotifier extends _$CheckinNotifier {
             sensoryTags: d.sensoryTags,
             taggedUserIds: d.taggedUserIds,
           );
-          promo.fold(
-            (err) => state = CheckinState.error(err.message),
-            (stampId) {
-              ref.invalidate(feedNotifierProvider);
-              ref.invalidate(timelineNotifierProvider);
-              state = CheckinState.completeStamp(stampId);
-            },
-          );
+          _onPromoted(promo);
         },
       );
     }
+  }
+
+  /// Apply a promote-to-stamp result: surface the error, or invalidate the
+  /// feed/timeline and finish on the new stamp id.
+  void _onPromoted(Either<AppException, String> promo) {
+    promo.fold(
+      (err) => state = CheckinState.error(err.message),
+      (stampId) {
+        ref.invalidate(feedNotifierProvider);
+        ref.invalidate(timelineNotifierProvider);
+        state = CheckinState.completeStamp(stampId);
+      },
+    );
   }
 
   Future<List<String>> _uploadAll(PhotoService service, List<String> paths) async {

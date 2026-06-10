@@ -88,7 +88,7 @@ class CheckInRepository with BaseRepository {
       final userId = this.userId;
       if (userId == null) return left(const AuthError('Unauthorized'));
       final data = await client.rpc('check_ins_for_local_day', params: {
-        'p_date': date.toIso8601String().substring(0, 10),
+        'p_date': isoDate(date),
       });
       return right((data as List)
           .map((r) => _fromRow(r as Map<String, dynamic>))
@@ -97,6 +97,29 @@ class CheckInRepository with BaseRepository {
       return left(NetworkError(e.toString()));
     }
   }
+
+  Future<Either<AppException, List<CheckIn>>> getMyCheckInsForRange({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    try {
+      final userId = this.userId;
+      if (userId == null) return left(const AuthError('Unauthorized'));
+      final data = await client
+          .from('check_ins')
+          .select()
+          .eq('user_id', userId)
+          .gte('visited_at', from.toIso8601String())
+          .lt('visited_at', to.toIso8601String())
+          .order('visited_at', ascending: false);
+      return right((data as List)
+          .map((r) => _fromRow(r as Map<String, dynamic>))
+          .toList());
+    } catch (e) {
+      return left(NetworkError(e.toString()));
+    }
+  }
+
 
   Future<Either<AppException, List<CheckIn>>> getMyCheckIns({
     int limit = 50,
@@ -111,7 +134,7 @@ class CheckInRepository with BaseRepository {
           .eq('user_id', userId)
           .order('visited_at', ascending: false)
           .range(offset, offset + limit - 1);
-      return right(data.map(_fromRow).toList());
+      return right((data as List).map((r) => _fromRow(r as Map<String, dynamic>)).toList());
     } catch (e) {
       return left(NetworkError(e.toString()));
     }
@@ -391,6 +414,10 @@ class CheckInRepository with BaseRepository {
 
   Future<void> deletePhoto(String photoId) async {
     await client.from('photos').delete().eq('id', photoId);
+  }
+
+  Future<void> deletePhotoByUrl(String url) async {
+    await client.from('photos').delete().eq('storage_url', url);
   }
 
   /// Day-of-month → visit count for [month] (for the calendar badges).
