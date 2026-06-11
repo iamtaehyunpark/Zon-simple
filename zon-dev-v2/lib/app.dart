@@ -26,8 +26,13 @@ import 'features/profile/presentation/friend_requests_screen.dart';
 import 'features/profile/presentation/activity_screen.dart';
 import 'features/feed/presentation/saved_stamps_screen.dart';
 import 'features/photo_import/presentation/photo_suggestion_screen.dart';
+import 'features/voice_import/presentation/voice_import_screen.dart';
 import 'features/settings/presentation/location_visibility_screen.dart';
 import 'features/map/presentation/place_detail_screen.dart';
+import 'core/sharing/shared_voice_service.dart';
+import 'core/sharing/shared_photos_handler.dart';
+import 'core/places/place_service_provider.dart';
+import 'features/photo_import/presentation/photo_checkin_inspection_screen.dart';
 
 const kBrandPurple = Color(0xFF8B6EC4);
 
@@ -143,6 +148,25 @@ final _routerProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: '/voice-import',
+        name: 'voice-import',
+        pageBuilder: (ctx, state) => MaterialPage(
+          fullscreenDialog: true,
+          child: VoiceImportScreen(
+              memos: (state.extra as List<SharedVoiceMemo>?) ?? const []),
+        ),
+      ),
+      GoRoute(
+        path: '/photo-inspection',
+        name: 'photo-inspection',
+        pageBuilder: (ctx, state) => MaterialPage(
+          fullscreenDialog: true,
+          child: PhotoCheckInInspectionScreen(
+            groups: (state.extra as List<InspectionGroup>?) ?? const [],
+          ),
+        ),
+      ),
+      GoRoute(
         path: '/profile/:id',
         name: 'user-profile',
         builder: (ctx, state) =>
@@ -225,6 +249,8 @@ class ZonApp extends ConsumerStatefulWidget {
 
 class _ZonAppState extends ConsumerState<ZonApp> with WidgetsBindingObserver {
   StreamSubscription<String>? _notifSub;
+  StreamSubscription<List<SharedVoiceMemo>>? _shareSub;
+  StreamSubscription<List<InspectionGroup>>? _photoShareSub;
 
   @override
   void initState() {
@@ -237,11 +263,42 @@ class _ZonAppState extends ConsumerState<ZonApp> with WidgetsBindingObserver {
     });
     // Begin route tracking after first frame (if already signed in).
     WidgetsBinding.instance.addPostFrameCallback((_) => _syncTracking());
+    _initShareIntake();
+  }
+
+  // Voice memos shared from the iOS Voice Memos app via the Share Extension.
+  // Warm app → `sharedVoiceMemos` stream; cold launch → getPending poll.
+  // Requires the Share Extension target — see ios/SHARE_EXTENSION_SETUP.md.
+  void _initShareIntake() {
+    _shareSub = SharedVoiceService.instance.stream.listen(
+      _onSharedVoiceMemos,
+      onError: (e) => debugPrint('share stream: $e'),
+    );
+    SharedVoiceService.instance.getPending().then(_onSharedVoiceMemos);
+
+    // Photo sharing from iOS Photos.app via Share Extension.
+    SharedPhotosHandler.init((lat, lng) => ref.read(placeServiceForProvider(lat, lng)));
+    _photoShareSub = SharedPhotosHandler.stream.listen(_onSharedPhotos);
+  }
+
+  void _onSharedVoiceMemos(List<SharedVoiceMemo> memos) {
+    if (memos.isEmpty) return;
+    // Only route signed-in users; the redirect guard would bounce them.
+    if (Supabase.instance.client.auth.currentUser == null) return;
+    ref.read(_routerProvider).push('/voice-import', extra: memos);
+  }
+
+  void _onSharedPhotos(List<InspectionGroup> groups) {
+    if (groups.isEmpty) return;
+    if (Supabase.instance.client.auth.currentUser == null) return;
+    ref.read(_routerProvider).push('/photo-inspection', extra: groups);
   }
 
   @override
   void dispose() {
     _notifSub?.cancel();
+    _shareSub?.cancel();
+    _photoShareSub?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

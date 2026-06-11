@@ -10,11 +10,17 @@ class TimelineNote {
   final String id;
   final String body;
   final DateTime notedAt;
+  final String? audioUrl; // voice memo recording, null for text-only notes
+  final int? audioDurationMs;
   const TimelineNote({
     required this.id,
     required this.body,
     required this.notedAt,
+    this.audioUrl,
+    this.audioDurationMs,
   });
+
+  bool get isVoice => audioUrl != null && audioUrl!.isNotEmpty;
 }
 
 @riverpod
@@ -47,6 +53,8 @@ class TimelineNoteRepository with BaseRepository {
             id: r['id'] as String,
             body: r['body'] as String,
             notedAt: DateTime.parse(r['noted_at'] as String),
+            audioUrl: r['audio_url'] as String?,
+            audioDurationMs: r['audio_duration_ms'] as int?,
           )
       ];
     } catch (_) {
@@ -54,7 +62,13 @@ class TimelineNoteRepository with BaseRepository {
     }
   }
 
-  Future<void> add(DateTime date, String body, DateTime notedAt) async {
+  Future<void> add(
+    DateTime date,
+    String body,
+    DateTime notedAt, {
+    String? audioUrl,
+    int? audioDurationMs,
+  }) async {
     final uid = userId;
     if (uid == null) return;
     await client.from('timeline_notes').insert({
@@ -62,6 +76,8 @@ class TimelineNoteRepository with BaseRepository {
       'date': isoDate(date),
       'body': body,
       'noted_at': notedAt.toIso8601String(),
+      if (audioUrl != null) 'audio_url': audioUrl,
+      if (audioDurationMs != null) 'audio_duration_ms': audioDurationMs,
     });
   }
 

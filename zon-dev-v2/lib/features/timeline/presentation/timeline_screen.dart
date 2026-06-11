@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:ui' as ui;
+import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:record/record.dart' show Amplitude;
 import 'package:geolocator/geolocator.dart' show Geolocator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +13,7 @@ import 'package:intl/intl.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
 import '../../../app.dart';
 import '../../../shared/theme/app_theme.dart';
+import '../../../core/audio/voice_memo_service.dart';
 import '../../../core/photos/photo_service.dart';
 import '../../../shared/widgets/place_search_field.dart';
 import '../../../data/models/check_in.dart';
@@ -40,6 +44,8 @@ class _TlItem {
   final List<String> photoUrls;
   final bool isPublic;
   final bool isAuto; // passive auto check-in (gray)
+  final String? audioUrl; // voice-memo recording (note nodes only)
+  final int? audioDurationMs;
   const _TlItem({
     required this.id,
     required this.kind,
@@ -51,10 +57,13 @@ class _TlItem {
     this.photoUrls = const [],
     this.isPublic = false,
     this.isAuto = false,
+    this.audioUrl,
+    this.audioDurationMs,
   });
 
   bool get isStamp => kind == _NodeKind.stamp;
   bool get isNote => kind == _NodeKind.note;
+  bool get isVoice => audioUrl != null && audioUrl!.isNotEmpty;
   bool get hasLocation => lat != null && lng != null;
 }
 
@@ -319,6 +328,8 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
           name: '',
           time: n.notedAt,
           text: n.body,
+          audioUrl: n.audioUrl,
+          audioDurationMs: n.audioDurationMs,
         ),
     ]..sort((a, b) => a.time.compareTo(b.time));
 
@@ -804,6 +815,78 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     if (item != null) await _deleteItem(item);
   }
 
+  Future<void> _mergeNote(_TlItem note) async {
+    final candidates = (_bundle?.checkIns ?? [])
+        .toList()
+      ..sort((a, b) => a.visitedAt.compareTo(b.visitedAt));
+
+    if (candidates.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No check-ins today to merge into')),
+        );
+      }
+      return;
+    }
+
+    final into = await showModalBottomSheet<CheckIn>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('Merge note into…',
+                  style: Theme.of(ctx).textTheme.titleMedium),
+            ),
+            const Divider(height: 1),
+            for (final c in candidates)
+              ListTile(
+                leading: const Icon(Icons.pin_drop_outlined),
+                title: Text(c.placeName),
+                subtitle: Text(DateFormat('h:mm a').format(c.visitedAt)),
+                onTap: () => Navigator.pop(ctx, c),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (into == null || !mounted) return;
+
+    final noteText = note.text?.trim() ?? '';
+    final existing = into.note?.trim() ?? '';
+    final merged = existing.isEmpty ? noteText : '$existing\n$noteText';
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Merge note?'),
+        content: Text(
+            'This note\'s text will be added to "${into.placeName}" and the note will be deleted.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Merge')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final ciRepo = ref.read(checkInRepositoryProvider);
+    final noteRepo = ref.read(timelineNoteRepositoryProvider);
+    await ciRepo.updateCheckIn(into.id, {'note': merged});
+    await noteRepo.delete(note.id);
+
+    setState(() => _items.removeWhere((i) => i.id == note.id));
+    _reload();
+  }
+
   // Promote = open the stamp editor pre-filled from the check-in (note, photos,
   // place), so the user reviews/edits before it becomes a stamp.
   void _promote(BuildContext sheetCtx, CheckIn ci) {
@@ -826,6 +909,49 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       at = nonNotes.last.time.add(const Duration(minutes: 1));
     }
     await ref.read(timelineNoteRepositoryProvider).add(_day, text, at);
+    _reload();
+  }
+
+  // Voice memo: open the recorder sheet, then upload the recording and save a
+  // note whose body is the transcript. Treated as a note node (same placement
+  // rules) but additionally carries a playable audio bar.
+  Future<void> _addVoiceMemo() async {
+    final result = await showModalBottomSheet<_VoiceMemoResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => const _VoiceRecorderSheet(),
+    );
+    if (result == null || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(const SnackBar(
+        content: Text('Saving voice memo…'), duration: Duration(seconds: 1)));
+
+    final service = VoiceMemoService();
+    final audioUrl = await service.upload(result.file);
+    if (audioUrl == null) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Could not upload voice memo')));
+      return;
+    }
+
+    final transcript = result.transcript.trim();
+    final body = transcript.isEmpty ? '🎙 Voice memo' : transcript;
+
+    final now = DateTime.now();
+    var at = DateTime(_day.year, _day.month, _day.day, now.hour, now.minute, now.second);
+    final nonNotes = _items.where((i) => !i.isNote);
+    if (nonNotes.isNotEmpty && nonNotes.last.time.isAfter(at)) {
+      at = nonNotes.last.time.add(const Duration(minutes: 1));
+    }
+    await ref.read(timelineNoteRepositoryProvider).add(
+          _day,
+          body,
+          at,
+          audioUrl: audioUrl,
+          audioDurationMs: result.durationMs,
+        );
     _reload();
   }
 
@@ -1254,14 +1380,27 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                           itemKey: _itemKeys[item.id],
                           onSaveText: (text) => _saveText(item, text),
                           trailing: item.isNote
-                              ? ReorderableDragStartListener(
-                                  index: i,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                    color: Colors.transparent,
-                                    child: const Icon(Icons.drag_handle,
-                                        size: 20, color: Z.textMuted),
-                                  ),
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.merge_outlined,
+                                          size: 20, color: Z.textMuted),
+                                      tooltip: 'Merge into…',
+                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () => _mergeNote(item),
+                                    ),
+                                    ReorderableDragStartListener(
+                                      index: i,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                        color: Colors.transparent,
+                                        child: const Icon(Icons.drag_handle,
+                                            size: 20, color: Z.textMuted),
+                                      ),
+                                    ),
+                                  ],
                                 )
                               : null,
                         );
@@ -1296,7 +1435,10 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
                     // ── Add note row ────────────────────────────────
                     SliverToBoxAdapter(
-                      child: _AddNoteRow(onSubmit: _submitNote),
+                      child: _AddNoteRow(
+                        onSubmit: _submitNote,
+                        onVoice: _addVoiceMemo,
+                      ),
                     ),
 
                     // ── Divider ─────────────────────────────────────
@@ -1391,6 +1533,12 @@ class _TimelineNode extends StatelessWidget {
       icon: Icons.edit_note,
       label: 'Note'
     ),
+    'voice': (
+      color: Z.note,
+      soft: Z.noteSoft,
+      icon: Icons.mic,
+      label: 'Voice'
+    ),
     'auto': (
       color: Z.auto,
       soft: Color(0x1F9CA3AF),
@@ -1406,7 +1554,7 @@ class _TimelineNode extends StatelessWidget {
         : item.kind == _NodeKind.stamp
             ? 'stamp'
             : item.kind == _NodeKind.note
-                ? 'note'
+                ? (item.isVoice ? 'voice' : 'note')
                 : 'checkin';
     final meta = _kindMeta[kindKey]!;
     final isNote = item.kind == _NodeKind.note;
@@ -1503,6 +1651,15 @@ class _TimelineNode extends StatelessWidget {
                                 fontStyle: isNote
                                     ? FontStyle.italic
                                     : FontStyle.normal)),
+                      ],
+                      // Playable voice-memo bar
+                      if (item.isVoice) ...[
+                        const SizedBox(height: 8),
+                        _VoiceBar(
+                          url: item.audioUrl!,
+                          durationMs: item.audioDurationMs,
+                          color: meta.color,
+                        ),
                       ],
                       // Photo thumbs (regular grid when not editing)
                       if (item.photoUrls.isNotEmpty) ...[
@@ -1786,7 +1943,8 @@ class _InlineNodeEditorState extends State<_InlineNodeEditor> {
 // ── Add note row ──────────────────────────────────────────────────────────────
 class _AddNoteRow extends StatefulWidget {
   final Future<void> Function(String) onSubmit;
-  const _AddNoteRow({required this.onSubmit});
+  final VoidCallback onVoice;
+  const _AddNoteRow({required this.onSubmit, required this.onVoice});
   @override
   State<_AddNoteRow> createState() => _AddNoteRowState();
 }
@@ -1801,24 +1959,49 @@ class _AddNoteRowState extends State<_AddNoteRow> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(52, 4, 16, 8),
       child: !_active
-          ? GestureDetector(
-              onTap: () => setState(() => _active = true),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Z.outline2, style: BorderStyle.solid, width: 1.5),
-                  borderRadius: BorderRadius.circular(12),
+          ? Row(
+              children: [
+                Expanded(
+                  child: GestureDetector(
+                    onTap: () => setState(() => _active = true),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                            color: Z.outline2,
+                            style: BorderStyle.solid,
+                            width: 1.5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.add, size: 18, color: Z.textMuted),
+                          SizedBox(width: 8),
+                          Text('Add a note',
+                              style:
+                                  TextStyle(fontSize: 14, color: Z.textMuted)),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-                child: const Row(
-                  children: [
-                    Icon(Icons.add, size: 18, color: Z.textMuted),
-                    SizedBox(width: 8),
-                    Text('Add a note',
-                        style: TextStyle(fontSize: 14, color: Z.textMuted)),
-                  ],
+                const SizedBox(width: 8),
+                // Voice memo — record speech, transcribe + attach a playable bar.
+                GestureDetector(
+                  onTap: widget.onVoice,
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: Z.brandSoft,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Z.brand, width: 1.5),
+                    ),
+                    child: const Icon(Icons.mic, size: 20, color: Z.brand),
+                  ),
                 ),
-              ),
+              ],
             )
           : Container(
               decoration: BoxDecoration(
@@ -2472,6 +2655,295 @@ class _CalendarSheetState extends ConsumerState<_CalendarSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Voice memo: playable bar ──────────────────────────────────────────────────
+/// Compact audio player rendered beneath a voice-memo transcript. Tap to
+/// play/pause; a thin progress track fills as it plays.
+class _VoiceBar extends StatefulWidget {
+  final String url;
+  final int? durationMs;
+  final Color color;
+  const _VoiceBar({required this.url, this.durationMs, required this.color});
+  @override
+  State<_VoiceBar> createState() => _VoiceBarState();
+}
+
+class _VoiceBarState extends State<_VoiceBar> {
+  final _player = AudioPlayer();
+  StreamSubscription<Duration>? _posSub;
+  StreamSubscription<PlayerState>? _stateSub;
+  StreamSubscription<Duration>? _durSub;
+  Duration _pos = Duration.zero;
+  Duration _dur = Duration.zero;
+  bool _playing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.durationMs != null) {
+      _dur = Duration(milliseconds: widget.durationMs!);
+    }
+    _stateSub = _player.onPlayerStateChanged.listen((s) {
+      if (mounted) setState(() => _playing = s == PlayerState.playing);
+    });
+    _posSub = _player.onPositionChanged.listen((p) {
+      if (mounted) setState(() => _pos = p);
+    });
+    _durSub = _player.onDurationChanged.listen((d) {
+      if (mounted && d > Duration.zero) setState(() => _dur = d);
+    });
+    _player.onPlayerComplete.listen((_) {
+      if (mounted) setState(() => _pos = Duration.zero);
+    });
+  }
+
+  @override
+  void dispose() {
+    _posSub?.cancel();
+    _stateSub?.cancel();
+    _durSub?.cancel();
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (_playing) {
+      await _player.pause();
+    } else {
+      await _player.play(UrlSource(widget.url));
+    }
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = _dur.inMilliseconds == 0 ? 1 : _dur.inMilliseconds;
+    final progress = (_pos.inMilliseconds / total).clamp(0.0, 1.0);
+    return GestureDetector(
+      onTap: _toggle,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: widget.color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: widget.color.withValues(alpha: 0.25)),
+        ),
+        child: Row(
+          children: [
+            Icon(_playing ? Icons.pause_circle_filled : Icons.play_circle_fill,
+                size: 28, color: widget.color),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 4,
+                  backgroundColor: widget.color.withValues(alpha: 0.18),
+                  valueColor: AlwaysStoppedAnimation(widget.color),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              _dur == Duration.zero ? '0:00' : _fmt(_playing ? _pos : _dur),
+              style: TextStyle(
+                  fontSize: 12,
+                  color: widget.color,
+                  fontWeight: FontWeight.w600,
+                  fontFeatures: const [ui.FontFeature.tabularFigures()]),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Voice memo: recorder sheet ────────────────────────────────────────────────
+/// Result handed back from [_VoiceRecorderSheet]: the local recording, its
+/// transcript, and duration.
+class _VoiceMemoResult {
+  final File file;
+  final String transcript;
+  final int durationMs;
+  const _VoiceMemoResult(this.file, this.transcript, this.durationMs);
+}
+
+/// Modal recorder: tap to start, live timer + amplitude pulse, stop to
+/// transcribe. Pops a [_VoiceMemoResult] on success.
+class _VoiceRecorderSheet extends StatefulWidget {
+  const _VoiceRecorderSheet();
+  @override
+  State<_VoiceRecorderSheet> createState() => _VoiceRecorderSheetState();
+}
+
+enum _RecPhase { idle, recording, transcribing }
+
+class _VoiceRecorderSheetState extends State<_VoiceRecorderSheet> {
+  final _service = VoiceMemoService();
+  _RecPhase _phase = _RecPhase.idle;
+  Timer? _ticker;
+  StreamSubscription<Amplitude>? _ampSub;
+  Duration _elapsed = Duration.zero;
+  double _level = 0; // 0..1 normalized amplitude
+  String? _error;
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _ampSub?.cancel();
+    _service.dispose();
+    super.dispose();
+  }
+
+  Future<void> _start() async {
+    final ok = await _service.start();
+    if (!ok) {
+      setState(() => _error = 'Microphone permission denied');
+      return;
+    }
+    _elapsed = Duration.zero;
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _elapsed += const Duration(seconds: 1));
+    });
+    _ampSub = _service.amplitudeStream().listen((amp) {
+      // dBFS (~-60 quiet .. 0 loud) → 0..1
+      final norm = ((amp.current + 60) / 60).clamp(0.0, 1.0);
+      if (mounted) setState(() => _level = norm);
+    });
+    setState(() => _phase = _RecPhase.recording);
+  }
+
+  Future<void> _stop() async {
+    _ticker?.cancel();
+    _ampSub?.cancel();
+    final durationMs = _elapsed.inMilliseconds;
+    setState(() => _phase = _RecPhase.transcribing);
+    final file = await _service.stop();
+    if (file == null) {
+      if (mounted) {
+        setState(() {
+          _phase = _RecPhase.idle;
+          _error = 'Recording too short';
+        });
+      }
+      return;
+    }
+    final transcript = await _service.transcribe(file);
+    if (!mounted) return;
+    Navigator.pop(
+      context,
+      _VoiceMemoResult(file, transcript, durationMs),
+    );
+  }
+
+  Future<void> _cancel() async {
+    await _service.cancel();
+    if (mounted) Navigator.pop(context);
+  }
+
+  String _fmt(Duration d) {
+    final m = d.inMinutes;
+    final s = d.inSeconds % 60;
+    return '$m:${s.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.fromLTRB(
+          24, 20, 24, 24 + MediaQuery.of(context).viewInsets.bottom),
+      decoration: const BoxDecoration(
+        color: Z.surface1,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 36,
+            height: 4,
+            decoration: BoxDecoration(
+                color: Z.outline, borderRadius: BorderRadius.circular(2)),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            _phase == _RecPhase.transcribing
+                ? 'Transcribing…'
+                : _phase == _RecPhase.recording
+                    ? 'Recording'
+                    : 'Voice memo',
+            style: const TextStyle(
+                fontSize: 16, fontWeight: FontWeight.w700, color: Z.text),
+          ),
+          const SizedBox(height: 24),
+          if (_phase == _RecPhase.transcribing)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: CircularProgressIndicator(color: Z.brand),
+            )
+          else
+            // Mic button — pulses with input level while recording.
+            GestureDetector(
+              onTap: _phase == _RecPhase.recording ? _stop : _start,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 88 + (_phase == _RecPhase.recording ? _level * 28 : 0),
+                height: 88 + (_phase == _RecPhase.recording ? _level * 28 : 0),
+                decoration: BoxDecoration(
+                  color: _phase == _RecPhase.recording
+                      ? Z.error.withValues(alpha: 0.12)
+                      : Z.brandSoft,
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: _phase == _RecPhase.recording ? Z.error : Z.brand,
+                      width: 2),
+                ),
+                child: Icon(
+                  _phase == _RecPhase.recording ? Icons.stop : Icons.mic,
+                  size: 36,
+                  color: _phase == _RecPhase.recording ? Z.error : Z.brand,
+                ),
+              ),
+            ),
+          const SizedBox(height: 20),
+          Text(
+            _phase == _RecPhase.transcribing
+                ? 'Converting your speech to text'
+                : _phase == _RecPhase.recording
+                    ? _fmt(_elapsed)
+                    : 'Tap to start recording',
+            style: TextStyle(
+                fontSize: _phase == _RecPhase.recording ? 22 : 14,
+                fontWeight: _phase == _RecPhase.recording
+                    ? FontWeight.w700
+                    : FontWeight.w400,
+                color: _phase == _RecPhase.recording ? Z.text : Z.textMuted,
+                fontFeatures: const [ui.FontFeature.tabularFigures()]),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!,
+                style: const TextStyle(fontSize: 13, color: Z.error)),
+          ],
+          const SizedBox(height: 20),
+          if (_phase != _RecPhase.transcribing)
+            TextButton(
+              onPressed: _cancel,
+              child: const Text('Cancel',
+                  style: TextStyle(color: Z.textMuted)),
+            ),
+        ],
       ),
     );
   }

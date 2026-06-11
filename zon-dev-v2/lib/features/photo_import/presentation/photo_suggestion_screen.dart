@@ -101,7 +101,7 @@ class _PhotoSuggestionScreenState extends ConsumerState<PhotoSuggestionScreen> {
           lng: latLng.longitude,
           takenAt: photoTime,
           placeName: 'Photo location',
-        ));
+        ));  // existing flow — AssetEntity path
       }
 
       prevTime = photoTime;

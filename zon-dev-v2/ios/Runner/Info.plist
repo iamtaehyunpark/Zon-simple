@@ -34,6 +34,10 @@
 	<string>ZON reads your photo locations to automatically add them to your personal map and timeline.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>ZON uses your camera to add photos to your Stamps.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ZON uses your microphone to record voice memos on your timeline.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>ZON transcribes your voice memos to text on your device.</string>
 	<key>NSUserNotificationsUsageDescription</key>
 	<string>ZON sends reminders to add a Stamp when you visit somewhere new.</string>
 	<key>UIBackgroundModes</key>

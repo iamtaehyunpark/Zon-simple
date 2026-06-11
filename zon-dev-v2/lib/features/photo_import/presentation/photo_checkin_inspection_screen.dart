@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,7 +15,8 @@ import '../../timeline/presentation/providers/timeline_provider.dart';
 /// One candidate check-in built from sequentially-clustered photos.
 /// Mutable so the user can edit place/note and merge nodes.
 class InspectionGroup {
-  final List<AssetEntity> assets; // mutable — addAll on merge
+  final List<AssetEntity> assets; // from photo library (photo_manager)
+  final List<File> files;         // from share extension (alternative source)
   final double lat;
   final double lng;
   DateTime takenAt;
@@ -22,13 +24,17 @@ class InspectionGroup {
   String note;
 
   InspectionGroup({
-    required this.assets,
+    List<AssetEntity>? assets,
+    List<File>? files,
     required this.lat,
     required this.lng,
     required this.takenAt,
     required this.placeName,
     this.note = '',
-  });
+  })  : assets = assets ?? [],
+        files = files ?? [];
+
+  int get photoCount => assets.length + files.length;
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -80,6 +86,7 @@ class _PhotoCheckInInspectionScreenState
     final remove = _groups[removeIndex];
 
     keep.assets.addAll(remove.assets);
+    keep.files.addAll(remove.files);
     if (remove.takenAt.isBefore(keep.takenAt)) keep.takenAt = remove.takenAt;
 
     final keepNote = _noteCtrl[keepIndex].text.trim();
@@ -139,10 +146,10 @@ class _PhotoCheckInInspectionScreenState
     try {
       final repo = ref.read(checkInRepositoryProvider);
       for (final g in _groups) {
-        // Upload all photos for this group in parallel.
+        // Upload all photos for this group in parallel (supports both sources).
         final results = await Future.wait<String?>([
-          for (final asset in g.assets)
-            _uploadAsset(asset),
+          for (final asset in g.assets) _uploadAsset(asset),
+          for (final file in g.files) PhotoService().uploadFile(file),
         ]);
         final urls = [for (final u in results) if (u != null) u];
 
@@ -309,14 +316,19 @@ class _GroupPage extends StatelessWidget {
             height: 110,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              itemCount: group.assets.length,
+              itemCount: group.photoCount,
               separatorBuilder: (_, __) => const SizedBox(width: 6),
-              itemBuilder: (_, i) => _AssetThumb(asset: group.assets[i]),
+              itemBuilder: (_, i) {
+                if (i < group.assets.length) {
+                  return _AssetThumb(asset: group.assets[i]);
+                }
+                return _FileThumb(file: group.files[i - group.assets.length]);
+              },
             ),
           ),
           const SizedBox(height: 6),
           Text(
-            '${group.assets.length} photo${group.assets.length == 1 ? '' : 's'} · '
+            '${group.photoCount} photo${group.photoCount == 1 ? '' : 's'} · '
             '${DateFormat('EEE, MMM d · h:mm a').format(group.takenAt)}',
             style: TextStyle(fontSize: 12, color: Colors.grey[600]),
           ),
@@ -436,4 +448,28 @@ class _AssetThumbState extends State<_AssetThumb> {
       },
     );
   }
+}
+
+// ── File thumbnail (shared from Photos.app) ───────────────────────────────────
+
+class _FileThumb extends StatelessWidget {
+  final File file;
+  const _FileThumb({required this.file});
+
+  @override
+  Widget build(BuildContext context) => ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.file(
+          file,
+          width: 110,
+          height: 110,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            width: 110,
+            height: 110,
+            color: Colors.grey[200],
+            child: const Icon(Icons.broken_image_outlined, color: Colors.grey),
+          ),
+        ),
+      );
 }
