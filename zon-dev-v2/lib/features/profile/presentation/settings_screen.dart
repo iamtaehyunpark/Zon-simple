@@ -220,6 +220,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             sub: 'Choose who can see you', arrow: true,
             onTap: _isGhostMode ? null : () => context.push('/location-visibility'),
             enabled: !_isGhostMode),
+        _Row(icon: Icons.shield_outlined, label: 'Data & Privacy',
+            sub: 'Control how your data is used & shared', arrow: true,
+            onTap: () => context.push('/data-privacy')),
       ]),
       _Section('NOTIFICATIONS', [
         _Row(icon: Icons.favorite, label: 'Likes',
