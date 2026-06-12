@@ -397,8 +397,8 @@ Migrations live in `supabase/migrations/`. All have been applied to the remote p
 | 037 | `visits` + `derive_visits()` stay-point segmentation (pg_cron, currently commented out) |
 | 038 | `event_log` append-only outbox + emitter triggers on check_ins/stamps/visits |
 | 039 | `user_attributes` segmentation dims (inference jobs are a later workstream; rows seeded) |
-| 040 *(MCP-applied, no local file)* | revoke RPC on internal functions |
-| 041 *(MCP-applied, no local file)* | fix `emit_checkin_event` dropped-column reference |
+| 040 | Revoke PostgREST RPC on internal 035–038 trigger/helper functions (`emit_*`, `sync_*`, `set_*_place`) |
+| 041 | Hotfix: `emit_checkin_event` referenced `check_ins.tz_offset_min` (dropped in 019), aborting every check-in insert — dead reference removed |
 | 042 | **Consent enforcement:** `bm_place_aggregates` now requires `consent_version is not null` (seeded opt-in users excluded until they actively decide); `has_bm_consent()` / `has_third_party_consent()` service-only gates. App side: jurisdiction-aware consent gate (`lib/features/compliance/`) |
 
 > **Consent posture (owner decision 2026-06-12):** opt-out where the law allows; opt-in (blocking gate) for KR + EU/EEA, detected from device locale. Users in opt-in regions hit `ConsentGateScreen` once post-login; everyone can review/withdraw in Settings → Data & Privacy. Right-of-access via `/inferred-data`.
