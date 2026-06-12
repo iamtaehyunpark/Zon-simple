@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ZON — v3 Prototype · Gen-Z Minimal</title>
+
+  <!-- Poppins -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,500&display=swap" rel="stylesheet"/>
+  <!-- Material Symbols -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200&display=block"/>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #141414;
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; height: 100vh;
+      font-family: 'Poppins', sans-serif;
+      overflow: hidden;
+    }
+    .phone-outer { position: relative; transform-origin: center center; transition: transform 0.2s ease; }
+    .phone-frame {
+      position: relative; width: 390px; height: 844px;
+      border-radius: 52px; background: #0A0A0A;
+      box-shadow: 0 0 0 1.5px #2A2A2A, 0 0 0 3px #141414, 0 24px 72px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(255,255,255,0.05);
+      overflow: hidden; flex-shrink: 0;
+    }
+    .phone-frame::before {
+      content: ''; position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      width: 120px; height: 34px; background: #0A0A0A; border-radius: 17px; z-index: 9999;
+    }
+    .phone-screen { position: absolute; inset: 0; border-radius: 52px; overflow: hidden; }
+    #root { width: 390px; height: 844px; overflow: hidden; }
+    .phone-label {
+      position: absolute; bottom: -30px; left: 50%; transform: translateX(-50%);
+      font-family: 'Poppins', sans-serif; font-size: 11px; font-weight: 500;
+      color: rgba(255,255,255,0.25); letter-spacing: 0.08em; white-space: nowrap;
+    }
+    * { scrollbar-width: none; }
+    *::-webkit-scrollbar { display: none; }
+
+    @keyframes slideIn { from { transform:translateX(28px); opacity:0; } to { transform:translateX(0); opacity:1; } }
+    @keyframes slideUp  { from { transform:translateY(16px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+    @keyframes fadeIn   { from { opacity:0; } to { opacity:1; } }
+    @keyframes fabIn    { from { transform:translateY(10px) scale(0.95); opacity:0; } to { transform:translateY(0) scale(1); opacity:1; } }
+    @keyframes shimmer  { 0% { background-position:-200% 0; } 100% { background-position:200% 0; } }
+
+    .material-symbols-rounded {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      line-height: 1; display: inline-flex; align-items: center;
+      justify-content: center; vertical-align: middle; user-select: none;
+    }
+
+    /* ── Tweak bar ── */
+    .tweaks {
+      position: fixed; top: 24px; right: 24px; z-index: 9999;
+      display: flex; flex-direction: column; gap: 16px; align-items: flex-end;
+    }
+    .tweak-group { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+    .tweak-label {
+      font-family: 'Poppins', sans-serif; font-size: 10px; font-weight: 600;
+      color: rgba(255,255,255,0.28); letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .tweak-row { display: flex; gap: 6px; }
+    .tweak-btn {
+      background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 9999px; color: rgba(255,255,255,0.5);
+      font-family: 'Poppins', sans-serif; font-size: 11px; font-weight: 600;
+      padding: 5px 13px; cursor: pointer; backdrop-filter: blur(8px);
+      transition: all 0.15s; letter-spacing: 0.03em;
+    }
+    .tweak-btn:hover { background: rgba(255,255,255,0.14); color: rgba(255,255,255,0.8); }
+    .tweak-btn.active { background: rgba(139,110,196,0.45); border-color: rgba(139,110,196,0.55); color: white; }
+
+    .hint {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      font-family: 'Poppins', sans-serif; font-size: 10px; font-weight: 500;
+      color: rgba(255,255,255,0.2); letter-spacing: 0.06em; pointer-events: none; white-space: nowrap;
+    }
+  </style>
+
+  <template id="__bundler_thumbnail">
+    <svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+      <rect width="120" height="80" fill="#141414"/>
+      <rect x="38" y="6" width="44" height="68" rx="8" fill="#FAFAFA"/>
+      <rect x="42" y="14" width="36" height="22" rx="3" fill="#E8E8E0"/>
+      <path d="M44,22 Q54,18 60,20 T76,16" stroke="#8B6EC4" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+      <circle cx="56" cy="21" r="3" fill="#8B6EC4"/>
+      <circle cx="66" cy="19" r="3" fill="#8B6EC4"/>
+      <rect x="42" y="40" width="36" height="5" rx="2.5" fill="#EFEFEF"/>
+      <rect x="42" y="49" width="10" height="10" rx="2" fill="#D0C8CC"/>
+      <rect x="54" y="49" width="10" height="10" rx="2" fill="#C4CCC0"/>
+      <rect x="66" y="49" width="10" height="10" rx="2" fill="#CCC8C0"/>
+      <text x="60" y="78" fontSize="5.5" fill="rgba(255,255,255,0.25)" textAnchor="middle" fontFamily="Poppins,sans-serif">ZON v3</text>
+    </svg>
+  </template>
+</head>
+<body>
+
+  <!-- Tweak bar -->
+  <div class="tweaks">
+    <div class="tweak-group">
+      <span class="tweak-label">Direction</span>
+      <div class="tweak-row">
+        <button class="tweak-btn"        id="tw-A" onclick="setDir('A')">A · Pure</button>
+        <button class="tweak-btn active" id="tw-B" onclick="setDir('B')">B · Accented</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="phone-outer" id="phoneOuter">
+    <div class="phone-frame">
+      <div class="phone-screen">
+        <div id="root"></div>
+      </div>
+    </div>
+    <span class="phone-label">ZON · v3 · Gen-Z Minimal · Poppins</span>
+  </div>
+
+  <span class="hint">Tap tabs · FAB + · Tap cards to explore screens</span>
+
+  <script>
+    function scalePhone() {
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const scale = Math.min(1, (vw - 180) / 390, (vh - 48) / 844);
+      const el = document.getElementById('phoneOuter');
+      if (el) el.style.transform = 'scale(' + scale + ')';
+    }
+    window.addEventListener('resize', scalePhone);
+    scalePhone();
+
+    function setDir(d) {
+      window.THEME = window.THEME || {};
+      window.THEME.direction = d;
+      document.querySelectorAll('.tweak-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('tw-' + d).classList.add('active');
+      window.dispatchEvent(new CustomEvent('zon-theme-change', { detail: { direction: d } }));
+    }
+  </script>
+
+  <!-- Load JSX in dependency order -->
+  <script type="text/babel" src="v3-tokens.jsx"></script>
+  <script type="text/babel" src="v3-primitives.jsx"></script>
+  <script type="text/babel" src="v3-cards.jsx"></script>
+  <script type="text/babel" src="v3-screens-main.jsx"></script>
+  <script type="text/babel" src="v3-screens-tl.jsx"></script>
+  <script type="text/babel" src="v3-screens-sub.jsx"></script>
+  <script type="text/babel" src="v3-screens-modal.jsx"></script>
+  <script type="text/babel" src="v3-app.jsx"></script>
+  <script>setTimeout(scalePhone, 300);</script>
+</body>
+</html>

@@ -1,41 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// ZON design tokens — Direction D (Final)
-/// Source: zon-tokens.jsx
+/// ZON design tokens — v3 (Gen-Z Minimal)
+/// Source: zon_redesign/project/v3-tokens.jsx
+/// Poppins · pure white/neutral surfaces · brand purple reserved for highlights.
 class Z {
-  // Brand
+  // Brand — FAB, active tab, story ring, CTA buttons, map route, pins, badges
   static const brand      = Color(0xFF8B6EC4);
   static const brandDark  = Color(0xFF6B50A4);
-  static const brandLight = Color(0xFFA98EDC);
-  static const brandSoft  = Color(0x218B6EC4); // rgba(139,110,196,0.13)
-  static const brandSoft2 = Color(0x108B6EC4); // rgba(139,110,196,0.06)
+  static const brandLight = Color(0xFFB09ED8);
+  static const brandSoft  = Color(0x1A8B6EC4); // rgba(139,110,196,0.10)
+  static const brandSoft2 = Color(0x0D8B6EC4); // rgba(139,110,196,0.05)
 
   // Semantic
   static const checkin     = Color(0xFF3B82F6);
-  static const checkinSoft = Color(0x1F3B82F6);
+  static const checkinSoft = Color(0x1A3B82F6);
   static const following   = Color(0xFFF59E0B);
   static const story       = Color(0xFFEC4899);
   static const note        = Color(0xFFD97706);
-  static const noteSoft    = Color(0x1AD97706);
-  static const auto        = Color(0xFF9CA3AF);
+  static const noteSoft    = Color(0x14D97706);
+  static const auto        = Color(0xFFADADAD);
   static const error       = Color(0xFFEF4444);
-  static const success     = Color(0xFF10B981);
+  static const success     = Color(0xFF22C55E);
 
-  // Surfaces
-  static const surface0 = Color(0xFFF7F4EE); // scaffold / page bg
+  // Surfaces — clean white, no warm cream
+  static const surface0 = Color(0xFFFAFAFA); // scaffold / page bg
   static const surface1 = Color(0xFFFFFFFF); // card / header bg
-  static const surface2 = Color(0xFFF0EDE6); // sheet bg
-  static const surface3 = Color(0xFFE8E4DC); // toggle track off
+  static const surface2 = Color(0xFFF3F3F3); // sheet bg
+  static const surface3 = Color(0xFFEFEFEF); // toggle track off
 
-  // Text
-  static const text      = Color(0xFF1A1714);
-  static const textMuted = Color(0xFF8A8278);
-  static const textFaint = Color(0xFFC0BAB2);
+  // Text — neutral hierarchy (not warm browns)
+  static const text      = Color(0xFF111111);
+  static const textMuted = Color(0xFF737373);
+  static const textFaint = Color(0xFFC7C7C7);
 
-  // Outline
-  static const outline  = Color(0xFFE8E4DC);
-  static const outline2 = Color(0xFFC8C2BA);
+  // Outline — neutral, not warm
+  static const outline  = Color(0xFFEFEFEF);
+  static const outline2 = Color(0xFFDBDBDB);
+
+  // Map — neutral (Naver-inspired)
+  static const mapBase   = Color(0xFFE8E8E0);
+  static const mapStreet = Color(0xFFF2F2EA);
+  static const mapWater  = Color(0xFFBED0E8);
+  static const mapGreen  = Color(0xFFC4D8BC);
 
   // Radius helpers
   static BorderRadius get r8   => BorderRadius.circular(8);
@@ -47,10 +54,10 @@ class Z {
   static BorderRadius get rFull => BorderRadius.circular(9999);
 }
 
-/// Build the MaterialApp ThemeData using DM Sans + Z tokens.
+/// Build the MaterialApp ThemeData using Poppins + Z tokens.
 class AppTheme {
   static ThemeData get theme {
-    final base = GoogleFonts.dmSansTextTheme();
+    final base = GoogleFonts.poppinsTextTheme();
     return ThemeData(
       useMaterial3: true,
       colorScheme: ColorScheme.fromSeed(
@@ -77,7 +84,7 @@ class AppTheme {
         foregroundColor: Z.text,
         elevation: 0,
         scrolledUnderElevation: 0,
-        titleTextStyle: GoogleFonts.dmSans(
+        titleTextStyle: GoogleFonts.poppins(
           fontSize: 17,
           fontWeight: FontWeight.w700,
           color: Z.text,
@@ -104,7 +111,7 @@ class AppTheme {
           backgroundColor: Z.brand,
           foregroundColor: Colors.white,
           minimumSize: const Size(0, 48),
-          textStyle: GoogleFonts.dmSans(fontSize: 15, fontWeight: FontWeight.w700),
+          textStyle: GoogleFonts.poppins(fontSize: 15, fontWeight: FontWeight.w700),
           shape: RoundedRectangleBorder(borderRadius: Z.r16),
         ),
       ),
@@ -113,14 +120,14 @@ class AppTheme {
           foregroundColor: Z.text,
           side: const BorderSide(color: Z.outline2),
           minimumSize: const Size(0, 44),
-          textStyle: GoogleFonts.dmSans(fontSize: 14, fontWeight: FontWeight.w600),
+          textStyle: GoogleFonts.poppins(fontSize: 14, fontWeight: FontWeight.w600),
           shape: RoundedRectangleBorder(borderRadius: Z.rFull),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Z.surface0,
-        hintStyle: GoogleFonts.dmSans(fontSize: 14, color: Z.textMuted),
+        hintStyle: GoogleFonts.poppins(fontSize: 14, color: Z.textMuted),
         border: OutlineInputBorder(
           borderRadius: Z.r12,
           borderSide: const BorderSide(color: Z.outline),
@@ -138,7 +145,7 @@ class AppTheme {
       chipTheme: ChipThemeData(
         backgroundColor: Z.surface1,
         selectedColor: Z.brand,
-        labelStyle: GoogleFonts.dmSans(fontSize: 13, fontWeight: FontWeight.w500),
+        labelStyle: GoogleFonts.poppins(fontSize: 13, fontWeight: FontWeight.w500),
         side: const BorderSide(color: Z.outline, width: 1.5),
         shape: const StadiumBorder(),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),

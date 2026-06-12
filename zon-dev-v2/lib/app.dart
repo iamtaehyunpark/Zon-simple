@@ -115,14 +115,20 @@ final _routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (ctx, state) => CustomTransitionPage(
           key: state.pageKey,
           fullscreenDialog: true,
+          // Non-opaque so the page beneath stays painted — CheckinEntry is a
+          // collapsible bottom-sheet popup (scrim + sheet), not a full page.
+          opaque: false,
+          barrierColor: Colors.transparent,
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            const begin = Offset(0.0, 1.0);
-            const end = Offset.zero;
-            const curve = Curves.easeInOut;
-            final tween = Tween(begin: begin, end: end).chain(CurveTween(curve: curve));
-            return SlideTransition(
-              position: animation.drive(tween),
-              child: child,
+            // Sheet slides up; the dim scrim (inside CheckinEntry) fades in.
+            final slide = Tween(begin: const Offset(0.0, 1.0), end: Offset.zero)
+                .chain(CurveTween(curve: Curves.easeOutCubic));
+            return FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: animation.drive(slide),
+                child: child,
+              ),
             );
           },
           child: CheckinEntry(

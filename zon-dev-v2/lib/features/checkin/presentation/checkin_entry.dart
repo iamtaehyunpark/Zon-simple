@@ -32,11 +32,43 @@ class CheckinEntry extends ConsumerStatefulWidget {
   ConsumerState<CheckinEntry> createState() => _CheckinEntryState();
 }
 
-class _CheckinEntryState extends ConsumerState<CheckinEntry> {
+class _CheckinEntryState extends ConsumerState<CheckinEntry>
+    with SingleTickerProviderStateMixin {
   final _searchCtrl = TextEditingController();
   List<ExternalPlace> _searchResults = [];
   bool _searching = false;
   CheckIn? _savedCheckIn;
+
+  // Drag-to-dismiss state for the bottom sheet.
+  double _sheetDrag = 0;
+  late final AnimationController _snapCtrl =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
+
+  void _dismiss() {
+    ref.read(checkinNotifierProvider.notifier).reset();
+    context.pop();
+  }
+
+  void _onSheetDragUpdate(DragUpdateDetails d) {
+    if (_snapCtrl.isAnimating) _snapCtrl.stop();
+    setState(() => _sheetDrag = (_sheetDrag + d.delta.dy).clamp(0.0, 1000.0));
+  }
+
+  void _onSheetDragEnd(DragEndDetails d) {
+    final v = d.velocity.pixelsPerSecond.dy;
+    if (_sheetDrag > 140 || v > 700) {
+      _dismiss();
+    } else {
+      // Animate the sheet snapping back to rest.
+      final anim = Tween(begin: _sheetDrag, end: 0.0).animate(
+          CurvedAnimation(parent: _snapCtrl, curve: Curves.easeOut));
+      void listener() => setState(() => _sheetDrag = anim.value);
+      anim.addListener(listener);
+      _snapCtrl
+        ..reset()
+        ..forward().whenComplete(() => anim.removeListener(listener));
+    }
+  }
 
   @override
   void initState() {
@@ -77,6 +109,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _snapCtrl.dispose();
     super.dispose();
   }
 
@@ -193,141 +226,156 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry> {
       ),
     );
 
+    final sheetH = MediaQuery.of(context).size.height * 0.72;
+    final dragFrac = (_sheetDrag / sheetH).clamp(0.0, 1.0);
+
     return Scaffold(
-      backgroundColor: const Color(0x7F000000), // semi-transparent black
+      backgroundColor: Color.fromRGBO(0, 0, 0, 0.5 * (1 - dragFrac)),
       body: Column(
         children: [
           // Top peek area (tapping dismisses)
           Expanded(
             child: GestureDetector(
-              onTap: () {
-                ref.read(checkinNotifierProvider.notifier).reset();
-                context.pop();
-              },
+              onTap: _dismiss,
               behavior: HitTestBehavior.opaque,
               child: const SizedBox.expand(),
             ),
           ),
-          // Bottom sheet container
-          Container(
-            width: double.infinity,
-            decoration: const BoxDecoration(
-              color: Z.surface1,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 16,
-                  offset: Offset(0, -4),
-                ),
-              ],
-            ),
-            height: MediaQuery.of(context).size.height * 0.72,
-            child: Column(
-              children: [
-                // Bottom Handle
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Z.outline2,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+          // Bottom sheet — drag the handle/header down to dismiss.
+          Transform.translate(
+            offset: Offset(0, _sheetDrag),
+            child: Container(
+              width: double.infinity,
+              decoration: const BoxDecoration(
+                color: Z.surface1,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 16,
+                    offset: Offset(0, -4),
                   ),
-                ),
-                // Custom Step Headers
-                if (checkinState.maybeWhen(
-                  editingCheckIn: (_) => true,
-                  editingStamp: (_) => true,
-                  orElse: () => false,
-                )) ...[
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(
+                ],
+              ),
+              height: sheetH,
+              child: Column(
+                children: [
+                  // Draggable handle + header zone
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onVerticalDragUpdate: _onSheetDragUpdate,
+                    onVerticalDragEnd: _onSheetDragEnd,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        GestureDetector(
-                          onTap: () {
-                            ref
-                                .read(checkinNotifierProvider.notifier)
-                                .startCheckin(
-                                  lat: widget.lat,
-                                  lng: widget.lng,
-                                  mode: widget.mode,
-                                  visitedAt: widget.visitedAt,
-                                );
-                          },
-                          child: const Icon(Icons.arrow_back, color: Z.text),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            checkinState.maybeWhen(
-                              editingCheckIn: (draft) => draft.placeName,
-                              editingStamp: (draft) => draft.placeName,
-                              orElse: () => 'Edit Check-in',
+                        // Bottom Handle
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Center(
+                            child: Container(
+                              width: 40,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: Z.outline2,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
                             ),
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                              color: Z.text,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        // Custom Step Headers
+                        if (checkinState.maybeWhen(
+                          editingCheckIn: (_) => true,
+                          editingStamp: (_) => true,
+                          orElse: () => false,
+                        )) ...[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            child: Row(
+                              children: [
+                                GestureDetector(
+                                  onTap: () {
+                                    ref
+                                        .read(checkinNotifierProvider.notifier)
+                                        .startCheckin(
+                                          lat: widget.lat,
+                                          lng: widget.lng,
+                                          mode: widget.mode,
+                                          visitedAt: widget.visitedAt,
+                                        );
+                                  },
+                                  child: const Icon(Icons.arrow_back,
+                                      color: Z.text),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    checkinState.maybeWhen(
+                                      editingCheckIn: (draft) => draft.placeName,
+                                      editingStamp: (draft) => draft.placeName,
+                                      orElse: () => 'Edit Check-in',
+                                    ),
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: Z.text,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Divider(color: Z.outline),
+                        ] else if (checkinState.maybeWhen(
+                          placeSelected: (_, __, ___, ____, _____) => true,
+                          orElse: () => false,
+                        )) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
+                            child: Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  isStamp ? 'Create Stamp' : 'Add a Check-in',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    color: Z.text,
+                                  ),
+                                ),
+                                GestureDetector(
+                                  onTap: _dismiss,
+                                  child: Container(
+                                    width: 30,
+                                    height: 30,
+                                    decoration: const BoxDecoration(
+                                      color: Z.surface2,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(Icons.close,
+                                        size: 16, color: Z.textMuted),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
-                  const Divider(color: Z.outline),
-                ] else if (checkinState.maybeWhen(
-                  placeSelected: (_, __, ___, ____, _____) => true,
-                  orElse: () => false,
-                )) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 16, 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          isStamp ? 'Create Stamp' : 'Add a Check-in',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: Z.text,
-                          ),
-                        ),
-                        GestureDetector(
-                          onTap: () {
-                            ref.read(checkinNotifierProvider.notifier).reset();
-                            context.pop();
-                          },
-                          child: Container(
-                            width: 30,
-                            height: 30,
-                            decoration: const BoxDecoration(
-                              color: Z.surface2,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.close,
-                                size: 16, color: Z.textMuted),
-                          ),
-                        ),
-                      ],
+                  // Step body
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24)),
+                      child: mainContent,
                     ),
                   ),
                 ],
-                // Step body
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius:
-                        const BorderRadius.vertical(top: Radius.circular(24)),
-                    child: mainContent,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ],

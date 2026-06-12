@@ -1,21 +1,23 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart' as geo;
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/location/providers/gps_provider.dart';
 import '../../../data/repositories/stamp_repository.dart';
 import '../../../data/repositories/comment_repository.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/user_profile.dart';
-import '../../../data/models/enums.dart';
 import '../../../shared/widgets/app_states.dart';
+import '../../../shared/widgets/mini_map.dart';
+import 'feed_screen.dart' show StampCard;
 import 'providers/feed_provider.dart';
 import '../../profile/presentation/providers/profile_provider.dart';
-import '../../../shared/widgets/photo_thumb_row.dart';
 import '../../../shared/utils/format.dart';
 import '../../checkin/presentation/user_tag_field.dart' show showUserPicker;
 
@@ -87,409 +89,592 @@ class StampDetailScreen extends ConsumerWidget {
   }
 }
 
-class _StampDetailBody extends ConsumerWidget {
+class _StampDetailBody extends ConsumerStatefulWidget {
   final Stamp stamp;
   final String stampId;
 
   const _StampDetailBody({required this.stamp, required this.stampId});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final commentsAsync = ref.watch(stampCommentsProvider(stampId));
-    final photoUrls =
-        ref.watch(stampPhotosProvider(stampId)).valueOrNull ?? const <String>[];
+  ConsumerState<_StampDetailBody> createState() => _StampDetailBodyState();
+}
+
+class _StampDetailBodyState extends ConsumerState<_StampDetailBody> {
+  PageController? _gallery;
+  int _page = 0;
+  bool _finalizedInitial = false;
+
+  Stamp get stamp => widget.stamp;
+  String get stampId => widget.stampId;
+
+  @override
+  void dispose() {
+    _gallery?.dispose();
+    super.dispose();
+  }
+
+  // Build the page controller so the gallery opens on the first photo (index 1)
+  // per the v3 spec. Photos may resolve after the first frame; once they do,
+  // jump to the first photo if the user is still on the map slide. We reuse the
+  // single controller (no dispose/recreate) to avoid touching a controller the
+  // previous frame's PageView still holds.
+  void _ensureController(int slideCount, bool loaded) {
+    if (_gallery == null) {
+      final initial = slideCount > 1 ? 1 : 0;
+      _page = initial;
+      _gallery = PageController(initialPage: initial);
+      _finalizedInitial = loaded;
+      return;
+    }
+    if (!_finalizedInitial && loaded) {
+      _finalizedInitial = true;
+      if (_page == 0 && slideCount > 1) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && (_gallery?.hasClients ?? false) && _page == 0) {
+            _gallery!.jumpToPage(1);
+          }
+        });
+      }
+    }
+  }
+
+  String? _subtitle() {
+    final parts = <String>[];
+    final pos = ref.read(gpsNotifierProvider).valueOrNull;
+    if (pos != null) {
+      final m = geo.Geolocator.distanceBetween(
+          pos.latitude, pos.longitude, stamp.lat, stamp.lng);
+      parts.add(m < 1000 ? '${m.round()}m away' : '${(m / 1000).toStringAsFixed(1)}km away');
+    }
+    parts.add(_relDate(stamp.visitedAt));
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final photosAsync = ref.watch(stampPhotosProvider(stampId));
+    final photoUrls = photosAsync.valueOrNull ??
+        (stamp.coverPhotoUrl != null ? [stamp.coverPhotoUrl!] : const <String>[]);
     final tagged = ref.watch(stampTaggedUsersProvider(stampId)).valueOrNull ??
         const <UserProfile>[];
     final isOwner = stamp.userId == ref.watch(currentUserProvider)?.id;
+    final commentsAsync = ref.watch(stampCommentsProvider(stampId));
 
-    return CustomScrollView(
-      slivers: [
-        // ── App bar with 340px cover photo & scrim ────────────
-        SliverAppBar(
-          expandedHeight: 340,
-          pinned: true,
-          automaticallyImplyLeading: false,
-          leadingWidth: 56,
-          leading: GestureDetector(
-            onTap: () => context.pop(),
-            child: Container(
-              margin: const EdgeInsets.only(left: 16, top: 8, bottom: 8),
-              decoration: const BoxDecoration(
-                color: Colors.black45,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.chevron_left, color: Colors.white, size: 28),
-            ),
-          ),
-          actions: [
-            GestureDetector(
-              onTap: () async {
-                await ref.read(stampRepositoryProvider).toggleSave(stampId);
-                ref.invalidate(stampDetailProvider(stampId));
-              },
-              child: Container(
-                width: 40,
-                height: 40,
-                margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-                decoration: const BoxDecoration(
-                  color: Colors.black45,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  stamp.isSaved ? Icons.bookmark : Icons.bookmark_border,
-                  color: stamp.isSaved ? Z.brand : Colors.white,
-                  size: 20,
-                ),
-              ),
-            ),
-            if (isOwner)
-              Container(
-                width: 40,
-                height: 40,
-                margin: const EdgeInsets.only(right: 16, left: 4, top: 8, bottom: 8),
-                decoration: const BoxDecoration(
-                  color: Colors.black45,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.white, size: 20),
-                  padding: EdgeInsets.zero,
-                  onSelected: (v) async {
-                    if (v == 'edit') {
-                      await context.push('/stamp/$stampId/edit');
-                      ref.invalidate(stampDetailProvider(stampId));
-                      ref.invalidate(stampPhotosProvider(stampId));
-                    } else if (v == 'delete') {
-                      final ok = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Delete stamp?'),
-                          content: const Text('This cannot be undone.'),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text('Cancel'),
-                            ),
-                            FilledButton(
-                              onPressed: () => Navigator.pop(ctx, true),
-                              child: const Text('Delete'),
+    final slideCount = 1 + photoUrls.length; // map slide + photos
+    _ensureController(slideCount, photosAsync.hasValue);
+
+    return Column(
+      children: [
+        // ── Fixed place header ───────────────────────────────
+        Container(
+          color: Z.surface1,
+          child: SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(6, 2, 8, 10),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => context.pop(),
+                    behavior: HitTestBehavior.opaque,
+                    child: const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Icon(Icons.arrow_back, size: 24, color: Z.text),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: stamp.externalPlaceId != null
+                          ? () => context.push(
+                              '/place/${Uri.encodeComponent(stamp.externalPlaceId!)}')
+                          : null,
+                      behavior: HitTestBehavior.opaque,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            stamp.placeName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Z.text,
+                                height: 1.2),
+                          ),
+                          if (_subtitle() != null) ...[
+                            const SizedBox(height: 1),
+                            Text(
+                              _subtitle()!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 12, color: Z.textMuted),
                             ),
                           ],
-                        ),
-                      );
-                      if (ok == true) {
-                        await ref
-                            .read(stampRepositoryProvider)
-                            .deleteStamp(stampId);
-                        ref.read(feedNotifierProvider.notifier).removeStamp(stampId);
-                        if (context.mounted) context.pop();
-                      }
-                    }
-                  },
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
-                  ],
-                ),
-              ),
-          ],
-          flexibleSpace: FlexibleSpaceBar(
-            background: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (stamp.coverPhotoUrl != null)
-                  CachedNetworkImage(
-                    imageUrl: stamp.coverPhotoUrl!,
-                    fit: BoxFit.cover,
-                  )
-                else
-                  Container(
-                    color: Z.surface2,
-                    child: const Icon(Icons.image_outlined, size: 48, color: Z.textMuted),
-                  ),
-                // Gradient scrim
-                Positioned.fill(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.black.withValues(alpha: 0.4),
-                          Colors.transparent,
-                          Colors.black.withValues(alpha: 0.7),
                         ],
-                        stops: const [0.0, 0.5, 1.0],
                       ),
                     ),
                   ),
-                ),
-                // Bottom details overlay
-                Positioned(
-                  bottom: 16,
-                  left: 16,
-                  right: 16,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: stamp.externalPlaceId != null
-                            ? () => context.push(
-                                '/place/${Uri.encodeComponent(stamp.externalPlaceId!)}')
-                            : null,
-                        child: Row(
+                  const SizedBox(width: 8),
+                  if (stamp.externalPlaceId != null)
+                    GestureDetector(
+                      onTap: () => context.push(
+                          '/place/${Uri.encodeComponent(stamp.externalPlaceId!)}'),
+                      child: Container(
+                        height: 32,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Z.outline2),
+                          borderRadius: Z.rFull,
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.location_on,
-                                size: 16, color: Colors.white),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                stamp.placeName,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: Colors.white54,
-                                  decorationThickness: 1,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            _VisibilityBadge(stamp.visibility),
+                            Icon(Icons.near_me, size: 13, color: Z.brand),
+                            SizedBox(width: 4),
+                            Text('Go',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: Z.text)),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          GestureDetector(
-                            behavior: HitTestBehavior.opaque,
-                            onTap: () => context.push('/profile/${stamp.userId}'),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CircleAvatar(
-                                  radius: 12,
-                                  backgroundImage: stamp.avatarUrl != null
-                                      ? CachedNetworkImageProvider(stamp.avatarUrl!)
-                                      : null,
-                                  child: stamp.avatarUrl == null
-                                      ? const Icon(Icons.person, size: 12)
-                                      : null,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '@${stamp.username ?? "user"}',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const Spacer(),
-                          Text(
-                            DateFormat('MMM d, yyyy · h:mm a').format(stamp.visitedAt),
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.white.withValues(alpha: 0.75),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                  if (isOwner)
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, size: 22, color: Z.text),
+                      onSelected: (v) => _onMenu(v, photoUrls),
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'edit', child: Text('Edit')),
+                        PopupMenuItem(value: 'delete', child: Text('Delete')),
+                      ],
+                    ),
+                ],
+              ),
             ),
           ),
         ),
+        const Divider(height: 0.5, color: Z.outline),
 
-        // ── Stamp info ───────────────────────────────────────
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (tagged.isNotEmpty) ...[
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      for (final u in tagged)
-                        ActionChip(
-                          visualDensity: VisualDensity.compact,
-                          avatar: CircleAvatar(
-                            backgroundImage: u.avatarUrl != null
-                                ? CachedNetworkImageProvider(u.avatarUrl!)
-                                : null,
-                            child: u.avatarUrl == null
-                                ? const Icon(Icons.person, size: 12)
-                                : null,
-                          ),
-                          label: Text('@${u.username}'),
-                          onPressed: () => context.push('/profile/${u.id}'),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                ],
+        // ── Everything scrolls: gallery → actions → comments → more ──
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              // Gallery
+              _buildGallery(photoUrls),
 
-                if (stamp.caption != null && stamp.caption!.isNotEmpty) ...[
-                  Text(
-                    stamp.caption!,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontStyle: FontStyle.italic,
-                      height: 1.65,
-                      color: Z.text,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-
-                if (stamp.sensoryTags.isNotEmpty) ...[
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: stamp.sensoryTags
-                        .map((t) => Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: Z.brandSoft,
-                                borderRadius: Z.rFull,
-                              ),
-                              child: Text(
-                                t,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: Z.brand,
-                                ),
-                              ),
-                            ))
-                        .toList(),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // Action icons row
-                Row(
+              // Actions + caption
+              Container(
+                color: Z.surface1,
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _LikeButton(stamp: stamp, stampId: stampId),
-                    const SizedBox(width: 24),
                     Row(
                       children: [
-                        const Icon(Icons.chat_bubble_outline, size: 20, color: Z.textMuted),
-                        const SizedBox(width: 6),
-                        Text(
-                          compactCount(stamp.commentCount),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Z.textMuted,
-                          ),
+                        _IconAction(
+                          icon: stamp.isLiked
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          color: stamp.isLiked ? Z.error : Z.text,
+                          onTap: () async {
+                            await ref
+                                .read(stampRepositoryProvider)
+                                .toggleLike(stampId);
+                            ref.invalidate(stampDetailProvider(stampId));
+                          },
+                        ),
+                        _IconAction(
+                            icon: Icons.chat_bubble_outline,
+                            color: Z.text,
+                            onTap: () {}),
+                        _IconAction(
+                            icon: Icons.send, color: Z.text, onTap: () {}),
+                        const Spacer(),
+                        _IconAction(
+                          icon: stamp.isSaved
+                              ? Icons.bookmark
+                              : Icons.bookmark_border,
+                          color: stamp.isSaved ? Z.brand : Z.text,
+                          onTap: () async {
+                            await ref
+                                .read(stampRepositoryProvider)
+                                .toggleSave(stampId);
+                            ref.invalidate(stampDetailProvider(stampId));
+                          },
                         ),
                       ],
                     ),
-                    const Spacer(),
-                    if (photoUrls.isNotEmpty) ...[
-                      const Icon(Icons.photo_library_outlined, size: 18, color: Z.textMuted),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${compactCount(stamp.photoCount)} photos',
-                        style: const TextStyle(fontSize: 12, color: Z.textMuted),
+                    const SizedBox(height: 8),
+                    Text('${compactCount(stamp.likeCount)} likes',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: Z.text)),
+                    if (stamp.caption != null &&
+                        stamp.caption!.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text.rich(
+                        TextSpan(children: [
+                          TextSpan(
+                            text: '@${stamp.username ?? 'user'} ',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w600, color: Z.text),
+                          ),
+                          TextSpan(text: stamp.caption!),
+                        ]),
+                        style: const TextStyle(
+                            fontSize: 13, height: 1.65, color: Z.text),
+                      ),
+                    ],
+                    if (stamp.sensoryTags.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 2,
+                        children: [
+                          for (final t in stamp.sensoryTags)
+                            Text('#$t',
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: Z.brand)),
+                        ],
+                      ),
+                    ],
+                    if (tagged.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          for (final u in tagged)
+                            GestureDetector(
+                              onTap: () => context.push('/profile/${u.id}'),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 9,
+                                    backgroundImage: u.avatarUrl != null
+                                        ? CachedNetworkImageProvider(
+                                            u.avatarUrl!)
+                                        : null,
+                                    child: u.avatarUrl == null
+                                        ? const Icon(Icons.person, size: 9)
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text('@${u.username}',
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                          color: Z.textMuted)),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ],
                 ),
+              ),
+              const Divider(height: 0.5, color: Z.outline),
+
+              // Comments — flattened, borderless
+              Container(
+                color: Z.surface1,
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                alignment: Alignment.centerLeft,
+                child: const Text('Comments',
+                    style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: Z.text)),
+              ),
+              commentsAsync.when(
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                      child: CircularProgressIndicator(color: Z.brand)),
+                ),
+                error: (e, _) => const SizedBox.shrink(),
+                data: (comments) {
+                  if (comments.isEmpty) {
+                    return Container(
+                      color: Z.surface1,
+                      padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+                      alignment: Alignment.centerLeft,
+                      child: const Text('No comments yet. Be the first!',
+                          style: TextStyle(color: Z.textMuted, fontSize: 13)),
+                    );
+                  }
+                  final repliesByParent = <String, List<StampComment>>{};
+                  for (final c in comments) {
+                    if (c.parentId != null) {
+                      repliesByParent
+                          .putIfAbsent(c.parentId!, () => [])
+                          .add(c);
+                    }
+                  }
+                  final rows = <Widget>[];
+                  for (final c
+                      in comments.where((c) => c.parentId == null)) {
+                    rows.add(_CommentTile(
+                        comment: c, stampId: stampId, isReply: false));
+                    for (final r in repliesByParent[c.id] ?? const []) {
+                      rows.add(_CommentTile(
+                          comment: r, stampId: stampId, isReply: true));
+                    }
+                  }
+                  return Container(
+                    color: Z.surface1,
+                    padding: const EdgeInsets.only(top: 4, bottom: 4),
+                    child: Column(children: rows),
+                  );
+                },
+              ),
+              Container(
+                color: Z.surface1,
+                child: _CommentInput(stampId: stampId),
+              ),
+
+              // More from this place
+              if (stamp.externalPlaceId != null)
+                _MoreFromPlace(
+                  placeId: stamp.externalPlaceId!,
+                  placeName: stamp.placeName,
+                  excludeId: stampId,
+                ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _onMenu(String v, List<String> photoUrls) async {
+    if (v == 'edit') {
+      await context.push('/stamp/$stampId/edit');
+      ref.invalidate(stampDetailProvider(stampId));
+      ref.invalidate(stampPhotosProvider(stampId));
+    } else if (v == 'delete') {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Delete stamp?'),
+          content: const Text('This cannot be undone.'),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Delete')),
+          ],
+        ),
+      );
+      if (ok == true) {
+        await ref.read(stampRepositoryProvider).deleteStamp(stampId);
+        ref.read(feedNotifierProvider.notifier).removeStamp(stampId);
+        if (mounted) context.pop();
+      }
+    }
+  }
+
+  // ── Gallery: map slide (0) + photo slides ──────────────────
+  Widget _buildGallery(List<String> photoUrls) {
+    const h = 348.0;
+    final slides = <Widget>[
+      // Slide 0 — map
+      Stack(
+        fit: StackFit.expand,
+        children: [
+          MiniMap(
+            lat: stamp.lat,
+            lng: stamp.lng,
+            zoom: 15.5,
+            markers: [
+              MiniMapMarker(
+                  id: stamp.id,
+                  lat: stamp.lat,
+                  lng: stamp.lng,
+                  color: Z.brand.toARGB32(),
+                  radius: 8),
+            ],
+          ),
+          Positioned(
+            left: 16,
+            bottom: 28,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.94),
+                borderRadius: Z.rFull,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.location_on, size: 13, color: Z.brand),
+                  const SizedBox(width: 5),
+                  Text(stamp.placeName,
+                      style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: Z.text)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+      // Photo slides
+      for (final url in photoUrls)
+        CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.cover,
+          placeholder: (_, __) => const ColoredBox(color: Z.surface2),
+          errorWidget: (_, __, ___) => const ColoredBox(color: Z.surface2),
+        ),
+    ];
+
+    return SizedBox(
+      height: h,
+      child: Stack(
+        children: [
+          PageView(
+            controller: _gallery,
+            onPageChanged: (i) => setState(() => _page = i),
+            children: slides,
+          ),
+          // Indicators
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 10,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Map = teardrop pin indicator
+                Opacity(
+                  opacity: _page == 0 ? 1.0 : 0.38,
+                  child: const Icon(Icons.location_on,
+                      size: 13, color: Colors.white),
+                ),
+                for (int i = 0; i < photoUrls.length; i++) ...[
+                  const SizedBox(width: 6),
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    width: _page == i + 1 ? 18 : 6,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: _page == i + 1
+                          ? Colors.white
+                          : Colors.white.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
-        ),
+        ],
+      ),
+    );
+  }
 
-        // ── Photo grid ───────────────────────────────────────
-        if (photoUrls.isNotEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: PhotoThumbRow(urls: photoUrls, size: 90),
-            ),
+  String _relDate(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays == 0) return 'Today';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return DateFormat('MMM d, yyyy').format(dt);
+  }
+}
+
+// ── Icon action (Instagram-style bar) ─────────────────────────
+class _IconAction extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  const _IconAction(
+      {required this.icon, required this.color, required this.onTap});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: Padding(
+          padding: const EdgeInsets.only(right: 16),
+          child: Icon(icon, size: 26, color: color),
+        ),
+      );
+}
+
+// ── More from this place — feed-style StampCards ──────────────
+class _MoreFromPlace extends ConsumerStatefulWidget {
+  final String placeId;
+  final String placeName;
+  final String excludeId;
+  const _MoreFromPlace({
+    required this.placeId,
+    required this.placeName,
+    required this.excludeId,
+  });
+
+  @override
+  ConsumerState<_MoreFromPlace> createState() => _MoreFromPlaceState();
+}
+
+class _MoreFromPlaceState extends ConsumerState<_MoreFromPlace> {
+  List<Stamp> _stamps = const [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final res = await ref
+        .read(stampRepositoryProvider)
+        .getStampsForPlace(widget.placeId);
+    if (!mounted) return;
+    setState(() {
+      _stamps = res
+          .getOrElse((_) => const [])
+          .where((s) => s.id != widget.excludeId)
+          .toList();
+      _loading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading || _stamps.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 6),
+          child: Text('More from ${widget.placeName}',
+              style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: Z.text)),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Column(
+            children: [for (final s in _stamps) StampCard(stamp: s)],
           ),
-
-        // ── Comments header ──────────────────────────────────
-        const SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(16, 20, 16, 8),
-            child: Text(
-              'Comments',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Z.text),
-            ),
-          ),
         ),
-
-        // ── Comments list ────────────────────────────────────
-        commentsAsync.when(
-          loading: () => const SliverToBoxAdapter(
-            child: Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(color: Z.brand),
-              ),
-            ),
-          ),
-          error: (e, _) => const SliverToBoxAdapter(child: SizedBox.shrink()),
-          data: (comments) {
-            if (comments.isEmpty) {
-              return const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-                  child: Text(
-                    'No comments yet. Be the first!',
-                    style: TextStyle(color: Z.textMuted, fontSize: 14),
-                  ),
-                ),
-              );
-            }
-            final repliesByParent = <String, List<StampComment>>{};
-            for (final c in comments) {
-              if (c.parentId != null) {
-                repliesByParent.putIfAbsent(c.parentId!, () => []).add(c);
-              }
-            }
-            final rows = <Widget>[];
-            for (final c in comments.where((c) => c.parentId == null)) {
-              rows.add(
-                  _CommentTile(comment: c, stampId: stampId, isReply: false));
-              for (final r in repliesByParent[c.id] ?? const []) {
-                rows.add(
-                    _CommentTile(comment: r, stampId: stampId, isReply: true));
-              }
-            }
-            return SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (ctx, i) => rows[i],
-                childCount: rows.length,
-              ),
-            );
-          },
-        ),
-
-        // ── Comment input ────────────────────────────────────
-        SliverToBoxAdapter(
-          child: _CommentInput(stampId: stampId),
-        ),
-
-        const SliverToBoxAdapter(child: SizedBox(height: 32)),
       ],
     );
   }
@@ -712,23 +897,23 @@ class _CommentTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final myId = ref.watch(currentUserProvider)?.id;
     final isOwn = comment.userId == myId;
+    final avatarSize = isReply ? 22.0 : 30.0;
 
     return Padding(
       padding: EdgeInsets.only(
-        left: isReply ? 52 : 16,
+        left: isReply ? 34 : 16,
         right: 16,
-        top: 6,
-        bottom: 6,
+        top: 8,
+        bottom: 8,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Avatar (34px or 28px for reply)
           GestureDetector(
             onTap: () => context.push('/profile/${comment.userId}'),
             child: Container(
-              width: isReply ? 28 : 34,
-              height: isReply ? 28 : 34,
+              width: avatarSize,
+              height: avatarSize,
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
                 color: Z.surface2,
@@ -736,16 +921,14 @@ class _CommentTile extends ConsumerWidget {
               clipBehavior: Clip.antiAlias,
               child: comment.avatarUrl != null
                   ? CachedNetworkImage(
-                      imageUrl: comment.avatarUrl!,
-                      fit: BoxFit.cover,
-                    )
+                      imageUrl: comment.avatarUrl!, fit: BoxFit.cover)
                   : Center(
                       child: Text(
                         comment.username != null && comment.username!.isNotEmpty
                             ? comment.username![0].toUpperCase()
                             : '?',
                         style: TextStyle(
-                          fontSize: isReply ? 11 : 13,
+                          fontSize: isReply ? 10 : 12,
                           fontWeight: FontWeight.bold,
                           color: Z.textMuted,
                         ),
@@ -754,80 +937,63 @@ class _CommentTile extends ConsumerWidget {
             ),
           ),
           const SizedBox(width: 10),
-          // Bubble content
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Z.surface1,
-                border: Border.all(color: Z.outline),
-                borderRadius: Z.r12,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header: username + time
-                  Row(
-                    children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Inline: @user + body
+                Text.rich(
+                  TextSpan(children: [
+                    TextSpan(
+                      text: '@${comment.username ?? 'user'} ',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w600, color: Z.text),
+                    ),
+                    ..._mentionSpan(comment.body).children!,
+                  ]),
+                  style: const TextStyle(
+                      fontSize: 13, height: 1.55, color: Z.text),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(_timeAgo(comment.createdAt),
+                        style: const TextStyle(
+                            color: Z.textMuted, fontSize: 11)),
+                    if (!isReply) ...[
+                      const SizedBox(width: 14),
                       GestureDetector(
-                        onTap: () => context.push('/profile/${comment.userId}'),
-                        child: Text(
-                          comment.username ?? 'User',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                            color: Z.text,
-                          ),
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        _timeAgo(comment.createdAt),
-                        style: const TextStyle(color: Z.textMuted, fontSize: 11),
+                        onTap: () => ref
+                            .read(replyTargetProvider(stampId).notifier)
+                            .state = comment,
+                        child: const Text('Reply',
+                            style: TextStyle(
+                                color: Z.textMuted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500)),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 4),
-                  // Text body
-                  Text.rich(
-                    _mentionSpan(comment.body),
-                    style: const TextStyle(fontSize: 13, height: 1.45, color: Z.text),
-                  ),
-                  // Reply CTA
-                  if (!isReply) ...[
-                    const SizedBox(height: 6),
-                    GestureDetector(
-                      onTap: () => ref
-                          .read(replyTargetProvider(stampId).notifier)
-                          .state = comment,
-                      child: const Text(
-                        'Reply',
-                        style: TextStyle(
-                          color: Z.brand,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    if (isOwn) ...[
+                      const SizedBox(width: 14),
+                      GestureDetector(
+                        onTap: () async {
+                          final repo = ref.read(commentRepositoryProvider);
+                          await repo.deleteComment(comment.id);
+                          ref.invalidate(stampCommentsProvider(stampId));
+                          ref.invalidate(stampDetailProvider(stampId));
+                        },
+                        child: const Text('Delete',
+                            style: TextStyle(
+                                color: Z.textMuted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500)),
                       ),
-                    ),
+                    ],
                   ],
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          if (isOwn) ...[
-            const SizedBox(width: 4),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18, color: Z.textMuted),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              onPressed: () async {
-                final repo = ref.read(commentRepositoryProvider);
-                await repo.deleteComment(comment.id);
-                ref.invalidate(stampCommentsProvider(stampId));
-                ref.invalidate(stampDetailProvider(stampId));
-              },
-            ),
-          ],
         ],
       ),
     );
@@ -859,76 +1025,3 @@ class _CommentTile extends ConsumerWidget {
   }
 }
 
-// ── Shared widgets ────────────────────────────────────────────
-
-class _VisibilityBadge extends StatelessWidget {
-  final StampVisibility visibility;
-  const _VisibilityBadge(this.visibility);
-
-  @override
-  Widget build(BuildContext context) {
-    final isPublic = visibility == StampVisibility.public;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: isPublic ? const Color(0x1F10B981) : Z.brandSoft,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isPublic ? Icons.public : Icons.lock,
-            size: 11,
-            color: isPublic ? Z.success : Z.brand,
-          ),
-          const SizedBox(width: 4),
-          Text(
-            visibility.name.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.5,
-              color: isPublic ? Z.success : Z.brand,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LikeButton extends ConsumerWidget {
-  final Stamp stamp;
-  final String stampId;
-  const _LikeButton({required this.stamp, required this.stampId});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () async {
-        await ref.read(stampRepositoryProvider).toggleLike(stampId);
-        ref.invalidate(stampDetailProvider(stampId));
-      },
-      child: Row(
-        children: [
-          Icon(
-            stamp.isLiked ? Icons.favorite : Icons.favorite_border,
-            color: stamp.isLiked ? Z.error : Z.textMuted,
-            size: 20,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            compactCount(stamp.likeCount),
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: stamp.isLiked ? Z.error : Z.textMuted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

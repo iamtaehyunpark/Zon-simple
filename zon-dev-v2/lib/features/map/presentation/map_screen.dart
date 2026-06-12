@@ -746,140 +746,170 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             },
           ),
 
-          // ── Phase A: Search bar ─────────────────────────────────────
+          // ── Top header box: search + category chips (prototype layout) ──
           Positioned(
-            top: MediaQuery.of(context).padding.top + 16,
-            left: 16,
-            right: 16,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Material(
-                  elevation: 4,
-                  borderRadius: BorderRadius.circular(28),
-                  child: TextField(
-                    controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'Search places…',
-                      prefixIcon: _searching
-                          ? const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2)),
-                            )
-                          : const Icon(Icons.search),
-                      suffixIcon: _searchCtrl.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: _clearSearch,
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(28),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 14),
-                    ),
-                    onTap: () => setState(() => _searchActive = true),
-                    onChanged: _onSearchChanged,
-                  ),
-                ),
-                if (_searchActive && _searchResults.isNotEmpty)
-                  Material(
-                    elevation: 6,
-                    borderRadius: BorderRadius.circular(16),
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      itemCount: _searchResults.length.clamp(0, 5),
-                      itemBuilder: (ctx, i) {
-                        final r = _searchResults[i];
-                        return ListTile(
-                          leading: const Icon(Icons.place_outlined, size: 20),
-                          title: Text(r.name,
-                              style: const TextStyle(fontSize: 14)),
-                          subtitle: r.address != null
-                              ? Text(r.address!,
-                                  style: const TextStyle(fontSize: 12),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis)
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Z.surface1,
+                boxShadow: [
+                  BoxShadow(
+                      color: Color(0x0F000000),
+                      blurRadius: 0,
+                      offset: Offset(0, 1)),
+                ],
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 6, 14, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Search field
+                      TextField(
+                        controller: _searchCtrl,
+                        style: const TextStyle(fontSize: 14, color: Z.text),
+                        decoration: InputDecoration(
+                          hintText: 'Search places, areas…',
+                          prefixIcon: _searching
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2)),
+                                )
+                              : const Icon(Icons.search,
+                                  size: 20, color: Z.textMuted),
+                          suffixIcon: _searchCtrl.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.close, size: 18),
+                                  onPressed: _clearSearch,
+                                )
                               : null,
-                          dense: true,
-                          onTap: () => _selectSearchResult(r),
-                        );
-                      },
-                    ),
-                  ),
-                if (_selectedSearchResult != null && !_searchActive)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.place),
-                        title: Text(_selectedSearchResult!.name,
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: _selectedSearchResult!.address != null
-                            ? Text(_selectedSearchResult!.address!)
-                            : null,
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            TextButton(
-                              onPressed: () => context.push(
-                                  '/place/${_selectedSearchResult!.placeId}'),
-                              child: const Text('Details'),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close, size: 18),
-                              onPressed: _clearSearch,
-                            ),
-                          ],
+                          filled: true,
+                          fillColor: Z.surface1,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(9999),
+                            borderSide: const BorderSide(color: Z.outline2),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(9999),
+                            borderSide:
+                                const BorderSide(color: Z.brand, width: 1.5),
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(9999),
+                            borderSide: const BorderSide(color: Z.outline2),
+                          ),
                         ),
-                        dense: true,
+                        onTap: () => setState(() => _searchActive = true),
+                        onChanged: _onSearchChanged,
                       ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
 
-          // ── Phase B: Category filter chips ─────────────────────────
-          if (!_searchActive)
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 76,
-              left: 0,
-              right: 0,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    for (final cat in PlaceCategory.values)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: FilterChip(
-                          label: Text(cat.label,
-                              style: const TextStyle(fontSize: 12)),
-                          selected: _category == cat,
-                          onSelected: (_) =>
-                              setState(() => _category = cat),
-                          backgroundColor: Colors.white,
-                          selectedColor: kBrandPurple.withValues(alpha: 0.15),
-                          checkmarkColor: kBrandPurple,
-                          visualDensity: VisualDensity.compact,
-                          padding: EdgeInsets.zero,
+                      // Search results dropdown
+                      if (_searchActive && _searchResults.isNotEmpty)
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          decoration: BoxDecoration(
+                            color: Z.surface1,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Z.outline),
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: ListView.builder(
+                            shrinkWrap: true,
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            itemCount: _searchResults.length.clamp(0, 5),
+                            itemBuilder: (ctx, i) {
+                              final r = _searchResults[i];
+                              return ListTile(
+                                leading: const Icon(Icons.place_outlined,
+                                    size: 20, color: Z.textMuted),
+                                title: Text(r.name,
+                                    style: const TextStyle(fontSize: 14)),
+                                subtitle: r.address != null
+                                    ? Text(r.address!,
+                                        style: const TextStyle(fontSize: 12),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis)
+                                    : null,
+                                dense: true,
+                                onTap: () => _selectSearchResult(r),
+                              );
+                            },
+                          ),
+                        ),
+
+                      // Selected place card
+                      if (_selectedSearchResult != null && !_searchActive)
+                        Container(
+                          margin: const EdgeInsets.only(top: 8),
+                          decoration: BoxDecoration(
+                            color: Z.surface1,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Z.outline),
+                          ),
+                          child: ListTile(
+                            leading: const Icon(Icons.place, color: Z.brand),
+                            title: Text(_selectedSearchResult!.name,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w600)),
+                            subtitle: _selectedSearchResult!.address != null
+                                ? Text(_selectedSearchResult!.address!)
+                                : null,
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextButton(
+                                  onPressed: () => context.push(
+                                      '/place/${_selectedSearchResult!.placeId}'),
+                                  child: const Text('Details'),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.close, size: 18),
+                                  onPressed: _clearSearch,
+                                ),
+                              ],
+                            ),
+                            dense: true,
+                          ),
+                        ),
+
+                      // Category chips
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 30,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final cat in PlaceCategory.values) ...[
+                                _CatPill(
+                                  label: cat.label,
+                                  active: _category == cat,
+                                  onTap: () =>
+                                      setState(() => _category = cat),
+                                ),
+                                const SizedBox(width: 7),
+                              ],
+                            ],
+                          ),
                         ),
                       ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
+          ),
 
           // ── Summary pill ──
           Positioned(
@@ -904,20 +934,19 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('📍', style: TextStyle(fontSize: 13)),
+                    Text(_savedOnly ? '🔖' : '📍',
+                        style: const TextStyle(fontSize: 13)),
                     const SizedBox(width: 6),
                     Text(
-                      '${_myStamps.length} stamps  ·  ${_todayDistanceKm.toStringAsFixed(1)} km today',
+                      _savedOnly
+                          ? '${_savedStamps.length} saved'
+                          : '${_myStamps.length} stamps  ·  ${_todayDistanceKm.toStringAsFixed(1)} km today',
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: Z.text,
                       ),
                     ),
-                    if (_savedOnly) ...[
-                      const SizedBox(width: 8),
-                      const Icon(Icons.bookmark, size: 14, color: Z.brand),
-                    ],
                     if (ghostMode) ...[
                       const SizedBox(width: 8),
                       const Icon(Icons.visibility_off, size: 14, color: Z.textMuted),
@@ -1079,23 +1108,24 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 scrollDirection: Axis.horizontal,
                                 child: Row(
                                   children: [
-                                    for (final f in [
-                                      MapFilter.today,
-                                      MapFilter.week,
-                                      MapFilter.month,
-                                      MapFilter.all,
-                                    ])
-                                      Padding(
-                                        padding: const EdgeInsets.only(right: 6),
-                                        child: _SheetChip(
-                                          label: f.label,
-                                          selected: !_savedOnly && _filter == f,
-                                          onTap: () {
-                                            if (_savedOnly) setState(() => _savedOnly = false);
-                                            _onFilterTap(f);
-                                          },
+                                    // Duration filters — hidden while "Saved"
+                                    // is active (Saved ignores duration).
+                                    if (!_savedOnly)
+                                      for (final f in [
+                                        MapFilter.today,
+                                        MapFilter.week,
+                                        MapFilter.month,
+                                        MapFilter.all,
+                                      ])
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(right: 6),
+                                          child: _SheetChip(
+                                            label: f.label,
+                                            selected: _filter == f,
+                                            onTap: () => _onFilterTap(f),
+                                          ),
                                         ),
-                                      ),
                                     _SheetChip(
                                       label: 'Saved',
                                       selected: _savedOnly,
@@ -1116,8 +1146,46 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         controller: scrollCtrl,
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         children: [
+                          // ── Saved-only view (ignores duration) ──────────
+                          if (_savedOnly) ...[
+                            const Padding(
+                              padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+                              child: Text('Saved',
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      color: Z.text)),
+                            ),
+                            if (_savedStamps.isEmpty)
+                              const Padding(
+                                padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
+                                child: Text(
+                                  'No saved stamps yet. Tap the bookmark on a stamp to save it.',
+                                  style: TextStyle(
+                                      fontSize: 13, color: Z.textMuted),
+                                ),
+                              )
+                            else
+                              for (final s in _savedStamps)
+                                _SavedStampTile(
+                                  stamp: s,
+                                  onTap: () {
+                                    _map?.flyTo(
+                                      CameraOptions(
+                                        center: Point(
+                                            coordinates:
+                                                Position(s.lng, s.lat)),
+                                        zoom: 16.0,
+                                      ),
+                                      MapAnimationOptions(duration: 400),
+                                    );
+                                    context.push('/stamp/${s.id}');
+                                  },
+                                ),
+                          ],
                           // ── Nearby section ──────────────────────────────
-                          if (_nearbyPlaces.isNotEmpty || _nearbyLoading) ...[
+                          if (!_savedOnly &&
+                              (_nearbyPlaces.isNotEmpty || _nearbyLoading)) ...[
                             Padding(
                               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                               child: Row(
@@ -1176,18 +1244,41 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             const SizedBox(height: 8),
                             const Divider(height: 1, color: Z.outline),
                           ],
-                          // ── Trending nearby section ─────────────────────
-                          if (_nearbyPlaces.isNotEmpty || _nearbyLoading) ...[
-                            const Padding(
-                              padding: EdgeInsets.fromLTRB(16, 16, 16, 6),
-                              child: Text(
-                                'Trending nearby',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                  color: Z.textMuted,
-                                  letterSpacing: 0.5,
-                                ),
+                          // ── Trending nearby — Naver-style photo grid ────
+                          if (!_savedOnly &&
+                              (_nearbyPlaces.isNotEmpty || _nearbyLoading)) ...[
+                            Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                              child: Row(
+                                children: [
+                                  const Text(
+                                    'Trending Nearby',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      color: Z.text,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      color: Z.error,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  const Text(
+                                    'Live · 3 min ago',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w500,
+                                      color: Z.textMuted,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                             if (_nearbyLoading)
@@ -1201,53 +1292,58 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 ),
                               )
                             else
-                              Column(
-                                children: [
-                                  for (int i = 0; i < _nearbyPlaces.length; i++) ...[
-                                    Builder(builder: (ctx) {
-                                      final place = _nearbyPlaces[i];
-                                      final pos = ref.watch(gpsNotifierProvider).valueOrNull;
-                                      final distM = pos != null
-                                          ? geo.Geolocator.distanceBetween(
-                                              pos.latitude,
-                                              pos.longitude,
-                                              place.lat,
+                              GridView.builder(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                                shrinkWrap: true,
+                                physics:
+                                    const NeverScrollableScrollPhysics(),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  mainAxisSpacing: 8,
+                                  crossAxisSpacing: 8,
+                                  mainAxisExtent: 152,
+                                ),
+                                itemCount: _nearbyPlaces.length,
+                                itemBuilder: (ctx, i) {
+                                  final place = _nearbyPlaces[i];
+                                  final pos = ref
+                                      .read(gpsNotifierProvider)
+                                      .valueOrNull;
+                                  final distM = pos != null
+                                      ? geo.Geolocator.distanceBetween(
+                                          pos.latitude,
+                                          pos.longitude,
+                                          place.lat,
+                                          place.lng,
+                                        )
+                                      : 0.0;
+                                  final distStr = distM < 1000
+                                      ? '${distM.round()}m'
+                                      : '${(distM / 1000.0).toStringAsFixed(1)}km';
+                                  return _TrendingPhotoCard(
+                                    place: place,
+                                    index: i,
+                                    distance: distStr,
+                                    onTap: () {
+                                      _map?.flyTo(
+                                        CameraOptions(
+                                          center: Point(
+                                            coordinates: Position(
                                               place.lng,
-                                            )
-                                          : 0.0;
-                                      final distStr = distM < 1000
-                                          ? '${distM.round()}m'
-                                          : '${(distM / 1000.0).toStringAsFixed(1)}km';
-                                      return _TrendingRow(
-                                        place: place,
-                                        index: i,
-                                        distance: distStr,
-                                        onTap: () {
-                                          _map?.flyTo(
-                                            CameraOptions(
-                                              center: Point(
-                                                coordinates: Position(
-                                                  place.lng,
-                                                  place.lat,
-                                                ),
-                                              ),
-                                              zoom: 16.0,
+                                              place.lat,
                                             ),
-                                            MapAnimationOptions(duration: 400),
-                                          );
-                                          context.push('/place/${place.placeId}');
-                                        },
+                                          ),
+                                          zoom: 16.0,
+                                        ),
+                                        MapAnimationOptions(duration: 400),
                                       );
-                                    }),
-                                    if (i < _nearbyPlaces.length - 1)
-                                      const Divider(
-                                        height: 1,
-                                        indent: 16,
-                                        endIndent: 16,
-                                        color: Z.outline,
-                                      ),
-                                  ],
-                                ],
+                                      context
+                                          .push('/place/${place.placeId}');
+                                    },
+                                  );
+                                },
                               ),
                           ],
                         ],
@@ -1331,6 +1427,110 @@ class _SheetChip extends StatelessWidget {
                 color: selected ? Colors.white : Z.textMuted,
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Category pill (header chip — matches prototype Pill) ──────────────────────
+
+class _CatPill extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _CatPill(
+      {required this.label, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: active ? Z.brand : Z.surface1,
+          borderRadius: BorderRadius.circular(9999),
+          border: Border.all(color: active ? Z.brand : Z.outline2),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+            color: active ? Colors.white : Z.text,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Saved stamp tile (sheet list when "Saved" is active) ──────────────────────
+
+class _SavedStampTile extends StatelessWidget {
+  final Stamp stamp;
+  final VoidCallback onTap;
+  const _SavedStampTile({required this.stamp, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: stamp.coverPhotoUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: stamp.coverPhotoUrl!,
+                        fit: BoxFit.cover,
+                        placeholder: (_, __) =>
+                            const ColoredBox(color: Z.surface2),
+                        errorWidget: (_, __, ___) =>
+                            const ColoredBox(color: Z.surface2),
+                      )
+                    : const ColoredBox(
+                        color: Z.brandSoft,
+                        child: Icon(Icons.bookmark, size: 20, color: Z.brand),
+                      ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    stamp.placeName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Z.text),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    stamp.caption != null && stamp.caption!.isNotEmpty
+                        ? stamp.caption!
+                        : '@${stamp.username ?? 'you'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 12, color: Z.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(Icons.bookmark, size: 16, color: Z.brand),
           ],
         ),
       ),
@@ -1725,15 +1925,15 @@ class _CheckInSheet extends StatelessWidget {
   }
 }
 
-// ── Trending Row ──────────────────────────────────────────────────────────────
+// ── Trending photo card (Naver Map-style ranking grid) ────────────────────────
 
-class _TrendingRow extends StatelessWidget {
+class _TrendingPhotoCard extends StatelessWidget {
   final PlaceStat place;
   final int index;
   final String distance;
   final VoidCallback onTap;
 
-  const _TrendingRow({
+  const _TrendingPhotoCard({
     required this.place,
     required this.index,
     required this.distance,
@@ -1750,57 +1950,143 @@ class _TrendingRow extends StatelessWidget {
     return 'Place';
   }
 
+  String get _emoji {
+    switch (_category) {
+      case 'Café':
+        return '☕';
+      case 'Dining':
+        return '🍴';
+      case 'Nature':
+        return '🌿';
+      case 'Art':
+        return '🎨';
+      case 'Retail':
+        return '🏬';
+      default:
+        return '📍';
+    }
+  }
+
   String get _scoreText {
     if (index == 0) return '🔥 Hot';
-    if (index == 1) return '⬆ Rising';
+    if (index == 1 || index == 2) return '⬆ Rising';
     return 'New';
+  }
+
+  // Deterministic muted tint so cards look varied without real cover photos.
+  Color get _tint {
+    const palette = [
+      Color(0xFFD0C8CC),
+      Color(0xFFC4CCC0),
+      Color(0xFFCCC8C0),
+      Color(0xFFC0C4CC),
+      Color(0xFFC8C8C0),
+      Color(0xFFCCC0C8),
+    ];
+    return palette[place.placeId.hashCode.abs() % palette.length];
   }
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
-        child: Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          fit: StackFit.expand,
           children: [
-            Expanded(
+            // Placeholder "photo" — tinted surface + faint category emoji
+            ColoredBox(
+              color: _tint,
+              child: Center(
+                child: Text(
+                  _emoji,
+                  style: TextStyle(
+                    fontSize: 46,
+                    color: Colors.white.withValues(alpha: 0.45),
+                  ),
+                ),
+              ),
+            ),
+            // Gradient scrim: black 22% → transparent → black 68%
+            const DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  stops: [0.0, 0.38, 0.8],
+                  colors: [
+                    Color(0x38000000),
+                    Colors.transparent,
+                    Color(0xAD000000),
+                  ],
+                ),
+              ),
+            ),
+            // Rank number
+            Positioned(
+              top: 6,
+              left: 9,
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  height: 1,
+                ),
+              ),
+            ),
+            // Score badge
+            Positioned(
+              top: 8,
+              right: 8,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0x61000000),
+                  borderRadius: BorderRadius.circular(9999),
+                ),
+                child: Text(
+                  _scoreText,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            // Place name + category · distance
+            Positioned(
+              left: 9,
+              right: 9,
+              bottom: 9,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     place.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: Z.text,
+                      color: Colors.white,
+                      height: 1.3,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '$_category · $distance · ${place.stampCount} stamps',
+                    '$_category · $distance',
                     style: const TextStyle(
-                      fontSize: 12,
-                      color: Z.textMuted,
+                      fontSize: 10,
+                      color: Color(0xBFFFFFFF),
                     ),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Z.brandSoft,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                _scoreText,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: Z.brand,
-                ),
               ),
             ),
           ],

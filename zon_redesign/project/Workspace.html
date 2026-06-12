@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ZON — Design Update Workspace</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&display=swap');
+
+  :root {
+    --brand:      #8B6EC4;
+    --brand-dark: #6B50A4;
+    --brand-soft: rgba(139,110,196,0.13);
+    --brand-soft2:rgba(139,110,196,0.06);
+    --old-brand:  #1D9E75;
+
+    --checkin:    #3B82F6;
+    --note:       #D97706;
+    --error:      #EF4444;
+    --success:    #10B981;
+    --warn:       #F59E0B;
+
+    --surface0:   #F7F4EE;
+    --surface1:   #FFFFFF;
+    --surface2:   #F0EDE6;
+    --surface3:   #E8E4DC;
+
+    --text:       #1A1714;
+    --muted:      #8A8278;
+    --faint:      #C0BAB2;
+    --outline:    #E8E4DC;
+    --outline2:   #C8C2BA;
+
+    --r8:  8px;
+    --r12: 12px;
+    --r16: 16px;
+    --r24: 24px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    background: var(--surface0);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Top nav ── */
+  .topbar {
+    background: var(--surface1);
+    border-bottom: 1px solid var(--outline);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    height: 52px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo { font-size: 18px; font-weight: 900; letter-spacing: 1.5px; color: var(--brand); }
+  .nav-tabs { display: flex; gap: 4px; flex: 1; }
+  .nav-tab {
+    padding: 6px 14px; border-radius: var(--r8); font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none; background: none; color: var(--muted);
+    transition: all 0.15s;
+  }
+  .nav-tab.active { background: var(--brand-soft); color: var(--brand); }
+  .nav-tab:hover:not(.active) { background: var(--surface2); color: var(--text); }
+
+  .badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px;
+    letter-spacing: 0.04em;
+  }
+  .badge-brand { background: var(--brand-soft); color: var(--brand); }
+  .badge-warn  { background: rgba(245,158,11,0.13); color: var(--warn); }
+  .badge-ok    { background: rgba(16,185,129,0.13); color: var(--success); }
+  .badge-err   { background: rgba(239,68,68,0.12); color: var(--error); }
+  .badge-muted { background: var(--surface3); color: var(--muted); }
+
+  /* ── Page sections ── */
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .page-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+  }
+
+  .page-title {
+    font-size: 24px; font-weight: 800; margin-bottom: 4px; color: var(--text);
+  }
+  .page-sub {
+    font-size: 14px; color: var(--muted); margin-bottom: 32px;
+  }
+
+  /* ── Cards / grids ── */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+  @media (max-width: 900px) {
+    .grid2, .grid3 { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--surface1);
+    border: 1px solid var(--outline);
+    border-radius: var(--r16);
+    overflow: hidden;
+  }
+  .card-header {
+    padding: 14px 18px 10px;
+    border-bottom: 1px solid var(--outline);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .card-header h3 { font-size: 14px; font-weight: 700; flex: 1; }
+  .card-body { padding: 16px 18px; }
+
+  /* ── Screen cards ── */
+  .screen-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+  }
+
+  .screen-card {
+    background: var(--surface1);
+    border: 1px solid var(--outline);
+    border-radius: var(--r16);
+    overflow: hidden;
+  }
+  .screen-card-head {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--outline);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .screen-icon {
+    width: 36px; height: 36px; border-radius: var(--r8);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+  .screen-card-head h3 { font-size: 14px; font-weight: 700; flex: 1; }
+
+  .screen-card-body { padding: 14px 18px; }
+
+  .file-path {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--muted);
+    background: var(--surface2);
+    padding: 3px 8px;
+    border-radius: 5px;
+    display: inline-block;
+    margin-bottom: 10px;
+    word-break: break-all;
+  }
+
+  .gap-list { list-style: none; display: flex; flex-direction: column; gap: 7px; }
+  .gap-item {
+    display: flex; gap: 8px; align-items: flex-start;
+    font-size: 13px; line-height: 1.45;
+  }
+  .gap-item .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    flex-shrink: 0; margin-top: 5px;
+  }
+  .dot-brand { background: var(--brand); }
+  .dot-warn  { background: var(--warn); }
+  .dot-ok    { background: var(--success); }
+
+  /* ── Token table ── */
+  .token-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .token-table th {
+    text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    background: var(--surface2); border-bottom: 1px solid var(--outline);
+  }
+  .token-table td {
+    padding: 9px 12px; border-bottom: 1px solid var(--outline);
+    vertical-align: middle;
+  }
+  .token-table tr:last-child td { border-bottom: none; }
+  .token-table tr:hover td { background: var(--surface2); }
+
+  .swatch {
+    width: 20px; height: 20px; border-radius: 5px;
+    border: 1px solid rgba(0,0,0,0.08); display: inline-block; vertical-align: middle;
+    margin-right: 7px;
+  }
+  .mono { font-family: 'SF Mono','Fira Code',monospace; font-size: 11px; }
+
+  /* ── Priority tasks ── */
+  .task-group { margin-bottom: 28px; }
+  .task-group-title {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); margin-bottom: 10px;
+  }
+  .task-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+  .task-item {
+    background: var(--surface1);
+    border: 1px solid var(--outline);
+    border-radius: var(--r12);
+    padding: 11px 14px;
+    display: flex; align-items: flex-start; gap: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .task-item:hover { border-color: var(--outline2); }
+  .task-item.done {
+    opacity: 0.5; text-decoration: line-through;
+  }
+  .task-check {
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1.5px solid var(--outline2);
+    flex-shrink: 0; margin-top: 1px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s;
+  }
+  .task-item.done .task-check {
+    background: var(--brand); border-color: var(--brand);
+    color: white; font-size: 11px;
+  }
+  .task-body { flex: 1; }
+  .task-title { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .task-desc  { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+  .section-label {
+    font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted);
+    margin: 24px 0 10px;
+  }
+
+  /* ── Diff table ── */
+  .diff-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .diff-table th {
+    text-align: left; padding: 8px 14px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted);
+    background: var(--surface2); border-bottom: 1px solid var(--outline);
+  }
+  .diff-table td {
+    padding: 10px 14px; border-bottom: 1px solid var(--outline);
+    vertical-align: top; line-height: 1.45;
+  }
+  .diff-table tr:last-child td { border-bottom: none; }
+  .diff-old { color: #DC2626; }
+  .diff-new { color: #059669; font-weight: 600; }
+
+  /* ── Highlight bar ── */
+  .highlight-bar {
+    background: var(--brand-soft);
+    border: 1px solid rgba(139,110,196,0.2);
+    border-radius: var(--r12);
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .highlight-bar strong { color: var(--brand); }
+
+  /* ── Divider ── */
+  .divider { border: none; border-top: 1px solid var(--outline); margin: 24px 0; }
+
+  /* ── Map legend style ── */
+  .map-pin-row {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; padding: 6px 0;
+    border-bottom: 1px solid var(--outline);
+  }
+  .map-pin-row:last-child { border-bottom: none; }
+  .pin-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    flex-shrink: 0; border: 1px solid rgba(0,0,0,0.1);
+  }
+
+  /* ── Nav tab content ── */
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- ── Top navigation ── -->
+<nav class="topbar">
+  <span class="logo">ZON</span>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="switchTab('overview')">Overview</button>
+    <button class="nav-tab" onclick="switchTab('screens')">Screens</button>
+    <button class="nav-tab" onclick="switchTab('tokens')">Tokens</button>
+    <button class="nav-tab" onclick="switchTab('tasks')">Tasks</button>
+    <button class="nav-tab" onclick="switchTab('arch')">Architecture</button>
+  </div>
+  <span class="badge badge-brand">Flutter · Supabase · Mapbox</span>
+</nav>
+
+<!-- ══════════════════════════════════════════════
+     OVERVIEW TAB
+══════════════════════════════════════════════ -->
+<section id="tab-overview" class="section active">
+<div class="page-inner">
+  <div class="page-title">Design Update Workspace</div>
+  <div class="page-sub">ZON · Codebase: <code>zon-dev-v2/</code> · Prototype: <code>Zon Prototype.html</code> · Target brand: <span style="color:var(--brand);font-weight:700">#8B6EC4 Warm Purple</span></div>
+
+  <div class="highlight-bar">
+    <strong>Mission:</strong> Translate the JSX prototype (Direction D, Final) into Flutter — screen by screen. Keep all existing business logic, providers, repositories, and routing untouched. Replace only the <strong>widget trees</strong> returned from each screen's <code>build()</code> method. Brand color shifts from <span style="color:var(--old-brand);font-weight:700">#1D9E75 Teal</span> → <span style="color:var(--brand);font-weight:700">#8B6EC4 Purple</span> throughout.
+  </div>
+
+  <div class="grid2">
+    <!-- What exists -->
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:18px">📂</span>
+        <h3>Codebase today</h3>
+        <span class="badge badge-ok">Phases 0–14 complete</span>
+      </div>
+      <div class="card-body" style="font-size:13px;line-height:1.7;color:var(--muted)">
+        <ul style="list-style:none;display:flex;flex-direction:column;gap:5px">
+          <li>✅ Full Riverpod + GoRouter shell with 5-tab nav + center FAB</li>
+          <li>✅ Mapbox live map — own pins, followed pins, friend location bubbles</li>
+          <li>✅ Feed: StampCard, StoriesRail, _StoryView dialog, PhotoSuggestionBanner</li>
+          <li>✅ Timeline: DraggableScrollableSheet, inline editor, diary AI generation</li>
+          <li>✅ Profile: stats, stamp grid, social buttons (friend + follow), private gate</li>
+          <li>✅ All screens wired to real Supabase data (no mocks)</li>
+          <li>✅ Settings, Activity, Check-in detail, Stamp detail, Edit stamp screens</li>
+          <li>✅ GPS breadcrumb tracking, auto-anchor, ghost mode, location sharing</li>
+          <li>✅ Photo import flow (EXIF clustering → inspection → check-in creation)</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- What needs updating -->
+    <div class="card">
+      <div class="card-header">
+        <span style="font-size:18px">🎨</span>
+        <h3>What the redesign changes</h3>
+        <span class="badge badge-warn">Visual layer only</span>
+      </div>
+      <div class="card-body" style="font-size:13px;line-height:1.7;color:var(--muted)">
+        <ul style="list-style:none;display:flex;flex-direction:column;gap:5px">
+          <li>🟣 Brand color: Teal <code>#1D9E75</code> → Purple <code>#8B6EC4</code></li>
+          <li>🟣 <code>app_theme.dart</code> — full ZonColors + ZonRadii + ZonType system</li>
+          <li>🟣 Feed — photo-first StampCard with gradient scrim overlay</li>
+          <li>🟣 Feed — filter tabs (Following / Nearby / Trending), stories ring updated</li>
+          <li>🟣 Map — DraggableScrollableSheet replaces static top card</li>
+          <li>🟣 Map — search bar + category chips (Phase A/B placeholders)</li>
+          <li>🟣 Timeline — week strip, route map card, node rail visual refinement</li>
+          <li>🟣 Profile — identity row layout, 3-stat row, Diaries tab added</li>
+          <li>🟣 Activity — notification row layout</li>
+          <li>🟣 Settings — section rows with icon boxes + toggles</li>
+          <li>🟣 Stamp detail — hero image with gradient, actions row</li>
+          <li>🟣 Check-in entry — present as bottom sheet (3 steps)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <div class="section-label">Critical invariants — never change these</div>
+  <div class="grid3">
+    <div class="card">
+      <div class="card-body" style="font-size:13px;line-height:1.6">
+        <strong>Providers / Notifiers</strong><br>
+        <span style="color:var(--muted)">All <code>@riverpod</code> providers, their state, and any <code>ref.watch/read</code> calls stay untouched. Only the widget tree changes.</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body" style="font-size:13px;line-height:1.6">
+        <strong>Repositories</strong><br>
+        <span style="color:var(--muted)">No Supabase queries, RPC calls, or repository methods are modified. Data flows stay identical.</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-body" style="font-size:13px;line-height:1.6">
+        <strong>Routes</strong><br>
+        <span style="color:var(--muted)">All GoRouter route definitions in <code>lib/app.dart</code> stay exactly the same. Add <code>place/:id</code> stub only.</span>
+      </div>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     SCREENS TAB
+══════════════════════════════════════════════ -->
+<section id="tab-screens" class="section">
+<div class="page-inner">
+  <div class="page-title">Screen-by-screen gap analysis</div>
+  <div class="page-sub">Each card: file path · what's there now · what the prototype specifies · key changes</div>
+
+  <div class="screen-grid">
+
+    <!-- app_theme.dart -->
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:var(--brand-soft)">🎨</div>
+        <h3>Design Tokens</h3>
+        <span class="badge badge-err">P0 — Do first</span>
+      </div>
+      <div class="screen-card-body">
+        <span class="file-path">lib/shared/theme/app_theme.dart</span>
+        <ul class="gap-list">
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Replace <code>theme(Color seed)</code> with a hard-coded <code>ZonColors</code> class (brand = <code>#8B6EC4</code>)</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Add <code>ZonRadii</code> constants: r8, r12, r16, r24, r32, full</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Add <code>ZonType</code> TextStyle constants: display, titleLg, titleMd, titleSm, body, bodySm, label</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Wire full <code>ThemeData</code>: scaffold bg = surface0, card border = outline, filled button = brand, chip shape = StadiumBorder</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>In <code>app.dart</code>: <code>kBrandGreen</code> → <code>ZonColors.brand</code>, <code>initialLocation</code>: <code>'/feed'</code> → <code>'/map'</code></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Feed -->
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:rgba(59,130,246,0.12)">📰</div>
+        <h3>Feed Screen</h3>
+        <span class="badge badge-err">P0</span>
+      </div>
+      <div class="screen-card-body">
+        <span class="file-path">features/feed/presentation/feed_screen.dart</span>
+        <ul class="gap-list">
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Add filter tabs row (Following / Nearby / Trending) below AppBar — local <code>_selectedTab</code> state; Nearby/Trending show same data with "coming soon" for now</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span><strong>StampCard:</strong> photo-first, 222px image, gradient scrim bottom 88px, place+user overlay at bottom of photo, body below with italic caption + brand pill tags + action row</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span><strong>Stories rail:</strong> 76px wide items, 54px avatar, gradient ring brand→story color, 11px username below</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>AppBar: "ZON" w900 letterSpacing 1.5, red-dot badge on bell for unread count</span></li>
+          <li class="gap-item"><span class="dot dot-ok"></span><span>Keep: all <code>ref.watch</code>, <code>toggleLike</code>, <code>toggleSave</code>, <code>StoryView</code> dialog, <code>PhotoSuggestionBanner</code></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:rgba(217,119,6,0.1)">🗺️</div>
+        <h3>Map Screen</h3>
+        <span class="badge badge-err">P0</span>
+      </div>
+      <div class="screen-card-body">
+        <span class="file-path">features/map/presentation/map_screen.dart</span>
+        <ul class="gap-list">
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Replace static top Card with floating search bar (pill, 44px, surface1, outline border) + category chips horizontal scroll — Phase A/B placeholder (not wired to data yet)</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Replace bottom static Legend with <code>DraggableScrollableSheet</code> — snap at 196dp (collapsed) + 390dp (expanded), same as timeline pattern</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Sheet collapsed: drag handle + "📍 N stamps · X.X km today" summary pill</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Sheet expanded: filter chips (Today/Week/Month/All time/Saved) + Nearby cards horizontal scroll + Trending list</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Add <code>NearbyCard</code> widget: emoji + place name + stamps + distance, border-radius 14, 128px min-width</span></li>
+          <li class="gap-item"><span class="dot dot-ok"></span><span>Keep: ALL MapboxMap, pin layers, GpsNotifier, friend bubbles, ghost mode, _FriendLocationSheet, all data loading, _onMapTap, _onFilterTap</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:rgba(139,110,196,0.1)">📅</div>
+        <h3>Timeline Screen</h3>
+        <span class="badge badge-warn">P1</span>
+      </div>
+      <div class="screen-card-body">
+        <span class="file-path">features/timeline/presentation/timeline_screen.dart</span>
+        <ul class="gap-list">
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Date header: chevron_left · date label (Today / "Jun 6") · expand_more · chevron_right on right; calendar icon far right</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Add 7-day week strip below date header: S/M/T/W/T/F/S buttons, selected = brand bg, dot indicator for days with activity</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Route map in a Card with borderRadius 16; below: "Jun 6 · 3.8 km" muted + "3 stamps" brand bold</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Timeline nodes: left rail 52px, node circle 28px with soft bg + 2px border in node color, icon 14px inside, connector line in outline color</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>KindChip: checkin=blue / stamp=brandSoft+brand / note=amber / auto=grey</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>"Promote to stamp →" pill button on non-auto checkins</span></li>
+          <li class="gap-item"><span class="dot dot-ok"></span><span>Keep: all <code>_day</code>, <code>_items</code>, <code>DraggableScrollableSheet</code>, <code>DayRouteMap</code>, <code>DiaryRepository.generateDiary()</code>, <code>CheckInRepository</code>, all data loading, inline editor, swipe-delete</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Profile -->
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:rgba(236,72,153,0.1)">👤</div>
+        <h3>Profile Screen</h3>
+        <span class="badge badge-warn">P1</span>
+      </div>
+      <div class="screen-card-body">
+        <span class="file-path">features/profile/presentation/profile_screen.dart</span>
+        <ul class="gap-list">
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Replace SliverAppBar / FlexibleSpaceBar with flat AppBar: "@username" text + settings icon (own) or more_vert (other)</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Identity row (NOT Instagram): 58px CircleAvatar + display name + location text + Edit/Follow buttons; padding 16/18, borderBottom</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Stats row: 3 stats only — Stamps · Places · Friends (brand value, muted label). Remove Followers/Following from display.</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Tab bar: text-only tabs — Stamps | Saved | Diaries (underline style, brand when active)</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Diaries tab: query <code>TimelineNoteRepository</code> for diary entries, render as date-labeled text thread</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Stamps/Saved: 3-column grid, 126px cell height. Private stamps: small lock overlay top-right.</span></li>
+          <li class="gap-item"><span class="dot dot-ok"></span><span>Keep: <code>profileStampsNotifier</code>, <code>currentUserProvider</code>, <code>ProfileRepository</code> calls, avatar upload, existing social button logic</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Activity -->
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:rgba(239,68,68,0.1)">🔔</div>
+        <h3>Activity Screen</h3>
+        <span class="badge badge-warn">P1</span>
+      </div>
+      <div class="screen-card-body">
+        <span class="file-path">features/profile/presentation/activity_screen.dart</span>
+        <ul class="gap-list">
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Notification row: 40px CircleAvatar + flex column (bold @user + action text, 14px line-height 1.5) + 12px muted time + 44px thumbnail if applicable</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Section labels: 12px w700 muted uppercase letterSpacing 0.06em — "Friend Requests" above requests, "Today" above rest</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Friend request rows: Accept (brand filled) + Decline (outlined) button pair</span></li>
+          <li class="gap-item"><span class="dot dot-ok"></span><span>Keep: <code>NotificationRepository</code>, all data fetching logic</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:var(--surface2)">⚙️</div>
+        <h3>Settings Screen</h3>
+        <span class="badge badge-warn">P1</span>
+      </div>
+      <div class="screen-card-body">
+        <span class="file-path">features/profile/presentation/settings_screen.dart</span>
+        <ul class="gap-list">
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Section title: 12px uppercase muted; section body: Card of rows</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Each row: 34×34 rounded-10 icon box (brandSoft bg, brand icon) + label + optional subtitle + toggle OR chevron</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Toggle: 48×28 pill, brand on / surface3 off, white circle slides</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Destructive rows: red icon box, red text — Sign out + Delete account</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Privacy section must include: Private account toggle, Ghost mode toggle + "Hide your live location" sub, Location visibility → /location-visibility</span></li>
+          <li class="gap-item"><span class="dot dot-ok"></span><span>Keep: all toggle state, <code>PrivacyRepository</code>, <code>deleteAccount()</code>, navigation</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Stamp Detail -->
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:rgba(139,110,196,0.1)">⭐</div>
+        <h3>Stamp Detail</h3>
+        <span class="badge badge-warn">P1</span>
+      </div>
+      <div class="screen-card-body">
+        <span class="file-path">features/feed/presentation/stamp_detail_screen.dart</span>
+        <ul class="gap-list">
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Hero: full-width CachedNetworkImage 340px, gradient scrim transparent 50% → dark 70%</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Overlay: back button (dark circle) top-left, more_vert top-right</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Bottom of hero: 30px avatar + @username + time | location_on + place name 18px w700 white</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Body: italic 15px caption, brand pill tags, like+comment+bookmark action row</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Comments: 34px avatar + surface1 bubble with outline border, borderRadius 12</span></li>
+          <li class="gap-item"><span class="dot dot-ok"></span><span>Keep: like/save/comment logic, <code>stampDetailProvider</code>, <code>commentListProvider</code></span></li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Check-in Entry -->
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:rgba(59,130,246,0.12)">📍</div>
+        <h3>Check-in Entry</h3>
+        <span class="badge badge-muted">P2</span>
+      </div>
+      <div class="screen-card-body">
+        <span class="file-path">features/checkin/presentation/checkin_entry.dart</span>
+        <ul class="gap-list">
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Present as bottom sheet modal (not full-screen push): borderRadius 24 24 0 0, maxHeight 72vh</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Step 1 (Search): drag handle + title + close X + large PlaceSearchField + "Use current location" CTA (dashed brand border) + nearby list</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Step 2 (Editor): note textarea surface0 bg, photos strip 72×72 with dashed add button, "Share as story" toggle row, "Save Check-in" full-width 50px brand button</span></li>
+          <li class="gap-item"><span class="dot dot-brand"></span><span>Step 3 (Confirm): brand circle with check_circle icon, "Checked in!" + place name + 3 CTAs</span></li>
+          <li class="gap-item"><span class="dot dot-ok"></span><span>Keep: all place search logic, GPS resolution, photo upload, <code>CheckInRepository.createCheckIn()</code>, <code>promoteToStamp()</code></span></li>
+        </ul>
+      </div>
+    </div>
+
+  </div><!-- /.screen-grid -->
+
+  <!-- New screens needed -->
+  <div class="section-label" style="margin-top:32px">New screens / stubs to add</div>
+  <div class="screen-grid">
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:rgba(16,185,129,0.1)">🏠</div>
+        <h3>Place Detail</h3>
+        <span class="badge badge-muted">Phase D stub</span>
+      </div>
+      <div class="screen-card-body" style="font-size:13px;color:var(--muted)">
+        <span class="file-path">features/map/presentation/place_detail_screen.dart</span>
+        Route <code>/place/:id</code> already defined? <strong style="color:var(--error)">No — add to app.dart.</strong><br><br>
+        Build as a stub screen (hero photo + place name + "Coming soon" body) so map pins and nearby list items can navigate there without crashes. Full implementation is Phase D.
+      </div>
+    </div>
+    <div class="screen-card">
+      <div class="screen-card-head">
+        <div class="screen-icon" style="background:rgba(16,185,129,0.1)">📦</div>
+        <h3>NearbyCard widget</h3>
+        <span class="badge badge-muted">Map Phase E</span>
+      </div>
+      <div class="screen-card-body" style="font-size:13px;color:var(--muted)">
+        <span class="file-path">features/map/presentation/map_screen.dart (or shared/)</span><br><br>
+        New widget for the map bottom sheet horizontal scroll. Emoji + place name + "N stamps · Xm" muted. Min-width 128, border outline, borderRadius 14, tappable → <code>/place/:id</code>.
+      </div>
+    </div>
+  </div>
+
+</div>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     TOKENS TAB
+══════════════════════════════════════════════ -->
+<section id="tab-tokens" class="section">
+<div class="page-inner">
+  <div class="page-title">Design Token Reference</div>
+  <div class="page-sub">Exact values for <code>app_theme.dart</code> — ZonColors · ZonRadii · ZonType</div>
+
+  <div class="section-label">ZonColors — brand migration</div>
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-body" style="padding:0">
+      <table class="diff-table">
+        <thead><tr><th>Token</th><th>Old (kBrandGreen)</th><th>New (ZonColors)</th></tr></thead>
+        <tbody>
+          <tr><td><code>brand</code></td><td class="diff-old"><span class="swatch" style="background:#1D9E75"></span>#1D9E75</td><td class="diff-new"><span class="swatch" style="background:#8B6EC4"></span>#8B6EC4</td></tr>
+          <tr><td><code>brandDark</code></td><td class="diff-old">—</td><td class="diff-new"><span class="swatch" style="background:#6B50A4"></span>#6B50A4</td></tr>
+          <tr><td><code>brandSoft</code></td><td class="diff-old">—</td><td class="diff-new"><span class="swatch" style="background:rgba(139,110,196,0.13)"></span>rgba(139,110,196, 0.13) ≈ 0x218B6EC4</td></tr>
+          <tr><td><code>brandSoft2</code></td><td class="diff-old">—</td><td class="diff-new"><span class="swatch" style="background:rgba(139,110,196,0.06)"></span>rgba(139,110,196, 0.06) ≈ 0x0F8B6EC4</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <!-- Semantic colors -->
+    <div class="card">
+      <div class="card-header"><h3>ZonColors — semantic</h3></div>
+      <div class="card-body" style="padding:0">
+        <table class="token-table">
+          <thead><tr><th>Name</th><th>Hex</th><th>Dart</th></tr></thead>
+          <tbody>
+            <tr><td><span class="swatch" style="background:#3B82F6"></span><code>checkin</code></td><td>#3B82F6</td><td class="mono">Color(0xFF3B82F6)</td></tr>
+            <tr><td><span class="swatch" style="background:rgba(59,130,246,0.12)"></span><code>checkinSoft</code></td><td>~12% blue</td><td class="mono">Color(0x1F3B82F6)</td></tr>
+            <tr><td><span class="swatch" style="background:#F59E0B"></span><code>following</code></td><td>#F59E0B</td><td class="mono">Color(0xFFF59E0B)</td></tr>
+            <tr><td><span class="swatch" style="background:#EC4899"></span><code>story</code></td><td>#EC4899</td><td class="mono">Color(0xFFEC4899)</td></tr>
+            <tr><td><span class="swatch" style="background:#D97706"></span><code>note</code></td><td>#D97706</td><td class="mono">Color(0xFFD97706)</td></tr>
+            <tr><td><span class="swatch" style="background:rgba(217,119,6,0.10)"></span><code>noteSoft</code></td><td>~10% amber</td><td class="mono">Color(0x1AD97706)</td></tr>
+            <tr><td><span class="swatch" style="background:#9CA3AF"></span><code>auto</code></td><td>#9CA3AF</td><td class="mono">Color(0xFF9CA3AF)</td></tr>
+            <tr><td><span class="swatch" style="background:#EF4444"></span><code>error</code></td><td>#EF4444</td><td class="mono">Color(0xFFEF4444)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Surface colors -->
+    <div class="card">
+      <div class="card-header"><h3>ZonColors — surfaces &amp; text</h3></div>
+      <div class="card-body" style="padding:0">
+        <table class="token-table">
+          <thead><tr><th>Name</th><th>Hex</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td><span class="swatch" style="background:#F7F4EE;border:1px solid #E8E4DC"></span><code>surface0</code></td><td>#F7F4EE</td><td>Scaffold bg</td></tr>
+            <tr><td><span class="swatch" style="background:#FFFFFF;border:1px solid #E8E4DC"></span><code>surface1</code></td><td>#FFFFFF</td><td>Card bg</td></tr>
+            <tr><td><span class="swatch" style="background:#F0EDE6;border:1px solid #E8E4DC"></span><code>surface2</code></td><td>#F0EDE6</td><td>Sheet bg</td></tr>
+            <tr><td><span class="swatch" style="background:#E8E4DC"></span><code>surface3</code></td><td>#E8E4DC</td><td>Toggle off</td></tr>
+            <tr><td><span class="swatch" style="background:#1A1714"></span><code>textPrimary</code></td><td>#1A1714</td><td>Primary text</td></tr>
+            <tr><td><span class="swatch" style="background:#8A8278"></span><code>textMuted</code></td><td>#8A8278</td><td>Secondary text</td></tr>
+            <tr><td><span class="swatch" style="background:#C0BAB2"></span><code>textFaint</code></td><td>#C0BAB2</td><td>Placeholder</td></tr>
+            <tr><td><span class="swatch" style="background:#E8E4DC"></span><code>outline</code></td><td>#E8E4DC</td><td>Borders, dividers</td></tr>
+            <tr><td><span class="swatch" style="background:#C8C2BA"></span><code>outline2</code></td><td>#C8C2BA</td><td>Stronger borders</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top:24px">ZonRadii &amp; ZonType</div>
+  <div class="grid2">
+    <div class="card">
+      <div class="card-header"><h3>ZonRadii</h3></div>
+      <div class="card-body" style="padding:0">
+        <table class="token-table">
+          <thead><tr><th>Constant</th><th>Value</th><th>Usage</th></tr></thead>
+          <tbody>
+            <tr><td><code>r8</code></td><td>8px</td><td>Chips, small elements</td></tr>
+            <tr><td><code>r12</code></td><td>12px</td><td>Inputs, buttons</td></tr>
+            <tr><td><code>r16</code></td><td>16px</td><td>Cards</td></tr>
+            <tr><td><code>r24</code></td><td>24px</td><td>Bottom sheets (top corners)</td></tr>
+            <tr><td><code>r32</code></td><td>32px</td><td>Large hero cards</td></tr>
+            <tr><td><code>full</code></td><td>9999px</td><td>Avatars, pills, chips</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><h3>ZonType</h3></div>
+      <div class="card-body" style="padding:0">
+        <table class="token-table">
+          <thead><tr><th>Style</th><th>Size / Weight / Height</th></tr></thead>
+          <tbody>
+            <tr><td><code>display</code></td><td>30 / w800 / 1.2</td></tr>
+            <tr><td><code>titleLg</code></td><td>21 / w700 / 1.2</td></tr>
+            <tr><td><code>titleMd</code></td><td>18 / w700 / 1.2</td></tr>
+            <tr><td><code>titleSm</code></td><td>14 / w700 / 1.3</td></tr>
+            <tr><td><code>body</code></td><td>15 / w400 / 1.55</td></tr>
+            <tr><td><code>bodySm</code></td><td>13 / w400 / 1.5</td></tr>
+            <tr><td><code>label</code></td><td>11 / w700 / — / ls 0.5</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map colors -->
+  <div class="section-label" style="margin-top:24px">Map pin layer colors</div>
+  <div class="card">
+    <div class="card-body">
+      <div class="map-pin-row"><div class="pin-dot" style="background:#8B6EC4"></div><strong>Own stamps</strong> — ZonColors.brand #8B6EC4 (replaces kBrandGreen 0xFF1D9E75)</div>
+      <div class="map-pin-row"><div class="pin-dot" style="background:#3B82F6"></div><strong>Own check-ins</strong> — ZonColors.checkin #3B82F6 (was 0xFF2196F3 — near-identical, no change)</div>
+      <div class="map-pin-row"><div class="pin-dot" style="background:#9CA3AF;opacity:0.55"></div><strong>Auto anchors</strong> — ZonColors.auto #9CA3AF, r=2.5, opacity 0.55 (was 0xFF9E9E9E — near-identical)</div>
+      <div class="map-pin-row"><div class="pin-dot" style="background:#F59E0B"></div><strong>Following stamps</strong> — ZonColors.following #F59E0B (was 0xFFFF9800 — update)</div>
+      <div class="map-pin-row"><div class="pin-dot" style="background:#EC4899"></div><strong>Following stories</strong> — ZonColors.story #EC4899 (was 0xFFE91E63 — update)</div>
+      <div class="map-pin-row"><div class="pin-dot" style="background:#8B6EC4;opacity:0.4"></div><strong>Live route line</strong> — ZonColors.brand (replaces kBrandGreen)</div>
+    </div>
+  </div>
+
+</div>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     TASKS TAB
+══════════════════════════════════════════════ -->
+<section id="tab-tasks" class="section">
+<div class="page-inner">
+  <div class="page-title">Task list — execution order</div>
+  <div class="page-sub">Run <code>flutter analyze</code> after each task — fix errors before moving on</div>
+
+  <div class="task-group">
+    <div class="task-group-title">🔴 P0 — Visual parity, no new backend work</div>
+    <ul class="task-list" id="task-list">
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check">✓</div>
+        <div class="task-body">
+          <div class="task-title">1 · Design tokens — app_theme.dart</div>
+          <div class="task-desc">Create ZonColors, ZonRadii, ZonType. Replace <code>theme(Color seed)</code> with <code>theme()</code> using hard-coded brand. Wire full ThemeData with correct card, button, input, chip styles.</div>
+        </div>
+        <span class="badge badge-brand">app_theme.dart</span>
+      </li>
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">2 · app.dart — brand + initial route</div>
+          <div class="task-desc">Remove <code>kBrandGreen</code>, replace with <code>ZonColors.brand</code>. Change <code>initialLocation</code> from <code>'/feed'</code> to <code>'/map'</code>. Add <code>'/place/:id'</code> stub route.</div>
+        </div>
+        <span class="badge badge-brand">app.dart</span>
+      </li>
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">3 · Feed — StampCard photo-first redesign</div>
+          <div class="task-desc">222px photo with gradient scrim overlay (place + user at bottom). Italic caption, brand pill tags, action row. Filter tabs (Following/Nearby/Trending) as local state. Update StoriesRail ring gradient to brand→story.</div>
+        </div>
+        <span class="badge badge-brand">feed_screen.dart</span>
+      </li>
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">4 · Map — DraggableScrollableSheet + search bar</div>
+          <div class="task-desc">Replace static top Card with floating search bar + category chip strip. Replace bottom legend Card with DraggableScrollableSheet (snap 196/390dp). Add NearbyCard widget. Keep ALL existing map logic.</div>
+        </div>
+        <span class="badge badge-brand">map_screen.dart</span>
+      </li>
+    </ul>
+  </div>
+
+  <div class="task-group" style="margin-top:24px">
+    <div class="task-group-title">🟡 P1 — New UI, existing data</div>
+    <ul class="task-list">
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">5 · Timeline — week strip + node visual refinement</div>
+          <div class="task-desc">7-day week strip below date header. Node circles 28px with soft bg + color border. Connector rail in outline color. KindChip with correct colors. "Promote to stamp" pill on check-ins. Route map in Card with stats below.</div>
+        </div>
+        <span class="badge badge-warn">timeline_screen.dart</span>
+      </li>
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">6 · Profile — identity row + 3 stats + Diaries tab</div>
+          <div class="task-desc">Flat AppBar with @username. Identity row: 58px avatar + name/location + buttons. 3-stat row (Stamps/Places/Friends only). Text-only tab bar. Add Diaries tab querying diary entries. Stamps/Saved 3-col grid with lock overlay.</div>
+        </div>
+        <span class="badge badge-warn">profile_screen.dart</span>
+      </li>
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">7 · Activity — notification row layout</div>
+          <div class="task-desc">40px avatar + action text + time. Section labels ("Friend Requests", "Today") uppercase muted. Accept/Decline button pair on friend request rows. Thumbnail on like/comment rows.</div>
+        </div>
+        <span class="badge badge-warn">activity_screen.dart</span>
+      </li>
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">8 · Settings — section rows + icon boxes + custom toggles</div>
+          <div class="task-desc">Section card rows with 34×34 brandSoft icon box, label, subtitle. 48×28 pill toggle (brand on / surface3 off). Destructive rows in red. Privacy section: private account + ghost mode + location visibility link.</div>
+        </div>
+        <span class="badge badge-warn">settings_screen.dart</span>
+      </li>
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">9 · Stamp detail — hero + gradient + actions</div>
+          <div class="task-desc">340px full-width hero with gradient scrim. Back button dark circle top-left. Avatar+username+time overlay at bottom of hero. Italic caption body, brand tags, like+comment+bookmark row. Comment bubbles with outline border.</div>
+        </div>
+        <span class="badge badge-warn">stamp_detail_screen.dart</span>
+      </li>
+    </ul>
+  </div>
+
+  <div class="task-group" style="margin-top:24px">
+    <div class="task-group-title">⚪ P2 — Layout polish</div>
+    <ul class="task-list">
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">10 · Check-in entry — bottom sheet 3-step flow</div>
+          <div class="task-desc">Present as modal bottom sheet (not full-screen push). 3 steps: Search → Editor → Confirm. Drag handle + close. "Use current location" dashed CTA. Photos strip. Confirm step with brand circle icon + 3 CTAs.</div>
+        </div>
+        <span class="badge badge-muted">checkin_entry.dart</span>
+      </li>
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">11 · Wire existing screens to new entry points</div>
+          <div class="task-desc">Timeline check-in node tap → /check-in/:id. Stamp detail more_vert → Edit option. Profile stat numbers → /profile/:id/friends etc. Activity → Follow requests entry point.</div>
+        </div>
+        <span class="badge badge-muted">Multiple files</span>
+      </li>
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">12 · Place detail stub screen</div>
+          <div class="task-desc">New file <code>place_detail_screen.dart</code>. Route /place/:id in app.dart. Shell: hero + place name + "Coming soon" body. Wired from map nearby cards + timeline check-in onTap.</div>
+        </div>
+        <span class="badge badge-muted">place_detail_screen.dart</span>
+      </li>
+      <li class="task-item" onclick="toggleTask(this)">
+        <div class="task-check"></div>
+        <div class="task-body">
+          <div class="task-title">13 · flutter analyze → 0 errors, flutter test → pass</div>
+          <div class="task-desc">Run full analysis. Fix any type errors introduced by ZonColors references replacing kBrandGreen. Run existing test suite to confirm 0 regressions.</div>
+        </div>
+        <span class="badge badge-muted">CI</span>
+      </li>
+    </ul>
+  </div>
+
+</div>
+</section>
+
+<!-- ══════════════════════════════════════════════
+     ARCHITECTURE TAB
+══════════════════════════════════════════════ -->
+<section id="tab-arch" class="section">
+<div class="page-inner">
+  <div class="page-title">Architecture quick reference</div>
+  <div class="page-sub">Conventions to follow when editing any Flutter file</div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-header"><h3>Folder structure</h3></div>
+      <div class="card-body" style="font-size:12px;font-family:'SF Mono','Fira Code',monospace;line-height:1.9;color:var(--muted)">
+        <span style="color:var(--brand)">lib/</span><br>
+        ├── <span style="color:var(--text)">app.dart</span> ← ALL routes (GoRouter)<br>
+        ├── core/<br>
+        │&nbsp;&nbsp;&nbsp;├── auth/ · location/ · photos/ · places/<br>
+        │&nbsp;&nbsp;&nbsp;└── notifications/<br>
+        ├── data/<br>
+        │&nbsp;&nbsp;&nbsp;├── models/ ← Freezed data classes<br>
+        │&nbsp;&nbsp;&nbsp;└── repositories/ ← All Supabase calls<br>
+        ├── features/<br>
+        │&nbsp;&nbsp;&nbsp;├── feed/presentation/<br>
+        │&nbsp;&nbsp;&nbsp;├── map/presentation/<br>
+        │&nbsp;&nbsp;&nbsp;├── timeline/presentation/<br>
+        │&nbsp;&nbsp;&nbsp;├── profile/presentation/<br>
+        │&nbsp;&nbsp;&nbsp;├── checkin/presentation/<br>
+        │&nbsp;&nbsp;&nbsp;├── photo_import/presentation/<br>
+        │&nbsp;&nbsp;&nbsp;└── settings/presentation/<br>
+        └── shared/<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;├── theme/app_theme.dart<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;├── utils/format.dart<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;└── widgets/ ← app_states, place_search_field…
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Key rules</h3></div>
+      <div class="card-body" style="font-size:13px;line-height:1.8">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div><span style="color:var(--success)">✅</span> <code>@riverpod</code> codegen — run <code>dart run build_runner build</code> after model/provider changes</div>
+          <div><span style="color:var(--success)">✅</span> <code>setState()</code> only for local ephemeral UI state (tabs, toggles, form controllers)</div>
+          <div><span style="color:var(--success)">✅</span> <code>context.push()</code> for drill-down, <code>context.go()</code> for tab navigation</div>
+          <div><span style="color:var(--success)">✅</span> Minimum tap target: 44×44pt on every interactive element</div>
+          <div><span style="color:var(--success)">✅</span> <code>const</code> constructors wherever possible</div>
+          <div><span style="color:var(--error)">❌</span> No business logic in widgets</div>
+          <div><span style="color:var(--error)">❌</span> No direct Supabase calls in widgets</div>
+          <div><span style="color:var(--error)">❌</span> No fixed-height text containers that clip at 1.5× font scale</div>
+          <div><span style="color:var(--error)">❌</span> Never add dependencies without updating <code>pubspec.yaml</code></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Provider / state pattern</h3></div>
+      <div class="card-body" style="font-size:13px;line-height:1.8;color:var(--muted)">
+        <strong style="color:var(--text)">feedNotifierProvider</strong> — stamp list, pagination, like/save toggle<br>
+        <strong style="color:var(--text)">feedStoriesProvider</strong> — CheckInStory list for stories rail<br>
+        <strong style="color:var(--text)">gpsNotifierProvider</strong> — sessionPath, live position<br>
+        <strong style="color:var(--text)">timelineNotifierProvider</strong> — keepAlive, DayBundle (checkIns + stamps + notes + diary)<br>
+        <strong style="color:var(--text)">profileNotifierProvider(id)</strong> — UserProfile<br>
+        <strong style="color:var(--text)">profileStampsNotifierProvider(id, publicOnly)</strong> — stamp grid<br>
+        <strong style="color:var(--text)">followStateProvider(id)</strong> / <strong style="color:var(--text)">friendStateProvider(id)</strong><br>
+        <strong style="color:var(--text)">ghostModeProvider</strong> — from LocationSharingRepository<br>
+        <strong style="color:var(--text)">friendLocationsProvider</strong> — Realtime FriendLocation stream<br>
+        <strong style="color:var(--text)">unreadNotificationCountProvider</strong> — bell badge count
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><h3>Data model cheat-sheet</h3></div>
+      <div class="card-body" style="font-size:12px;font-family:'SF Mono','Fira Code',monospace;line-height:1.9;color:var(--muted)">
+        <span style="color:var(--brand)">Stamp</span> { id, userId, placeName, lat, lng,<br>
+        &nbsp;&nbsp;checkInId, visibility, coverPhotoUrl,<br>
+        &nbsp;&nbsp;caption, sensoryTags, photoUrls,<br>
+        &nbsp;&nbsp;likeCount, commentCount, isLiked, isSaved,<br>
+        &nbsp;&nbsp;username, avatarUrl, visitedAt }<br><br>
+        <span style="color:var(--checkin)">CheckIn</span> { id, userId, placeName, lat, lng,<br>
+        &nbsp;&nbsp;note, source (manual/photo/auto),<br>
+        &nbsp;&nbsp;visibility, taggedUserIds, photoUrls,<br>
+        &nbsp;&nbsp;stampId, visitedAt }<br><br>
+        <span style="color:var(--note)">CheckInStory</span> { userId, username,<br>
+        &nbsp;&nbsp;avatarUrl, checkIns: List&lt;CheckIn&gt; }
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label" style="margin-top:24px">Navigation reference</div>
+  <div class="card">
+    <div class="card-body" style="padding:0">
+      <table class="token-table">
+        <thead><tr><th>Route</th><th>Screen</th><th>Push style</th></tr></thead>
+        <tbody>
+          <tr><td><code>/map</code></td><td>MapScreen (initial)</td><td>Tab</td></tr>
+          <tr><td><code>/feed</code></td><td>FeedScreen</td><td>Tab</td></tr>
+          <tr><td><code>/timeline</code></td><td>TimelineScreen</td><td>Tab</td></tr>
+          <tr><td><code>/profile</code></td><td>ProfileScreen (own)</td><td>Tab</td></tr>
+          <tr><td><code>/checkin</code></td><td>CheckinEntry</td><td>fullscreenDialog</td></tr>
+          <tr><td><code>/check-in/:id</code></td><td>CheckInDetailScreen</td><td>push</td></tr>
+          <tr><td><code>/stamp/:id</code></td><td>StampDetailScreen</td><td>push</td></tr>
+          <tr><td><code>/stamp/:id/edit</code></td><td>EditStampScreen</td><td>push</td></tr>
+          <tr><td><code>/profile/:id</code></td><td>ProfileScreen (other)</td><td>push</td></tr>
+          <tr><td><code>/settings</code></td><td>SettingsScreen</td><td>push</td></tr>
+          <tr><td><code>/activity</code></td><td>ActivityScreen</td><td>push</td></tr>
+          <tr><td><code>/search</code></td><td>UserSearchScreen</td><td>push</td></tr>
+          <tr><td><code>/saved</code></td><td>SavedStampsScreen</td><td>push</td></tr>
+          <tr><td><code>/check-ins</code></td><td>CheckInListScreen</td><td>push</td></tr>
+          <tr><td><code>/photo-suggestions</code></td><td>PhotoSuggestionScreen</td><td>fullscreenDialog</td></tr>
+          <tr><td><code>/location-visibility</code></td><td>LocationVisibilityScreen</td><td>push</td></tr>
+          <tr><td><code>/place/:id</code></td><td>PlaceDetailScreen <strong style="color:var(--error)">(stub — add)</strong></td><td>push</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+</section>
+
+<script>
+  function switchTab(name) {
+    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  function toggleTask(el) {
+    el.classList.toggle('done');
+    const check = el.querySelector('.task-check');
+    check.textContent = el.classList.contains('done') ? '✓' : '';
+    // Persist to localStorage
+    const id = el.querySelector('.task-title').textContent;
+    const done = JSON.parse(localStorage.getItem('zon-tasks') || '{}');
+    done[id] = el.classList.contains('done');
+    localStorage.setItem('zon-tasks', JSON.stringify(done));
+  }
+
+  // Restore task state
+  window.addEventListener('DOMContentLoaded', () => {
+    const done = JSON.parse(localStorage.getItem('zon-tasks') || '{}');
+    document.querySelectorAll('.task-item').forEach(el => {
+      const id = el.querySelector('.task-title').textContent;
+      if (done[id]) {
+        el.classList.add('done');
+        el.querySelector('.task-check').textContent = '✓';
+      }
+    });
+  });
+</script>
+</body>
+</html>

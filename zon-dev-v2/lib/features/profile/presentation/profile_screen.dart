@@ -1,19 +1,24 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart' as geo;
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../data/models/stamp.dart';
+import '../../../data/models/check_in.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/diary_repository.dart';
 import '../../../data/repositories/stamp_repository.dart';
+import '../../../data/repositories/check_in_repository.dart';
 import '../../../shared/widgets/app_states.dart';
+import '../../../shared/widgets/mini_map.dart';
 import '../../../shared/utils/format.dart';
 import 'providers/profile_provider.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/location/providers/gps_provider.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/photos/photo_service.dart';
@@ -53,7 +58,8 @@ class ProfileScreen extends ConsumerWidget {
                     FriendState.none) ==
                 FriendState.friends;
 
-        final tabCount = isOwnProfile ? 3 : 2;
+        // Map · Stamps · [Saved] · Diaries
+        final tabCount = isOwnProfile ? 4 : 3;
 
         return DefaultTabController(
           length: tabCount,
@@ -255,6 +261,7 @@ class ProfileScreen extends ConsumerWidget {
                           indicatorColor: Z.brand,
                           indicatorWeight: 2.5,
                           tabs: [
+                            const Tab(text: 'Map'),
                             const Tab(text: 'Stamps'),
                             if (isOwnProfile) const Tab(text: 'Saved'),
                             const Tab(text: 'Diaries'),
@@ -269,6 +276,13 @@ class ProfileScreen extends ConsumerWidget {
                 Expanded(
                   child: TabBarView(
                     children: [
+                      // Map (first / default)
+                      !canView
+                          ? const _LockedGrid()
+                          : _MapTab(
+                              targetId: targetId,
+                              isOwnProfile: isOwnProfile,
+                              stampCount: profile.stampCount),
                       // Stamps
                       !canView
                           ? const _LockedGrid()
@@ -869,6 +883,355 @@ class _DiariesTabState extends ConsumerState<_DiariesTab>
           );
         },
       ),
+    );
+  }
+}
+
+// ── Map tab — user's stamps + check-ins plotted, with aggregates ──────────────
+class _MapTab extends ConsumerStatefulWidget {
+  final String targetId;
+  final bool isOwnProfile;
+  final int stampCount;
+  const _MapTab({
+    required this.targetId,
+    required this.isOwnProfile,
+    required this.stampCount,
+  });
+
+  @override
+  ConsumerState<_MapTab> createState() => _MapTabState();
+}
+
+class _MapTabState extends ConsumerState<_MapTab>
+    with AutomaticKeepAliveClientMixin {
+  List<Stamp> _stamps = [];
+  List<CheckIn> _checkIns = [];
+  bool _loading = true;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final stampRes = await ref.read(stampRepositoryProvider).getUserStamps(
+          widget.targetId,
+          publicOnly: !widget.isOwnProfile,
+          limit: 200,
+        );
+    List<CheckIn> checkIns = const [];
+    if (widget.isOwnProfile) {
+      final ciRes =
+          await ref.read(checkInRepositoryProvider).getMyCheckIns(limit: 200);
+      checkIns = ciRes.getOrElse((_) => const []);
+    }
+    if (!mounted) return;
+    setState(() {
+      _stamps = stampRes.getOrElse((_) => const []);
+      _checkIns = checkIns;
+      _loading = false;
+    });
+  }
+
+  /// Total distance between consecutive visits, in km.
+  double get _traveledKm {
+    final pts = <({DateTime t, double lat, double lng})>[
+      for (final s in _stamps) (t: s.visitedAt, lat: s.lat, lng: s.lng),
+      for (final c in _checkIns) (t: c.visitedAt, lat: c.lat, lng: c.lng),
+    ]..sort((a, b) => a.t.compareTo(b.t));
+    double m = 0;
+    for (int i = 0; i < pts.length - 1; i++) {
+      m += geo.Geolocator.distanceBetween(
+          pts[i].lat, pts[i].lng, pts[i + 1].lat, pts[i + 1].lng);
+    }
+    return m / 1000.0;
+  }
+
+  /// Distinct places, aggregated from stamps (name → count + representative pt).
+  List<({String name, int count, double lat, double lng})> get _visitedPlaces {
+    final byName =
+        <String, ({int count, double lat, double lng})>{};
+    for (final s in _stamps) {
+      final cur = byName[s.placeName];
+      byName[s.placeName] = (
+        count: (cur?.count ?? 0) + 1,
+        lat: cur?.lat ?? s.lat,
+        lng: cur?.lng ?? s.lng,
+      );
+    }
+    final list = byName.entries
+        .map((e) =>
+            (name: e.key, count: e.value.count, lat: e.value.lat, lng: e.value.lng))
+        .toList()
+      ..sort((a, b) => b.count.compareTo(a.count));
+    return list;
+  }
+
+  String _distLabel(double lat, double lng) {
+    final pos = ref.read(gpsNotifierProvider).valueOrNull;
+    if (pos == null) return '';
+    final m = geo.Geolocator.distanceBetween(
+        pos.latitude, pos.longitude, lat, lng);
+    return m < 1000 ? '${m.round()}m' : '${(m / 1000.0).toStringAsFixed(1)}km';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (_loading) return const LoadingView();
+
+    final allPts = [
+      for (final s in _stamps) (s.lat, s.lng),
+      for (final c in _checkIns) (c.lat, c.lng),
+    ];
+    if (allPts.isEmpty) {
+      return EmptyView(
+        icon: Icons.map_outlined,
+        message:
+            widget.isOwnProfile ? 'No places yet' : 'No public places yet',
+        subtitle: widget.isOwnProfile
+            ? 'Your stamps and check-ins will map here.'
+            : null,
+      );
+    }
+
+    final centerLat =
+        allPts.map((p) => p.$1).reduce((a, b) => a + b) / allPts.length;
+    final centerLng =
+        allPts.map((p) => p.$2).reduce((a, b) => a + b) / allPts.length;
+
+    final markers = <MiniMapMarker>[
+      for (final s in _stamps)
+        MiniMapMarker(
+            id: s.id, kind: 'stamp', lat: s.lat, lng: s.lng,
+            color: Z.brand.toARGB32(), radius: 7),
+      for (final c in _checkIns)
+        MiniMapMarker(
+            id: c.id, kind: 'checkin', lat: c.lat, lng: c.lng,
+            color: Z.checkin.toARGB32(), radius: 5),
+    ];
+
+    final places = _visitedPlaces;
+    final placeCheckIns =
+        _checkIns.where((c) => c.placeName.isNotEmpty).take(20).toList();
+
+    return ListView(
+      padding: EdgeInsets.zero,
+      children: [
+        // Map with stats overlay
+        SizedBox(
+          height: 268,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              MiniMap(
+                lat: centerLat,
+                lng: centerLng,
+                zoom: allPts.length > 1 ? 11.0 : 14.0,
+                markers: markers,
+              ),
+              // Gradient scrim + stats
+              IgnorePointer(
+                child: Container(
+                  alignment: Alignment.bottomLeft,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.center,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Color(0x85000000)],
+                    ),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                  child: Row(
+                    children: [
+                      _MapStat(
+                          value: '${widget.stampCount}', label: 'Stamps'),
+                      const SizedBox(width: 24),
+                      _MapStat(
+                          value: '${_traveledKm.toStringAsFixed(1)} km',
+                          label: 'Traveled'),
+                      const SizedBox(width: 24),
+                      _MapStat(
+                          value: '${places.length}', label: 'Places'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Visited Places
+        if (places.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 14, 16, 6),
+            child: Text('Visited Places',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Z.textMuted,
+                    letterSpacing: 0.6)),
+          ),
+          for (final p in places.take(20))
+            Container(
+              decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Z.outline))),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                        color: Z.brandSoft, borderRadius: Z.r12),
+                    alignment: Alignment.center,
+                    child: const Icon(Icons.location_on,
+                        size: 16, color: Z.brand),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(p.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Z.text)),
+                        const SizedBox(height: 2),
+                        Text('${p.count} stamp${p.count == 1 ? '' : 's'}',
+                            style: const TextStyle(
+                                fontSize: 11, color: Z.textMuted)),
+                      ],
+                    ),
+                  ),
+                  Text(_distLabel(p.lat, p.lng),
+                      style: const TextStyle(
+                          fontSize: 11, color: Z.textMuted)),
+                ],
+              ),
+            ),
+        ],
+
+        // Check-ins (own profile only)
+        if (placeCheckIns.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 14, 16, 6),
+            child: Text('Check-ins',
+                style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: Z.textMuted,
+                    letterSpacing: 0.6)),
+          ),
+          for (final c in placeCheckIns)
+            GestureDetector(
+              onTap: () => context.push('/check-in/${c.id}'),
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Z.outline))),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                          color: c.stampId != null
+                              ? Z.brandSoft
+                              : Z.checkinSoft,
+                          borderRadius: Z.r12),
+                      alignment: Alignment.center,
+                      child: Icon(
+                          c.stampId != null
+                              ? Icons.workspace_premium
+                              : Icons.location_on,
+                          size: 16,
+                          color: c.stampId != null ? Z.brand : Z.checkin),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(c.placeName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Z.text)),
+                          const SizedBox(height: 2),
+                          Text(DateFormat('MMM d · h:mm a').format(c.visitedAt),
+                              style: const TextStyle(
+                                  fontSize: 11, color: Z.textMuted)),
+                        ],
+                      ),
+                    ),
+                    _KindChip(
+                        auto: c.source == CheckInSource.auto,
+                        isStamp: c.stampId != null),
+                  ],
+                ),
+              ),
+            ),
+        ],
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+}
+
+class _MapStat extends StatelessWidget {
+  final String value;
+  final String label;
+  const _MapStat({required this.value, required this.label});
+  @override
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  height: 1.2)),
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 10, color: Color(0xB8FFFFFF))),
+        ],
+      );
+}
+
+class _KindChip extends StatelessWidget {
+  final bool auto;
+  final bool isStamp;
+  const _KindChip({required this.auto, required this.isStamp});
+  @override
+  Widget build(BuildContext context) {
+    final (label, color, soft) = isStamp
+        ? ('Stamp', Z.brand, Z.brandSoft)
+        : auto
+            ? ('Auto', Z.auto, const Color(0x1AADADAD))
+            : ('Check-in', Z.checkin, Z.checkinSoft);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(color: soft, borderRadius: Z.rFull),
+      child: Text(label.toUpperCase(),
+          style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: color)),
     );
   }
 }
