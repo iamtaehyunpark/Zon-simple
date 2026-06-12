@@ -391,6 +391,17 @@ Migrations live in `supabase/migrations/`. All have been applied to the remote p
 | 027 | *(skipped in numbering)* |
 | 028 *(MCP-applied, no local file)* | photos RLS unified: own + can_view_user-gated stamp + check-in photos |
 | 029 | Live location: `profiles.is_ghost_mode`, `user_locations` (user_id PK, lat, lng, accuracy, heading, updated_at), `location_hidden_from`; Realtime on `user_locations`; RLS: own full CRUD, friend SELECT gated by accepted friendship + not ghost mode + not hidden |
+| 030–034 | `place_stats` view; `notification_prefs`; `033_saved_places`; `voice_memos` |
+| 035 | **Big-data pivot:** canonical `places` + `place_external_ids`; `place_id` FKs on stamps/check_ins/raw_location_events; `resolve_place()` hybrid matcher (external-id OR 25m radius) auto-fires on insert; backfill |
+| 036 | Consent + anonymization: `data_consents` (opt-out seed), `geohash7` bins on raw_events/check_ins, `bm_place_aggregates()` (k-anon ≥5), `handle_new_user` seeds consent |
+| 037 | `visits` + `derive_visits()` stay-point segmentation (pg_cron, currently commented out) |
+| 038 | `event_log` append-only outbox + emitter triggers on check_ins/stamps/visits |
+| 039 | `user_attributes` segmentation dims (inference jobs are a later workstream; rows seeded) |
+| 040 *(MCP-applied, no local file)* | revoke RPC on internal functions |
+| 041 *(MCP-applied, no local file)* | fix `emit_checkin_event` dropped-column reference |
+| 042 | **Consent enforcement:** `bm_place_aggregates` now requires `consent_version is not null` (seeded opt-in users excluded until they actively decide); `has_bm_consent()` / `has_third_party_consent()` service-only gates. App side: jurisdiction-aware consent gate (`lib/features/compliance/`) |
+
+> **Consent posture (owner decision 2026-06-12):** opt-out where the law allows; opt-in (blocking gate) for KR + EU/EEA, detected from device locale. Users in opt-in regions hit `ConsentGateScreen` once post-login; everyone can review/withdraw in Settings → Data & Privacy. Right-of-access via `/inferred-data`.
 
 ---
 

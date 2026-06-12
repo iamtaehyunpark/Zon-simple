@@ -29,6 +29,10 @@ import 'features/photo_import/presentation/photo_suggestion_screen.dart';
 import 'features/voice_import/presentation/voice_import_screen.dart';
 import 'features/settings/presentation/location_visibility_screen.dart';
 import 'features/map/presentation/place_detail_screen.dart';
+import 'features/compliance/presentation/consent_gate_screen.dart';
+import 'features/compliance/presentation/data_privacy_screen.dart';
+import 'features/compliance/presentation/inferred_data_screen.dart';
+import 'features/compliance/presentation/providers/consent_provider.dart';
 import 'core/sharing/shared_voice_service.dart';
 import 'core/sharing/shared_photos_handler.dart';
 import 'core/places/place_service_provider.dart';
@@ -43,8 +47,10 @@ class _RouterRefreshNotifier extends ChangeNotifier {
 final _routerProvider = Provider<GoRouter>((ref) {
   final notifier = _RouterRefreshNotifier();
 
-  // Re-evaluate redirects whenever Supabase auth state changes (login/logout).
+  // Re-evaluate redirects whenever Supabase auth state changes (login/logout)
+  // or the data-consent gate resolves (opt-in users must pass it post-login).
   ref.listen(authStateStreamProvider, (_, __) => notifier.notify());
+  ref.listen(consentGateProvider, (_, __) => notifier.notify());
 
   return GoRouter(
     initialLocation: '/map',
@@ -55,6 +61,17 @@ final _routerProvider = Provider<GoRouter>((ref) {
 
       // Unauthenticated: everything funnels to /login.
       if (!isLoggedIn) return loc == '/login' ? null : '/login';
+
+      // Authenticated but in an opt-in jurisdiction without a recorded consent
+      // decision → blocking consent gate. `valueOrNull` is null only while the
+      // consent state is still loading; the listener above re-runs this redirect
+      // once it resolves, so a brief pre-gate frame is the worst case.
+      final gate = ref.read(consentGateProvider).valueOrNull;
+      if (gate != null && gate.needsGate) {
+        return loc == '/consent' ? null : '/consent';
+      }
+      // Decided (or opt-out): the gate is not a place they can sit.
+      if (loc == '/consent') return '/map';
 
       // Authenticated: keep users off /login and the bare '/' that the OAuth
       // deep-link callback resolves to (we define no '/' route).
@@ -171,6 +188,21 @@ final _routerProvider = Provider<GoRouter>((ref) {
         name: 'user-profile',
         builder: (ctx, state) =>
             ProfileScreen(userId: state.pathParameters['id']),
+      ),
+      GoRoute(
+        path: '/consent',
+        name: 'consent',
+        builder: (_, __) => const ConsentGateScreen(),
+      ),
+      GoRoute(
+        path: '/data-privacy',
+        name: 'data-privacy',
+        builder: (_, __) => const DataPrivacyScreen(),
+      ),
+      GoRoute(
+        path: '/inferred-data',
+        name: 'inferred-data',
+        builder: (_, __) => const InferredDataScreen(),
       ),
       GoRoute(
         path: '/settings',
