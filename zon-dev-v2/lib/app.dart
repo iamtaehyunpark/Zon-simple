@@ -336,6 +336,15 @@ class _ZonAppState extends ConsumerState<ZonApp> with WidgetsBindingObserver {
       title: 'ZON',
       routerConfig: router,
       theme: AppTheme.theme,
+      // Dismiss the keyboard whenever the user taps outside a text field.
+      // Wrapping the router's child applies this app-wide. The translucent
+      // behavior lets taps still reach buttons/links underneath; only taps
+      // not claimed by a deeper widget trigger the unfocus.
+      builder: (context, child) => GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+        child: child,
+      ),
     );
   }
 }
