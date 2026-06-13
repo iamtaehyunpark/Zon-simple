@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../../shared/theme/app_theme.dart';
@@ -51,8 +52,8 @@ class FeedScreen extends ConsumerWidget {
                         height: 48,
                         child: Row(
                           children: [
-                            const Text('ZON',
-                                style: TextStyle(
+                            Text('ZON',
+                                style: GoogleFonts.poppins(
                                     fontSize: 24,
                                     fontWeight: FontWeight.w900,
                                     letterSpacing: 1.5,

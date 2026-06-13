@@ -8,6 +8,7 @@ import 'package:record/record.dart' show Amplitude;
 import 'package:geolocator/geolocator.dart' show Geolocator;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
@@ -1096,6 +1097,15 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                       child: Stack(
                         alignment: Alignment.center,
                         children: [
+                          Positioned(
+                            left: 0,
+                            child: Text('ZON',
+                                style: GoogleFonts.poppins(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1.5,
+                                    color: Z.text)),
+                          ),
                           // Center date display with chevron shifting buttons directly adjacent to it
                           Row(
                             mainAxisSize: MainAxisSize.max,

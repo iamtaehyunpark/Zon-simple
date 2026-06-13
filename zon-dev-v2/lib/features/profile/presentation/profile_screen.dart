@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/check_in.dart';
@@ -81,21 +82,21 @@ class ProfileScreen extends ConsumerWidget {
                             height: 44,
                             child: Row(
                               children: [
-                                if (!isOwnProfile)
+                                Text('ZON',
+                                    style: GoogleFonts.poppins(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1.5,
+                                    color: Z.text)),
+                                if (!isOwnProfile) ...[
+                                  const SizedBox(width: 8),
                                   GestureDetector(
                                     onTap: () => Navigator.of(context).pop(),
                                     child: const Icon(Icons.arrow_back,
                                         size: 24, color: Z.text),
                                   ),
-                                if (!isOwnProfile)
-                                  const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text('@${profile.username}',
-                                      style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                          color: Z.text)),
-                                ),
+                                ],
+                                const Spacer(),
                                 if (isOwnProfile)
                                   GestureDetector(
                                     onTap: () => context.push('/activity'),
@@ -146,7 +147,7 @@ class ProfileScreen extends ConsumerWidget {
 
                         // Identity row: small avatar + name + edit/friend buttons
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                          padding: const EdgeInsets.fromLTRB(18, 22, 18, 22),
                           child: Row(
                             children: [
                               // Avatar
@@ -181,6 +182,14 @@ class ProfileScreen extends ConsumerWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
+                                      '@${profile.username}',
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: Z.textMuted),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
                                       profile.displayName?.isNotEmpty == true
                                           ? profile.displayName!
                                           : profile.username,
@@ -191,7 +200,8 @@ class ProfileScreen extends ConsumerWidget {
                                           height: 1.2),
                                     ),
                                     if (profile.bio != null &&
-                                        profile.bio!.isNotEmpty)
+                                        profile.bio!.isNotEmpty) ...[
+                                      const SizedBox(height: 5),
                                       Text(profile.bio!,
                                           style: const TextStyle(
                                               fontSize: 13,
@@ -199,6 +209,7 @@ class ProfileScreen extends ConsumerWidget {
                                               height: 1.4),
                                           maxLines: 2,
                                           overflow: TextOverflow.ellipsis),
+                                    ],
                                   ],
                                 ),
                               ),

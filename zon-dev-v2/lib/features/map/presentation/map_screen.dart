@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../shared/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' hide Size;
@@ -104,6 +105,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   bool _nearbyLoading = false;
   bool _nearbyLoaded = false;
 
+  // Pinned location — long-press to set; scopes search/nearby/trending
+  ({double lat, double lng})? _pinnedLocation;
+  final ValueNotifier<Offset?> _pinScreenPosNotifier = ValueNotifier(null);
+
   double _sheetExtent = 0.26;
   late final DraggableScrollableController _sheetController = DraggableScrollableController();
   Timer? _legendTimer;
@@ -179,6 +184,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   void dispose() {
     _sheetController.dispose();
     _friendScreenPosNotifier.dispose();
+    _pinScreenPosNotifier.dispose();
     _legendTimer?.cancel();
     _searchCtrl.dispose();
     super.dispose();
@@ -243,9 +249,10 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       return;
     }
     setState(() => _searching = true);
+    final pinned = _pinnedLocation;
     final pos = ref.read(gpsNotifierProvider).valueOrNull;
-    final lat = pos?.latitude ?? 37.5665;
-    final lng = pos?.longitude ?? 126.9780;
+    final lat = pinned?.lat ?? pos?.latitude ?? 37.5665;
+    final lng = pinned?.lng ?? pos?.longitude ?? 126.9780;
     try {
       final svc = ref.read(placeServiceForProvider(lat, lng));
       final results = await svc.search(q, lat, lng);
@@ -306,14 +313,59 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     );
   }
 
+  // ── Pinned location ───────────────────────────────────────────────────────
+
+  void _onMapLongPress(MapContentGestureContext ctx) {
+    final coords = ctx.point.coordinates;
+    final lat = coords.lat.toDouble();
+    final lng = coords.lng.toDouble();
+    setState(() {
+      _pinnedLocation = (lat: lat, lng: lng);
+      _nearbyLoaded = false;
+      _nearbyPlaces = [];
+    });
+    _updatePinScreenPosition();
+    _loadNearbyPlaces();
+  }
+
+  Future<void> _updatePinScreenPosition() async {
+    final pin = _pinnedLocation;
+    final map = _map;
+    if (pin == null || map == null) {
+      _pinScreenPosNotifier.value = null;
+      return;
+    }
+    try {
+      final sc = await map.pixelForCoordinate(
+        Point(coordinates: Position(pin.lng, pin.lat)),
+      );
+      _pinScreenPosNotifier.value = Offset(sc.x, sc.y);
+    } catch (_) {
+      _pinScreenPosNotifier.value = null;
+    }
+  }
+
+  void _clearPinnedLocation() {
+    setState(() {
+      _pinnedLocation = null;
+      _nearbyLoaded = false;
+      _nearbyPlaces = [];
+    });
+    _pinScreenPosNotifier.value = null;
+    _loadNearbyPlaces();
+  }
+
   // ── Phase E: Nearby hot list ──────────────────────────────────────────────
 
   Future<void> _loadNearbyPlaces() async {
+    final pinned = _pinnedLocation;
     final pos = ref.read(gpsNotifierProvider).valueOrNull;
-    if (pos == null) return;
+    final lat = pinned?.lat ?? pos?.latitude;
+    final lng = pinned?.lng ?? pos?.longitude;
+    if (lat == null || lng == null) return;
     setState(() => _nearbyLoading = true);
     final result = await ref.read(stampRepositoryProvider).getNearbyHotPlaces(
-          pos.latitude, pos.longitude,
+          lat, lng,
           radiusKm: 5,
         );
     if (!mounted) return;
@@ -643,6 +695,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final maxSheetSize = mapScreenHeight > 0
         ? (1.0 - (paddingTop + 130) / mapScreenHeight).clamp(0.6, 0.85)
         : 0.8;
+    final effectiveExtent = _searchActive ? 0.0 : _sheetExtent;
     // GPS: draw live route + broadcast position
     ref.listen(gpsNotifierProvider, (previous, next) {
       final pos = next.valueOrNull;
@@ -695,6 +748,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 ),
                 onCameraChangeListener: (data) {
                   _updateFriendScreenPositions();
+                  _updatePinScreenPosition();
                 },
                 onStyleLoadedListener: (styleLoadedEventData) {
                   _styleLoaded = true;
@@ -706,6 +760,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 onMapCreated: (controller) {
                   _map = controller;
                   controller.addInteraction(TapInteraction.onMap(_onMapTap));
+                  controller.addInteraction(LongTapInteraction.onMap(_onMapLongPress));
                   _updateLayers();
                   
                   // Center camera immediately if location is already resolved
@@ -746,6 +801,21 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             },
           ),
 
+          // ── Pinned location emoji ───────────────────────────────────
+          ValueListenableBuilder<Offset?>(
+            valueListenable: _pinScreenPosNotifier,
+            builder: (ctx, offset, _) {
+              if (offset == null) return const SizedBox.shrink();
+              return Positioned(
+                left: offset.dx - 14,
+                top: offset.dy - 30,
+                child: const IgnorePointer(
+                  child: Text('📍', style: TextStyle(fontSize: 28)),
+                ),
+              );
+            },
+          ),
+
           // ── Top header box: search + category chips (prototype layout) ──
           Positioned(
             top: 0,
@@ -768,50 +838,142 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Search field
-                      TextField(
-                        controller: _searchCtrl,
-                        style: const TextStyle(fontSize: 14, color: Z.text),
-                        decoration: InputDecoration(
-                          hintText: 'Search places, areas…',
-                          prefixIcon: _searching
-                              ? const Padding(
-                                  padding: EdgeInsets.all(12),
-                                  child: SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2)),
-                                )
-                              : const Icon(Icons.search,
-                                  size: 20, color: Z.textMuted),
-                          suffixIcon: _searchCtrl.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.close, size: 18),
-                                  onPressed: _clearSearch,
-                                )
-                              : null,
-                          filled: true,
-                          fillColor: Z.surface1,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(9999),
-                            borderSide: const BorderSide(color: Z.outline2),
+                      // Search row: ZON brand + Search field + Cancel button
+                      Row(
+                        children: [
+                          // Left ZON logo (collapses when search is active)
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeInOut,
+                            width: _searchActive ? 0 : 80, // ZON text width (66) + spacing (14) = 80
+                            decoration: const BoxDecoration(),
+                            clipBehavior: Clip.hardEdge,
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 200),
+                              opacity: _searchActive ? 0.0 : 1.0,
+                              curve: Curves.easeInOut,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                physics: const NeverScrollableScrollPhysics(),
+                                child: SizedBox(
+                                  width: 80,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'ZON',
+                                        style: GoogleFonts.poppins(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 1.5,
+                                          color: Z.text,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 14),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(9999),
-                            borderSide:
-                                const BorderSide(color: Z.brand, width: 1.5),
+                          // Search field
+                          Expanded(
+                            child: TextField(
+                              controller: _searchCtrl,
+                              style: const TextStyle(fontSize: 14, color: Z.text),
+                              decoration: InputDecoration(
+                                hintText: 'Search places, areas…',
+                                prefixIcon: _searching
+                                    ? const Padding(
+                                        padding: EdgeInsets.only(right: 6),
+                                        child: SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2)),
+                                      )
+                                    : const Padding(
+                                        padding: EdgeInsets.only(right: 6),
+                                        child: Icon(Icons.search,
+                                            size: 18, color: Z.textMuted),
+                                      ),
+                                prefixIconConstraints: const BoxConstraints(
+                                  minWidth: 24,
+                                  minHeight: 20,
+                                ),
+                                suffixIcon: _searchCtrl.text.isNotEmpty
+                                    ? GestureDetector(
+                                        onTap: _clearSearch,
+                                        behavior: HitTestBehavior.opaque,
+                                        child: const Padding(
+                                          padding: EdgeInsets.only(left: 6),
+                                          child: Icon(Icons.close, size: 16, color: Z.textMuted),
+                                        ),
+                                      )
+                                    : null,
+                                suffixIconConstraints: const BoxConstraints(
+                                  minWidth: 22,
+                                  minHeight: 20,
+                                ),
+                                filled: false,
+                                isDense: true,
+                                contentPadding: const EdgeInsets.fromLTRB(0, 4, 0, 4),
+                                enabledBorder: const UnderlineInputBorder(
+                                  borderSide: BorderSide(color: Z.outline2),
+                                ),
+                                focusedBorder: const UnderlineInputBorder(
+                                  borderSide: BorderSide(color: Z.brand, width: 1.5),
+                                ),
+                                border: const UnderlineInputBorder(
+                                  borderSide: BorderSide(color: Z.outline2),
+                                ),
+                              ),
+                              onTap: () => setState(() => _searchActive = true),
+                              onChanged: _onSearchChanged,
+                            ),
                           ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(9999),
-                            borderSide: const BorderSide(color: Z.outline2),
+                          // Right Cancel button (expands when search is active)
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            curve: Curves.easeInOut,
+                            width: _searchActive ? 68 : 0, // spacing (8) + Cancel button text (60)
+                            decoration: const BoxDecoration(),
+                            clipBehavior: Clip.hardEdge,
+                            child: AnimatedOpacity(
+                              duration: const Duration(milliseconds: 200),
+                              opacity: _searchActive ? 1.0 : 0.0,
+                              curve: Curves.easeInOut,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                physics: const NeverScrollableScrollPhysics(),
+                                child: SizedBox(
+                                  width: 68,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const SizedBox(width: 8),
+                                      GestureDetector(
+                                        onTap: () {
+                                          _clearSearch();
+                                          FocusManager.instance.primaryFocus?.unfocus();
+                                        },
+                                        behavior: HitTestBehavior.opaque,
+                                        child: const Text(
+                                          'Cancel',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600,
+                                            color: Z.brand,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
                           ),
-                        ),
-                        onTap: () => setState(() => _searchActive = true),
-                        onChanged: _onSearchChanged,
+                        ],
                       ),
 
                       // Search results dropdown
@@ -904,6 +1066,36 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                           ),
                         ),
                       ),
+
+                      // Pinned location indicator
+                      if (_pinnedLocation != null) ...[
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            GestureDetector(
+                              onTap: _clearPinnedLocation,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: const Color(0x1AE53935),
+                                  borderRadius: BorderRadius.circular(9999),
+                                  border: Border.all(color: const Color(0xFFE53935)),
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.location_pin, size: 12, color: Color(0xFFE53935)),
+                                    SizedBox(width: 4),
+                                    Text('Pinned location', style: TextStyle(fontSize: 11, color: Color(0xFFE53935), fontWeight: FontWeight.w600)),
+                                    SizedBox(width: 6),
+                                    Icon(Icons.close, size: 12, color: Color(0xFFE53935)),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -912,62 +1104,63 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
 
           // ── Summary pill ──
-          Positioned(
-            bottom: _sheetExtent * mapScreenHeight + 12,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: Z.surface1,
-                  borderRadius: BorderRadius.circular(9999),
-                  border: Border.all(color: Z.outline),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x0F000000),
-                      blurRadius: 8,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(_savedOnly ? '🔖' : '📍',
-                        style: const TextStyle(fontSize: 13)),
-                    const SizedBox(width: 6),
-                    Text(
-                      _savedOnly
-                          ? '${_savedStamps.length} saved'
-                          : '${_myStamps.length} stamps  ·  ${_todayDistanceKm.toStringAsFixed(1)} km today',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: Z.text,
-                      ),
-                    ),
-                    if (ghostMode) ...[
-                      const SizedBox(width: 8),
-                      const Icon(Icons.visibility_off, size: 14, color: Z.textMuted),
-                    ],
-                    if (_loading) ...[
-                      const SizedBox(width: 8),
-                      const SizedBox(
-                        width: 12,
-                        height: 12,
-                        child: CircularProgressIndicator(strokeWidth: 1.5, color: Z.brand),
+          if (!_searchActive)
+            Positioned(
+              bottom: effectiveExtent * mapScreenHeight + 12,
+              left: 0,
+              right: 0,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Z.surface1,
+                    borderRadius: BorderRadius.circular(9999),
+                    border: Border.all(color: Z.outline),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x0F000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 2),
                       ),
                     ],
-                  ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_savedOnly ? '🔖' : '📍',
+                          style: const TextStyle(fontSize: 13)),
+                      const SizedBox(width: 6),
+                      Text(
+                        _savedOnly
+                            ? '${_savedStamps.length} saved'
+                            : '${_myStamps.length} stamps  ·  ${_todayDistanceKm.toStringAsFixed(1)} km today',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Z.text,
+                        ),
+                      ),
+                      if (ghostMode) ...[
+                        const SizedBox(width: 8),
+                        const Icon(Icons.visibility_off, size: 14, color: Z.textMuted),
+                      ],
+                      if (_loading) ...[
+                        const SizedBox(width: 8),
+                        const SizedBox(
+                          width: 12,
+                          height: 12,
+                          child: CircularProgressIndicator(strokeWidth: 1.5, color: Z.brand),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
 
           // ── Map Legend ──
           Positioned(
-            bottom: _sheetExtent * mapScreenHeight + 56,
+            bottom: effectiveExtent * mapScreenHeight + 56,
             left: 16,
             child: AnimatedOpacity(
               opacity: _showLegend ? 1.0 : 0.0,
@@ -1026,7 +1219,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
             ),
           ),
 
-          NotificationListener<DraggableScrollableNotification>(
+          if (!_searchActive)
+            NotificationListener<DraggableScrollableNotification>(
             onNotification: (notification) {
               setState(() {
                 _sheetExtent = notification.extent;
@@ -1190,8 +1384,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                               padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                               child: Row(
                                 children: [
-                                  const Text('Nearby',
-                                      style: TextStyle(
+                                  Text(
+                                      _pinnedLocation != null ? 'Nearby (pinned)' : 'Nearby',
+                                      style: const TextStyle(
                                           fontWeight: FontWeight.w700,
                                           fontSize: 13,
                                           color: Z.text)),
@@ -1308,13 +1503,16 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 itemCount: _nearbyPlaces.length,
                                 itemBuilder: (ctx, i) {
                                   final place = _nearbyPlaces[i];
+                                  final pinned = _pinnedLocation;
                                   final pos = ref
                                       .read(gpsNotifierProvider)
                                       .valueOrNull;
-                                  final distM = pos != null
+                                  final refLat = pinned?.lat ?? pos?.latitude;
+                                  final refLng = pinned?.lng ?? pos?.longitude;
+                                  final distM = (refLat != null && refLng != null)
                                       ? geo.Geolocator.distanceBetween(
-                                          pos.latitude,
-                                          pos.longitude,
+                                          refLat,
+                                          refLng,
                                           place.lat,
                                           place.lng,
                                         )
@@ -1358,7 +1556,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
         // ── Locate Me Button ──
         Positioned(
-          bottom: _sheetExtent * mapScreenHeight + 12,
+          bottom: effectiveExtent * mapScreenHeight + 12,
           right: 16,
           child: FloatingActionButton.small(
             heroTag: 'locate-me',
@@ -1447,20 +1645,20 @@ class _CatPill extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: active ? Z.brand : Z.surface1,
+          color: active ? Z.brand : Z.surface2,
           borderRadius: BorderRadius.circular(9999),
-          border: Border.all(color: active ? Z.brand : Z.outline2),
         ),
         child: Text(
           label,
           style: TextStyle(
-            fontSize: 11,
-            fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-            color: active ? Colors.white : Z.text,
+            fontSize: 12,
+            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+            color: active ? Colors.white : Z.textMuted,
           ),
         ),
       ),
