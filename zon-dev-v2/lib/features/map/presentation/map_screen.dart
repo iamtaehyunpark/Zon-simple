@@ -242,24 +242,59 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   // ── Search (Phase A) ─────────────────────────────────────────────────────
 
-  Future<void> _onSearchChanged(String q) async {
-    if (q.trim().isEmpty) {
-      setState(() { _searchResults = []; _selectedSearchResult = null; });
+  Future<void> _runSearch() async {
+    final text = _searchCtrl.text.trim();
+    if (text.isEmpty && _category == PlaceCategory.all) {
+      setState(() {
+        _searchResults = [];
+        _selectedSearchResult = null;
+      });
       await _clearSearchLayer();
       return;
     }
+
     setState(() => _searching = true);
     final pinned = _pinnedLocation;
     final pos = ref.read(gpsNotifierProvider).valueOrNull;
     final lat = pinned?.lat ?? pos?.latitude ?? 37.5665;
     final lng = pinned?.lng ?? pos?.longitude ?? 126.9780;
+
+    String query = text;
+    if (_category != PlaceCategory.all) {
+      final isKr = isKorea(lat, lng);
+      final catKeyword = switch (_category) {
+        PlaceCategory.cafe => isKr ? '카페' : 'cafe',
+        PlaceCategory.food => isKr ? '맛집' : 'food',
+        PlaceCategory.culture => isKr ? '문화' : 'culture',
+        PlaceCategory.outdoor => isKr ? '자연' : 'outdoor',
+        PlaceCategory.shopping => isKr ? '쇼핑' : 'shopping',
+        _ => '',
+      };
+      if (catKeyword.isNotEmpty) {
+        if (text.isEmpty) {
+          query = catKeyword;
+        } else {
+          query = '$catKeyword $text';
+        }
+      }
+    }
+
     try {
       final svc = ref.read(placeServiceForProvider(lat, lng));
-      final results = await svc.search(q, lat, lng);
-      if (mounted) setState(() { _searchResults = results; _searching = false; });
+      final results = await svc.search(query, lat, lng);
+      if (mounted) {
+        setState(() {
+          _searchResults = results;
+          _searching = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _searching = false);
     }
+  }
+
+  Future<void> _onSearchChanged(String q) async {
+    await _runSearch();
   }
 
   Future<void> _selectSearchResult(PlaceResult place) async {
@@ -400,6 +435,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _searchActive = false;
       _searchResults = [];
       _selectedSearchResult = null;
+      _category = PlaceCategory.all;
     });
     _clearSearchLayer();
   }
@@ -897,10 +933,12 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                         child: Icon(Icons.search,
                                             size: 18, color: Z.textMuted),
                                       ),
-                                prefixIconConstraints: const BoxConstraints(
-                                  minWidth: 24,
-                                  minHeight: 20,
-                                ),
+                                prefixIconConstraints: _searchActive
+                                    ? null
+                                    : const BoxConstraints(
+                                        minWidth: 24,
+                                        minHeight: 20,
+                                      ),
                                 suffixIcon: _searchCtrl.text.isNotEmpty
                                     ? GestureDetector(
                                         onTap: _clearSearch,
@@ -911,13 +949,17 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                         ),
                                       )
                                     : null,
-                                suffixIconConstraints: const BoxConstraints(
-                                  minWidth: 22,
-                                  minHeight: 20,
-                                ),
+                                suffixIconConstraints: _searchActive
+                                    ? null
+                                    : const BoxConstraints(
+                                        minWidth: 22,
+                                        minHeight: 20,
+                                      ),
                                 filled: false,
                                 isDense: true,
-                                contentPadding: const EdgeInsets.fromLTRB(0, 4, 0, 4),
+                                contentPadding: _searchActive
+                                    ? const EdgeInsets.symmetric(horizontal: 4, vertical: 10)
+                                    : const EdgeInsets.fromLTRB(0, 4, 0, 4),
                                 enabledBorder: const UnderlineInputBorder(
                                   borderSide: BorderSide(color: Z.outline2),
                                 ),
@@ -976,35 +1018,123 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                         ],
                       ),
 
+                      // Category chips
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        height: 30,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          child: Row(
+                            children: [
+                              for (final cat in PlaceCategory.values) ...[
+                                _CatPill(
+                                  label: cat.label,
+                                  active: _category == cat,
+                                  onTap: () {
+                                    setState(() {
+                                      _category = cat;
+                                      _searchActive = true;
+                                    });
+                                    _runSearch();
+                                  },
+                                ),
+                                const SizedBox(width: 7),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ),
+
                       // Search results dropdown
                       if (_searchActive && _searchResults.isNotEmpty)
                         Container(
                           margin: const EdgeInsets.only(top: 8),
                           decoration: BoxDecoration(
                             color: Z.surface1,
-                            borderRadius: BorderRadius.circular(16),
+                            borderRadius: Z.r16,
                             border: Border.all(color: Z.outline),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x14000000), // 8% opacity shadow
+                                blurRadius: 16,
+                                offset: Offset(0, 6),
+                              ),
+                            ],
                           ),
                           clipBehavior: Clip.antiAlias,
-                          child: ListView.builder(
+                          child: ListView.separated(
                             shrinkWrap: true,
-                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            physics: const NeverScrollableScrollPhysics(),
+                            padding: EdgeInsets.zero,
                             itemCount: _searchResults.length.clamp(0, 5),
+                            separatorBuilder: (ctx, i) => const Divider(
+                              height: 1,
+                              color: Z.outline,
+                              indent: 52,
+                            ),
                             itemBuilder: (ctx, i) {
                               final r = _searchResults[i];
-                              return ListTile(
-                                leading: const Icon(Icons.place_outlined,
-                                    size: 20, color: Z.textMuted),
-                                title: Text(r.name,
-                                    style: const TextStyle(fontSize: 14)),
-                                subtitle: r.address != null
-                                    ? Text(r.address!,
-                                        style: const TextStyle(fontSize: 12),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis)
-                                    : null,
-                                dense: true,
-                                onTap: () => _selectSearchResult(r),
+                              return Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: () => _selectSearchResult(r),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 14, vertical: 11),
+                                    child: Row(
+                                      children: [
+                                        // Premium circle icon wrapper
+                                        Container(
+                                          width: 32,
+                                          height: 32,
+                                          decoration: const BoxDecoration(
+                                            color: Z.brandSoft,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: const Icon(
+                                            Icons.place,
+                                            size: 16,
+                                            color: Z.brand,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                r.name,
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 14,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: Z.text,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                              if (r.address != null) ...[
+                                                const SizedBox(height: 1),
+                                                Text(
+                                                  r.address!,
+                                                  style: GoogleFonts.poppins(
+                                                    fontSize: 11,
+                                                    color: Z.textMuted,
+                                                  ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
                               );
                             },
                           ),
@@ -1044,28 +1174,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                             dense: true,
                           ),
                         ),
-
-                      // Category chips
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 30,
-                        child: SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              for (final cat in PlaceCategory.values) ...[
-                                _CatPill(
-                                  label: cat.label,
-                                  active: _category == cat,
-                                  onTap: () =>
-                                      setState(() => _category = cat),
-                                ),
-                                const SizedBox(width: 7),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
 
                       // Pinned location indicator
                       if (_pinnedLocation != null) ...[
