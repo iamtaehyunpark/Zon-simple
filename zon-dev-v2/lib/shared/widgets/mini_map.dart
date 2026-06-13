@@ -37,6 +37,8 @@ class MiniMap extends StatefulWidget {
   final List<MiniMapMarker> markers;
   final List<List<double>>? route; // [lng,lat] pairs
   final int routeColor;
+  final List<List<double>>? hull; // [lng,lat] pairs — convex hull polygon (open ring)
+  final int hullColor;
   final bool interactive;
   final void Function(MapboxMap map)? onMapReady;
 
@@ -52,6 +54,8 @@ class MiniMap extends StatefulWidget {
     this.markers = const [],
     this.route,
     this.routeColor = 0xFF8B6EC4,
+    this.hull,
+    this.hullColor = 0xFF8B6EC4,
     this.interactive = false,
     this.onMapReady,
     this.onCameraChanged,
@@ -68,7 +72,9 @@ class _MiniMapState extends State<MiniMap> {
   void didUpdateWidget(covariant MiniMap old) {
     super.didUpdateWidget(old);
     if (_map != null &&
-        (old.markers != widget.markers || old.route != widget.route)) {
+        (old.markers != widget.markers ||
+            old.route != widget.route ||
+            old.hull != widget.hull)) {
       _drawOverlays(_map!);
     }
   }
@@ -104,7 +110,12 @@ class _MiniMapState extends State<MiniMap> {
   }
 
   Future<void> _drawOverlays(MapboxMap map) async {
-    // Route first so markers sit on top.
+    // Hull polygon first — route and markers sit on top.
+    final hull = widget.hull;
+    if (hull != null && hull.length >= 3) {
+      await drawPolygon(map, hull, widget.hullColor, idPrefix: 'mini-hull');
+    }
+    // Route next so markers sit on top.
     final route = widget.route;
     if (route != null && route.length >= 2) {
       await drawLine(map, route, widget.routeColor, idPrefix: 'mini-route');

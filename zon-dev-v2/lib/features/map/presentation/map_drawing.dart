@@ -162,6 +162,51 @@ Future<void> drawHotPlaces(
   ));
 }
 
+/// Draw a filled convex-hull polygon. [coords] are [lng, lat] pairs (open ring —
+/// do not repeat the first point). Renders a fill layer below a stroke layer so
+/// that pin markers drawn afterwards sit on top.
+Future<void> drawPolygon(
+  MapboxMap map,
+  List<List<double>> coords,
+  int fillColor, {
+  String idPrefix = 'polygon',
+  double fillOpacity = 0.15,
+  double strokeOpacity = 0.55,
+  double strokeWidth = 1.5,
+}) async {
+  final sourceId = '$idPrefix-source';
+  final fillLayerId = '$idPrefix-fill-layer';
+  final strokeLayerId = '$idPrefix-stroke-layer';
+  // Remove stroke first (can't remove source while a layer references it)
+  try {
+    if (await map.style.styleLayerExists(strokeLayerId)) {
+      await map.style.removeStyleLayer(strokeLayerId);
+    }
+  } catch (_) {}
+  await _remove(map, sourceId, fillLayerId);
+  if (coords.length < 3) return;
+  final ring = [
+    ...coords.map((c) => '[${c[0]},${c[1]}]'),
+    '[${coords[0][0]},${coords[0][1]}]', // close
+  ].join(',');
+  final geojson =
+      '{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[$ring]]}}';
+  await map.style.addSource(GeoJsonSource(id: sourceId, data: geojson));
+  await map.style.addLayer(FillLayer(
+    id: fillLayerId,
+    sourceId: sourceId,
+    fillColor: fillColor,
+    fillOpacity: fillOpacity,
+  ));
+  await map.style.addLayer(LineLayer(
+    id: strokeLayerId,
+    sourceId: sourceId,
+    lineColor: fillColor,
+    lineWidth: strokeWidth,
+    lineOpacity: strokeOpacity,
+  ));
+}
+
 Future<void> drawPins(
   MapboxMap map, {
   required String sourceId,

@@ -948,18 +948,83 @@ class _MapTabState extends ConsumerState<_MapTab>
     });
   }
 
-  /// Total distance between consecutive visits, in km.
-  double get _traveledKm {
-    final pts = <({DateTime t, double lat, double lng})>[
-      for (final s in _stamps) (t: s.visitedAt, lat: s.lat, lng: s.lng),
-      for (final c in _checkIns) (t: c.visitedAt, lat: c.lat, lng: c.lng),
-    ]..sort((a, b) => a.t.compareTo(b.t));
-    double m = 0;
-    for (int i = 0; i < pts.length - 1; i++) {
-      m += geo.Geolocator.distanceBetween(
-          pts[i].lat, pts[i].lng, pts[i + 1].lat, pts[i + 1].lng);
+  /// Convex hull of all stamp + check-in pins as [[lng, lat], ...] pairs (open ring).
+  /// Returns empty list when fewer than 3 distinct points exist.
+  List<List<double>> get _hullLngLat {
+    final raw = <List<double>>[
+      for (final s in _stamps) [s.lng, s.lat],
+      for (final c in _checkIns) [c.lng, c.lat],
+    ];
+    if (raw.length < 3) return [];
+    raw.sort((a, b) => a[0] != b[0] ? a[0].compareTo(b[0]) : a[1].compareTo(b[1]));
+
+    double cross(List<double> o, List<double> a, List<double> b) =>
+        (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+
+    final lower = <List<double>>[];
+    for (final p in raw) {
+      while (lower.length >= 2 &&
+          cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+        lower.removeLast();
+      }
+      lower.add(p);
     }
-    return m / 1000.0;
+    final upper = <List<double>>[];
+    for (final p in raw.reversed) {
+      while (upper.length >= 2 &&
+          cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+        upper.removeLast();
+      }
+      upper.add(p);
+    }
+    final hull = [...lower.take(lower.length - 1), ...upper.take(upper.length - 1)];
+    return hull.length >= 3 ? hull : [];
+  }
+
+  /// Area (km²) enclosed by the convex hull of all stamp + check-in pins.
+  double get _coverageKm2 {
+    final hull = _hullLngLat;
+    if (hull.length < 3) return 0;
+
+    // Project to metres relative to centroid (flat-earth, good enough for city-scale)
+    final cLat = hull.map((p) => p[1]).reduce((a, b) => a + b) / hull.length;
+    final cLng = hull.map((p) => p[0]).reduce((a, b) => a + b) / hull.length;
+    const mPerDegLat = 111320.0;
+    final mPerDegLng = 111320.0 * _cos(cLat * 3.141592653589793 / 180.0);
+
+    final pts = hull
+        .map((p) => (
+              x: (p[0] - cLng) * mPerDegLng,
+              y: (p[1] - cLat) * mPerDegLat,
+            ))
+        .toList();
+
+    // Shoelace formula → area in m²
+    double area = 0;
+    for (int i = 0; i < pts.length; i++) {
+      final j = (i + 1) % pts.length;
+      area += pts[i].x * pts[j].y;
+      area -= pts[j].x * pts[i].y;
+    }
+    return area.abs() / 2.0 / 1e6;
+  }
+
+  static double _cos(double radians) {
+    double x = radians % (2 * 3.141592653589793);
+    double result = 1, term = 1;
+    for (int i = 1; i <= 8; i++) {
+      term *= -x * x / ((2 * i - 1) * (2 * i));
+      result += term;
+    }
+    return result;
+  }
+
+  String get _coverageLabel {
+    final km2 = _coverageKm2;
+    if (km2 == 0) return '—';
+    if (km2 < 1) return '${(km2 * 100).round() / 100} km²';
+    if (km2 < 10) return '${km2.toStringAsFixed(1)} km²';
+    return '${km2.round()} km²';
   }
 
   /// Distinct places, aggregated from stamps (name → count + representative pt).
@@ -1044,6 +1109,7 @@ class _MapTabState extends ConsumerState<_MapTab>
                 lng: centerLng,
                 zoom: allPts.length > 1 ? 11.0 : 14.0,
                 markers: markers,
+                hull: _hullLngLat.isEmpty ? null : _hullLngLat,
               ),
               // Gradient scrim + stats
               IgnorePointer(
@@ -1063,8 +1129,8 @@ class _MapTabState extends ConsumerState<_MapTab>
                           value: '${widget.stampCount}', label: 'Stamps'),
                       const SizedBox(width: 24),
                       _MapStat(
-                          value: '${_traveledKm.toStringAsFixed(1)} km',
-                          label: 'Traveled'),
+                          value: _coverageLabel,
+                          label: 'Conquered'),
                       const SizedBox(width: 24),
                       _MapStat(
                           value: '${places.length}', label: 'Places'),

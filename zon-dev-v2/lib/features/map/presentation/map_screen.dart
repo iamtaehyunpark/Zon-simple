@@ -3,6 +3,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../../shared/theme/app_theme.dart';
 import 'package:geolocator/geolocator.dart' as geo;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' hide Size;
@@ -12,10 +14,8 @@ import '../../../app.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/models/friend_location.dart';
-import '../../../data/models/raw_location_event.dart';
 import '../../../data/repositories/stamp_repository.dart';
 import '../../../data/repositories/check_in_repository.dart';
-import '../../../data/repositories/location_repository.dart';
 import '../../../data/repositories/location_sharing_repository.dart';
 import '../../../core/location/providers/gps_provider.dart';
 import '../../../core/places/place_service_provider.dart' show placeServiceForProvider;
@@ -104,6 +104,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   List<PlaceStat> _nearbyPlaces = [];
   bool _nearbyLoading = false;
   bool _nearbyLoaded = false;
+  String? _geocodedAddress;
 
   // Pinned location — long-press to set; scopes search/nearby/trending
   ({double lat, double lng})? _pinnedLocation;
@@ -113,46 +114,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   late final DraggableScrollableController _sheetController = DraggableScrollableController();
   Timer? _legendTimer;
   bool _showLegend = false;
-
-  // Today's recorded GPS breadcrumbs (from the DB), refreshed on load and when
-  // a new session starts. Used for the "km today" stat alongside the live path.
-  List<RawLocationEvent> _todayRoute = const [];
-  DateTime? _seenSessionStart;
-
-  Future<void> _refreshTodayRoute() async {
-    final res =
-        await ref.read(locationRepositoryProvider).getRouteForDay(DateTime.now());
-    if (!mounted) return;
-    final route = res.getOrElse((_) => <RawLocationEvent>[])
-      ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
-    setState(() => _todayRoute = route);
-  }
-
-  double get _sessionDistanceKm {
-    final path = ref.read(gpsNotifierProvider.notifier).sessionPath;
-    if (path.length < 2) return 0.0;
-    double totalMeters = 0.0;
-    for (int i = 0; i < path.length - 1; i++) {
-      final p1 = path[i];
-      final p2 = path[i + 1];
-      totalMeters += geo.Geolocator.distanceBetween(p1[1], p1[0], p2[1], p2[0]);
-    }
-    return totalMeters / 1000.0;
-  }
-
-  /// Total distance travelled today: the day's recorded route *before* the
-  /// current session, plus the live session path. Splitting at the session
-  /// start avoids double-counting breadcrumbs the batcher already flushed.
-  double get _todayDistanceKm {
-    final startedAt = ref.read(gpsNotifierProvider.notifier).sessionStartedAt;
-    double meters = 0.0;
-    for (int i = 0; i < _todayRoute.length - 1; i++) {
-      final a = _todayRoute[i], b = _todayRoute[i + 1];
-      if (startedAt != null && !b.capturedAt.isBefore(startedAt)) break;
-      meters += geo.Geolocator.distanceBetween(a.lat, a.lng, b.lat, b.lng);
-    }
-    return meters / 1000.0 + _sessionDistanceKm;
-  }
 
   (DateTime, DateTime) _filterRange() {
     final now = DateTime.now();
@@ -232,7 +193,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _loading = false;
     });
     _updateLayers();
-    _refreshTodayRoute();
   }
 
   void _toggleSaved() {
@@ -392,13 +352,82 @@ class _MapScreenState extends ConsumerState<MapScreen> {
 
   // ── Phase E: Nearby hot list ──────────────────────────────────────────────
 
+  Future<String?> _geocodeCoords(double lat, double lng) async {
+    try {
+      if (isKorea(lat, lng)) {
+        final key = dotenv.env['KAKAO_REST_API_KEY'] ?? '';
+        if (key.isNotEmpty) {
+          final dio = Dio();
+          final res = await dio.get<Map<String, dynamic>>(
+            'https://dapi.kakao.com/v2/local/geo/coord2regioncode.json',
+            queryParameters: {
+              'x': '$lng',
+              'y': '$lat',
+            },
+            options: Options(
+              headers: {'Authorization': 'KakaoAK $key'},
+            ),
+          );
+          final docs = res.data?['documents'] as List? ?? [];
+          if (docs.isNotEmpty) {
+            final doc = docs.firstWhere((d) => (d as Map)['region_type'] == 'H', orElse: () => docs.first) as Map;
+            final region2 = doc['region_2depth_name'] as String? ?? '';
+            final region3 = doc['region_3depth_name'] as String? ?? '';
+            String name = '$region2 $region3'.trim();
+            if (name.isEmpty) {
+              name = doc['address_name'] as String? ?? '';
+            }
+            if (name.isNotEmpty) return name;
+          }
+        }
+      } else {
+        final token = dotenv.env['MAPBOX_TOKEN'] ?? '';
+        if (token.isNotEmpty) {
+          final dio = Dio();
+          final res = await dio.get<Map<String, dynamic>>(
+            'https://api.mapbox.com/geocoding/v5/mapbox.places/$lng,$lat.json',
+            queryParameters: {
+              'types': 'neighborhood,locality,place',
+              'limit': '1',
+              'access_token': token,
+            },
+          );
+          final features = res.data?['features'] as List? ?? [];
+          if (features.isNotEmpty) {
+            final feat = features.first as Map;
+            String text = feat['text'] as String? ?? '';
+            if (text.isEmpty) {
+              text = feat['place_name'] as String? ?? '';
+            }
+            if (text.isNotEmpty) return text;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[Geocode] Error geocoding ($lat, $lng): $e');
+    }
+    return null;
+  }
+
   Future<void> _loadNearbyPlaces() async {
     final pinned = _pinnedLocation;
     final pos = ref.read(gpsNotifierProvider).valueOrNull;
     final lat = pinned?.lat ?? pos?.latitude;
     final lng = pinned?.lng ?? pos?.longitude;
     if (lat == null || lng == null) return;
-    setState(() => _nearbyLoading = true);
+    setState(() {
+      _nearbyLoading = true;
+      _geocodedAddress = null;
+    });
+
+    _geocodeCoords(lat, lng).then((address) {
+      if (mounted) {
+        setState(() {
+          _geocodedAddress = address;
+        });
+      }
+    });
+
     final result = await ref.read(stampRepositoryProvider).getNearbyHotPlaces(
           lat, lng,
           radiusKm: 5,
@@ -741,13 +770,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       _maybeBroadcast(pos);
       if (!_nearbyLoaded && !_nearbyLoading) {
         _loadNearbyPlaces();
-      }
-      // A new session started → the just-ended one is now in the DB; refresh so
-      // its distance moves into today's prior-route total.
-      final startedAt = ref.read(gpsNotifierProvider.notifier).sessionStartedAt;
-      if (startedAt != null && startedAt != _seenSessionStart) {
-        _seenSessionStart = startedAt;
-        _refreshTodayRoute();
       }
     });
 
@@ -1241,7 +1263,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       Text(
                         _savedOnly
                             ? '${_savedStamps.length} saved'
-                            : '${_myStamps.length} stamps  ·  ${_todayDistanceKm.toStringAsFixed(1)} km today',
+                            : '${_myStamps.length} stamps  ·  ${_friendLocations.length} friends live',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -1555,9 +1577,11 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                   const EdgeInsets.fromLTRB(16, 16, 16, 8),
                               child: Row(
                                 children: [
-                                  const Text(
-                                    'Trending Nearby',
-                                    style: TextStyle(
+                                  Text(
+                                    _geocodedAddress != null
+                                        ? 'Trending in $_geocodedAddress'
+                                        : 'Trending Nearby',
+                                    style: const TextStyle(
                                       fontWeight: FontWeight.w700,
                                       fontSize: 14,
                                       color: Z.text,
