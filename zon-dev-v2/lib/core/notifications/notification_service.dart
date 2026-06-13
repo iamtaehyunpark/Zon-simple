@@ -13,6 +13,10 @@ class NotificationService {
   final _fcm = FirebaseMessaging.instance;
   final _local = FlutterLocalNotificationsPlugin();
 
+  StreamSubscription<RemoteMessage>? _fgSub;
+  StreamSubscription<RemoteMessage>? _openedSub;
+  StreamSubscription<String>? _tokenSub;
+
   Future<void> initialize() async {
     await requestPermission();
 
@@ -27,11 +31,11 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onLocalNotificationTapped,
     );
 
-    FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
+    _fgSub = FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
     FirebaseMessaging.onBackgroundMessage(_handleBackgroundMessage);
 
     // App opened from a tapped FCM notification (background/terminated)
-    FirebaseMessaging.onMessageOpenedApp.listen(_routeFromMessage);
+    _openedSub = FirebaseMessaging.onMessageOpenedApp.listen(_routeFromMessage);
 
     // App launched by tapping a notification while terminated
     final initial = await _fcm.getInitialMessage();
@@ -39,7 +43,7 @@ class NotificationService {
 
     // Register for token refreshes first so we still capture the token once
     // APNs delivers it later (e.g. after the Push capability is configured).
-    _fcm.onTokenRefresh.listen(_registerToken);
+    _tokenSub = _fcm.onTokenRefresh.listen(_registerToken);
 
     // On iOS, getToken() throws if the APNs token isn't available yet (no Push
     // entitlement, simulator, or APNs not configured in Firebase). Guard it so
@@ -187,6 +191,12 @@ class NotificationService {
   }
 
   Future<String?> get fcmToken => _fcm.getToken();
+
+  void dispose() {
+    _fgSub?.cancel();
+    _openedSub?.cancel();
+    _tokenSub?.cancel();
+  }
 }
 
 @pragma('vm:entry-point')

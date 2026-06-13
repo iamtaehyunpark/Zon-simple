@@ -84,8 +84,9 @@ class PhotoService {
   ///
   /// Returns null on any network or compression failure.
   static Future<String?> resizeForLlm(String url) async {
+    final dio = Dio();
     try {
-      final response = await Dio().get<List<int>>(
+      final response = await dio.get<List<int>>(
         url,
         options: Options(responseType: ResponseType.bytes),
       );
@@ -101,6 +102,8 @@ class PhotoService {
       return base64Encode(compressed);
     } catch (_) {
       return null;
+    } finally {
+      dio.close();
     }
   }
 

@@ -12,7 +12,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart';
-import '../../../app.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../core/audio/voice_memo_service.dart';
 import '../../../core/photos/photo_service.dart';
@@ -89,6 +88,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   final Set<String> _loadedMonths = {};
   Set<String> _diaryDays = {};
 
+  List<DateTime>? _slidableDaysCache;
+  DateTime? _slidableDaysCacheKey;
+
   final _sheetController = DraggableScrollableController();
   final _dateStripController = ScrollController();
   final Map<String, GlobalKey> _itemKeys = {};
@@ -135,30 +137,17 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     final now = DateTime.now();
     
     // Fetch diary dates
-    try {
-      final days = _slidableDays;
-      if (days.isNotEmpty) {
-        final firstDateStr = days.first.toIso8601String().substring(0, 10);
-        final diaryRes = await checkInRepo.client
-            .from('day_diaries')
-            .select('date')
-            .eq('user_id', checkInRepo.currentUserId ?? '')
-            .not('body', 'eq', '')
-            .gte('date', firstDateStr);
-
-        final diaryDays = {
-          for (final r in diaryRes as List)
-            r['date'] as String
-        };
-
-        if (mounted) {
-          setState(() {
-            _diaryDays = diaryDays;
-          });
-        }
+    final days = _slidableDays;
+    if (days.isNotEmpty) {
+      final firstDateStr = days.first.toIso8601String().substring(0, 10);
+      final diaryDays = await ref
+          .read(diaryRepositoryProvider)
+          .getDiaryDates(from: firstDateStr);
+      if (mounted) {
+        setState(() {
+          _diaryDays = diaryDays;
+        });
       }
-    } catch (e) {
-      debugPrint('[timeline] error loading diary activity: $e');
     }
     
     // We always want to ensure the last 6 months are loaded, plus the active selected month.
@@ -216,6 +205,9 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   }
 
   List<DateTime> get _slidableDays {
+    if (_slidableDaysCache != null && _slidableDaysCacheKey == _day) {
+      return _slidableDaysCache!;
+    }
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final days = <DateTime>[];
@@ -229,6 +221,8 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
       }
       days.insert(0, _day);
     }
+    _slidableDaysCacheKey = _day;
+    _slidableDaysCache = days;
     return days;
   }
 
@@ -410,7 +404,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     // Trace = the day's raw GPS breadcrumbs merged with every located node, so
     // the line follows actual movement (like the live map) and still threads
     // through each check-in / anchor / stamp.
-    await drawLine(map, _traceCoords(b), kBrandPurple.toARGB32(),
+    await drawLine(map, _traceCoords(b), Z.brand.toARGB32(),
         idPrefix: 'tl-path');
 
     await drawPins(
@@ -445,7 +439,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
         for (final i in located.where((i) => i.isStamp))
           MapPin(id: i.id, kind: 'stamp', name: i.name, lat: i.lat!, lng: i.lng!),
       ],
-      color: kBrandPurple.toARGB32(),
+      color: Z.brand.toARGB32(),
     );
     await _drawSelection();
 
@@ -475,7 +469,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
               name: sel.name,
               lat: sel.lat!,
               lng: sel.lng!),
-      kBrandPurple.toARGB32(),
+      Z.brand.toARGB32(),
     );
   }
 
@@ -1378,7 +1372,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                           onPromote: item.kind == _NodeKind.checkIn
                               ? (item.isAuto
                                   ? () => context.push(
-                                      '/checkin?lat=${item.lat}&lng=${item.lng}&time=${item.time.toIso8601String()}')
+                                      '/checkin?lat=${item.lat}&lng=${item.lng}&time=${item.time.toIso8601String()}${item.text != null && item.text!.isNotEmpty ? '&note=${Uri.encodeComponent(item.text!)}' : ''}')
                                   : () => context.push(
                                       '/checkin?fromCheckIn=${item.id}'))
                               : null,
@@ -2715,6 +2709,7 @@ class _VoiceBarState extends State<_VoiceBar> {
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<PlayerState>? _stateSub;
   StreamSubscription<Duration>? _durSub;
+  StreamSubscription<void>? _completeSub;
   Duration _pos = Duration.zero;
   Duration _dur = Duration.zero;
   bool _playing = false;
@@ -2734,13 +2729,14 @@ class _VoiceBarState extends State<_VoiceBar> {
     _durSub = _player.onDurationChanged.listen((d) {
       if (mounted && d > Duration.zero) setState(() => _dur = d);
     });
-    _player.onPlayerComplete.listen((_) {
+    _completeSub = _player.onPlayerComplete.listen((_) {
       if (mounted) setState(() => _pos = Duration.zero);
     });
   }
 
   @override
   void dispose() {
+    _completeSub?.cancel();
     _posSub?.cancel();
     _stateSub?.cancel();
     _durSub?.cancel();

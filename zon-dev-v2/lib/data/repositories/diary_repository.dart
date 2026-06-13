@@ -74,6 +74,24 @@ class DiaryRepository with BaseRepository {
     }
   }
 
+  /// Returns ISO date strings (yyyy-MM-dd) for all days that have a non-empty
+  /// diary entry on or after [from].
+  Future<Set<String>> getDiaryDates({required String from}) async {
+    final uid = userId;
+    if (uid == null) return {};
+    try {
+      final rows = await client
+          .from('day_diaries')
+          .select('date')
+          .eq('user_id', uid)
+          .not('body', 'eq', '')
+          .gte('date', from);
+      return {for (final r in rows as List) r['date'] as String};
+    } catch (_) {
+      return {};
+    }
+  }
+
   Future<void> saveDiary(DateTime date, String body) async {
     final uid = userId;
     if (uid == null) return;

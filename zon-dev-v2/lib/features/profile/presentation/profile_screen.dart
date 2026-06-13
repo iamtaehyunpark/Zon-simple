@@ -21,6 +21,7 @@ import 'providers/profile_provider.dart';
 import '../../../core/auth/auth_provider.dart';
 import '../../../core/location/providers/gps_provider.dart';
 import 'dart:io';
+import 'dart:math' show cos, pi;
 import 'package:image_picker/image_picker.dart';
 import '../../../core/photos/photo_service.dart';
 
@@ -97,7 +98,7 @@ class ProfileScreen extends ConsumerWidget {
                                   ),
                                 ],
                                 const Spacer(),
-                                if (isOwnProfile)
+                                if (isOwnProfile) ...[
                                   GestureDetector(
                                     onTap: () => context.push('/activity'),
                                     child: const SizedBox(
@@ -110,7 +111,6 @@ class ProfileScreen extends ConsumerWidget {
                                       ),
                                     ),
                                   ),
-                                if (isOwnProfile)
                                   GestureDetector(
                                     onTap: () => context.push('/check-ins'),
                                     child: const SizedBox(
@@ -123,22 +123,19 @@ class ProfileScreen extends ConsumerWidget {
                                       ),
                                     ),
                                   ),
-                                GestureDetector(
-                                  onTap: () => isOwnProfile
-                                      ? context.push('/settings')
-                                      : null,
-                                  child: SizedBox(
-                                    width: 40,
-                                    height: 40,
-                                    child: Icon(
-                                      isOwnProfile
-                                          ? Icons.settings
-                                          : Icons.more_vert,
-                                      size: 22,
-                                      color: Z.text,
+                                  GestureDetector(
+                                    onTap: () => context.push('/settings'),
+                                    child: const SizedBox(
+                                      width: 40,
+                                      height: 40,
+                                      child: Icon(
+                                        Icons.settings,
+                                        size: 22,
+                                        color: Z.text,
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),
@@ -770,11 +767,13 @@ class _StampsGrid extends ConsumerWidget {
           itemCount: stamps.length,
           itemBuilder: (ctx, i) {
             if (i == stamps.length - 3) {
-              ref
-                  .read(profileStampsNotifierProvider(targetId,
-                          publicOnly: !isOwnProfile)
-                      .notifier)
-                  .loadMore(targetId, publicOnly: !isOwnProfile);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                ref
+                    .read(profileStampsNotifierProvider(targetId,
+                            publicOnly: !isOwnProfile)
+                        .notifier)
+                    .loadMore(targetId, publicOnly: !isOwnProfile);
+              });
             }
             return _GridItem(stamp: stamps[i], isOwnProfile: isOwnProfile);
           },
@@ -1026,7 +1025,7 @@ class _MapTabState extends ConsumerState<_MapTab>
     final cLat = hull.map((p) => p[1]).reduce((a, b) => a + b) / hull.length;
     final cLng = hull.map((p) => p[0]).reduce((a, b) => a + b) / hull.length;
     const mPerDegLat = 111320.0;
-    final mPerDegLng = 111320.0 * _cos(cLat * 3.141592653589793 / 180.0);
+    final mPerDegLng = 111320.0 * cos(cLat * pi / 180.0);
 
     final pts = hull
         .map((p) => (
@@ -1043,16 +1042,6 @@ class _MapTabState extends ConsumerState<_MapTab>
       area -= pts[j].x * pts[i].y;
     }
     return area.abs() / 2.0 / 1e6;
-  }
-
-  static double _cos(double radians) {
-    double x = radians % (2 * 3.141592653589793);
-    double result = 1, term = 1;
-    for (int i = 1; i <= 8; i++) {
-      term *= -x * x / ((2 * i - 1) * (2 * i));
-      result += term;
-    }
-    return result;
   }
 
   String get _coverageLabel {

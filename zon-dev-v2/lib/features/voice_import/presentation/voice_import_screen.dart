@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -38,6 +39,7 @@ class _VoiceImportScreenState extends ConsumerState<VoiceImportScreen> {
   final _service = VoiceMemoService();
   final _player = AudioPlayer();
   late final List<_ImportItem> _items;
+  StreamSubscription<void>? _completeSub;
   String? _playingPath;
   bool _saving = false;
   int _saved = 0;
@@ -49,7 +51,7 @@ class _VoiceImportScreenState extends ConsumerState<VoiceImportScreen> {
     _items = [
       for (final m in widget.memos) _ImportItem(File(m.path), m.recordedAt),
     ];
-    _player.onPlayerComplete.listen((_) {
+    _completeSub = _player.onPlayerComplete.listen((_) {
       if (mounted) setState(() => _playingPath = null);
     });
     _transcribeAll();
@@ -57,6 +59,7 @@ class _VoiceImportScreenState extends ConsumerState<VoiceImportScreen> {
 
   @override
   void dispose() {
+    _completeSub?.cancel();
     for (final i in _items) {
       i.transcript.dispose();
     }

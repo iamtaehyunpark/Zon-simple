@@ -1,5 +1,5 @@
+// ignore_for_file: avoid_print, depend_on_referenced_packages
 import 'package:supabase/supabase.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'dart:io';
 
 // Mock simple storage to satisfy Gotrue if needed
@@ -20,7 +20,7 @@ void main() async {
   final file = File('.env');
   final lines = file.readAsLinesSync();
   final env = <String, String>{};
-  for (var line in lines) {
+  for (final line in lines) {
     if (line.isEmpty || line.startsWith('#')) continue;
     final parts = line.split('=');
     if (parts.length >= 2) {
@@ -43,9 +43,9 @@ void main() async {
   );
 
   // Use gmail.com
-  final email = 'test_friend_${DateTime.now().millisecondsSinceEpoch}@gmail.com';
-  final password = 'TestPassword123!';
-  
+  const email = 'test_friend_debug@gmail.com';
+  const password = 'TestPassword123!';
+
   print('Signing up test user: $email');
   final authRes = await client.auth.signUp(email: email, password: password);
   final user = authRes.user;
@@ -60,7 +60,7 @@ void main() async {
     print('Creating profile...');
     await client.from('profiles').insert({
       'id': user.id,
-      'username': 'testuser_${DateTime.now().millisecondsSinceEpoch}',
+      'username': 'testuser_debug',
       'display_name': 'Test User',
     });
     print('Profile created successfully.');
@@ -69,8 +69,9 @@ void main() async {
   }
 
   // Find another user
-  final profiles = await client.from('profiles').select('id, username').neq('id', user.id).limit(1);
-  if (profiles.isEmpty) {
+  final profiles =
+      await client.from('profiles').select('id, username').neq('id', user.id).limit(1);
+  if ((profiles as List).isEmpty) {
     print('No other profiles found in DB');
     return;
   }
@@ -91,7 +92,6 @@ void main() async {
       'requested_by': uid,
       'status': 'pending',
     }).select();
-    
     print('Insert success: $insertRes');
   } catch (e) {
     print('ERROR INSERTING FRIENDSHIP: $e');

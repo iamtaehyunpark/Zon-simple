@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:intl/intl.dart';
 import '../../../shared/theme/app_theme.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/check_in.dart';
@@ -18,6 +19,7 @@ class CheckinEntry extends ConsumerStatefulWidget {
   // this existing check-in (promote-to-stamp as an editable step).
   final String? fromCheckInId;
   final DateTime? visitedAt;
+  final String? initialNote;
 
   const CheckinEntry({
     super.key,
@@ -26,6 +28,7 @@ class CheckinEntry extends ConsumerStatefulWidget {
     this.mode = CheckinMode.checkIn,
     this.fromCheckInId,
     this.visitedAt,
+    this.initialNote,
   });
 
   @override
@@ -82,6 +85,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry>
               lng: widget.lng,
               mode: widget.mode,
               visitedAt: widget.visitedAt,
+              initialNote: widget.initialNote,
             );
       }
     });
@@ -230,6 +234,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry>
     final dragFrac = (_sheetDrag / sheetH).clamp(0.0, 1.0);
 
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       backgroundColor: Color.fromRGBO(0, 0, 0, 0.5 * (1 - dragFrac)),
       body: Column(
         children: [
@@ -374,6 +379,9 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry>
                       child: mainContent,
                     ),
                   ),
+                  // Push content above the keyboard when it opens.
+                  SizedBox(
+                      height: MediaQuery.of(context).viewInsets.bottom),
                 ],
               ),
             ),
@@ -672,7 +680,7 @@ class _PlaceSelectionBody extends StatelessWidget {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          '${s.visitedAt.day}/${s.visitedAt.month}/${s.visitedAt.year}',
+                          DateFormat('d/M/yyyy').format(s.visitedAt),
                           style:
                               const TextStyle(fontSize: 11, color: Z.textMuted),
                         ),

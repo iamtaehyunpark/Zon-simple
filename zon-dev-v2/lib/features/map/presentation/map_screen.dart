@@ -10,7 +10,6 @@ import 'package:geolocator/geolocator.dart' as geo;
 import 'package:mapbox_maps_flutter/mapbox_maps_flutter.dart' hide Size;
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
-import '../../../app.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/models/friend_location.dart';
@@ -113,6 +112,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   double _sheetExtent = 0.26;
   late final DraggableScrollableController _sheetController = DraggableScrollableController();
   Timer? _legendTimer;
+  Timer? _searchDebounce;
   bool _showLegend = false;
 
   (DateTime, DateTime) _filterRange() {
@@ -147,6 +147,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     _friendScreenPosNotifier.dispose();
     _pinScreenPosNotifier.dispose();
     _legendTimer?.cancel();
+    _searchDebounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -253,8 +254,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     }
   }
 
-  Future<void> _onSearchChanged(String q) async {
-    await _runSearch();
+  void _onSearchChanged(String q) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(const Duration(milliseconds: 400), _runSearch);
   }
 
   Future<void> _selectSearchResult(PlaceResult place) async {
@@ -353,37 +355,32 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   // ── Phase E: Nearby hot list ──────────────────────────────────────────────
 
   Future<String?> _geocodeCoords(double lat, double lng) async {
+    final dio = Dio();
     try {
       if (isKorea(lat, lng)) {
         final key = dotenv.env['KAKAO_REST_API_KEY'] ?? '';
         if (key.isNotEmpty) {
-          final dio = Dio();
           final res = await dio.get<Map<String, dynamic>>(
             'https://dapi.kakao.com/v2/local/geo/coord2regioncode.json',
-            queryParameters: {
-              'x': '$lng',
-              'y': '$lat',
-            },
-            options: Options(
-              headers: {'Authorization': 'KakaoAK $key'},
-            ),
+            queryParameters: {'x': '$lng', 'y': '$lat'},
+            options: Options(headers: {'Authorization': 'KakaoAK $key'}),
           );
           final docs = res.data?['documents'] as List? ?? [];
           if (docs.isNotEmpty) {
-            final doc = docs.firstWhere((d) => (d as Map)['region_type'] == 'H', orElse: () => docs.first) as Map;
+            final doc = docs.firstWhere(
+                  (d) => (d as Map)['region_type'] == 'H',
+                  orElse: () => docs.first,
+                ) as Map;
             final region2 = doc['region_2depth_name'] as String? ?? '';
             final region3 = doc['region_3depth_name'] as String? ?? '';
             String name = '$region2 $region3'.trim();
-            if (name.isEmpty) {
-              name = doc['address_name'] as String? ?? '';
-            }
+            if (name.isEmpty) name = doc['address_name'] as String? ?? '';
             if (name.isNotEmpty) return name;
           }
         }
       } else {
         final token = dotenv.env['MAPBOX_TOKEN'] ?? '';
         if (token.isNotEmpty) {
-          final dio = Dio();
           final res = await dio.get<Map<String, dynamic>>(
             'https://api.mapbox.com/geocoding/v5/mapbox.places/$lng,$lat.json',
             queryParameters: {
@@ -396,15 +393,15 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           if (features.isNotEmpty) {
             final feat = features.first as Map;
             String text = feat['text'] as String? ?? '';
-            if (text.isEmpty) {
-              text = feat['place_name'] as String? ?? '';
-            }
+            if (text.isEmpty) text = feat['place_name'] as String? ?? '';
             if (text.isNotEmpty) return text;
           }
         }
       }
     } catch (e) {
       debugPrint('[Geocode] Error geocoding ($lat, $lng): $e');
+    } finally {
+      dio.close();
     }
     return null;
   }
@@ -569,7 +566,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
         for (final s in displayedStamps)
           MapPin(id: s.id, kind: 'stamp', name: s.placeName, lat: s.lat, lng: s.lng),
       ],
-      color: kBrandPurple.toARGB32(),
+      color: Z.brand.toARGB32(),
     );
     await drawPins(
       map,
@@ -630,7 +627,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       await removeLine(map, idPrefix: 'live-route');
       return;
     }
-    await upsertLine(map, path, kBrandPurple.toARGB32(), idPrefix: 'live-route');
+    await upsertLine(map, path, Z.brand.toARGB32(), idPrefix: 'live-route');
   }
 
   // ── Tap handling ──────────────────────────────────────────────────────────
@@ -1316,7 +1313,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const _LegendRow(color: kBrandPurple, label: 'My stamps'),
+                      const _LegendRow(color: Z.brand, label: 'My stamps'),
                       const SizedBox(height: 4),
                       const _LegendRow(color: Color(_kCheckinBlue), label: 'My check-ins'),
                       const SizedBox(height: 4),
@@ -1592,13 +1589,13 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                     width: 6,
                                     height: 6,
                                     decoration: const BoxDecoration(
-                                      color: Z.error,
+                                      color: Z.success,
                                       shape: BoxShape.circle,
                                     ),
                                   ),
                                   const SizedBox(width: 5),
                                   const Text(
-                                    'Live · 3 min ago',
+                                    'Live',
                                     style: TextStyle(
                                       fontSize: 10,
                                       fontWeight: FontWeight.w500,
@@ -1636,9 +1633,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                                 itemBuilder: (ctx, i) {
                                   final place = _nearbyPlaces[i];
                                   final pinned = _pinnedLocation;
-                                  final pos = ref
-                                      .read(gpsNotifierProvider)
-                                      .valueOrNull;
                                   final refLat = pinned?.lat ?? pos?.latitude;
                                   final refLng = pinned?.lng ?? pos?.longitude;
                                   final distM = (refLat != null && refLng != null)
@@ -1868,28 +1862,42 @@ class _SavedStampTile extends StatelessWidget {
   }
 }
 
+// ── Place emoji / category helpers ────────────────────────────────────────────
+
+String _placeEmoji(String name) {
+  final n = name.toLowerCase();
+  if (n.contains('café') || n.contains('cafe') || n.contains('coffee')) { return '☕'; }
+  if (n.contains('restaurant') || n.contains('food') || n.contains('eat') ||
+      n.contains('pasta') || n.contains('pub')) { return '🍴'; }
+  if (n.contains('park') || n.contains('nature') || n.contains('garden')) { return '🌿'; }
+  if (n.contains('art') || n.contains('museum') || n.contains('gallery')) { return '🎨'; }
+  if (n.contains('shop') || n.contains('market') || n.contains('store')) { return '🏬'; }
+  if (n.contains('bar') || n.contains('club')) { return '🍺'; }
+  if (n.contains('book')) { return '📚'; }
+  return '📍';
+}
+
+String _placeCategory(String name) {
+  final n = name.toLowerCase();
+  if (n.contains('café') || n.contains('cafe') || n.contains('coffee')) { return 'Café'; }
+  if (n.contains('restaurant') || n.contains('food') || n.contains('eat') ||
+      n.contains('pasta') || n.contains('bar') || n.contains('pub')) { return 'Dining'; }
+  if (n.contains('park') || n.contains('nature') || n.contains('garden')) { return 'Nature'; }
+  if (n.contains('art') || n.contains('museum') || n.contains('gallery')) { return 'Art'; }
+  if (n.contains('shop') || n.contains('market') || n.contains('store')) { return 'Retail'; }
+  return 'Place';
+}
+
 // ── Nearby card (horizontal scroll card) ──────────────────────────────────────
 
 class _NearbyCard extends StatelessWidget {
-  final dynamic place; // NearbyPlace
+  final PlaceStat place;
   final VoidCallback onTap;
   const _NearbyCard({required this.place, required this.onTap});
 
-  String get _emoji {
-    final name = (place.name as String).toLowerCase();
-    if (name.contains('café') || name.contains('cafe') || name.contains('coffee')) return '☕';
-    if (name.contains('restaurant') || name.contains('food') || name.contains('eat')) return '🍴';
-    if (name.contains('park') || name.contains('nature') || name.contains('garden')) return '🌿';
-    if (name.contains('art') || name.contains('museum') || name.contains('gallery')) return '🎨';
-    if (name.contains('shop') || name.contains('market') || name.contains('store')) return '🏬';
-    if (name.contains('bar') || name.contains('pub') || name.contains('club')) return '🍺';
-    if (name.contains('book')) return '📚';
-    return '📍';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final stamps = place.stampCount as int;
+    final stamps = place.stampCount;
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1904,10 +1912,10 @@ class _NearbyCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(_emoji, style: const TextStyle(fontSize: 22)),
+            Text(_placeEmoji(place.name), style: const TextStyle(fontSize: 22)),
             const SizedBox(height: 4),
             Text(
-              place.name as String,
+              place.name,
               style: const TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -2270,33 +2278,6 @@ class _TrendingPhotoCard extends StatelessWidget {
     required this.onTap,
   });
 
-  String get _category {
-    final name = place.name.toLowerCase();
-    if (name.contains('café') || name.contains('cafe') || name.contains('coffee')) return 'Café';
-    if (name.contains('restaurant') || name.contains('food') || name.contains('eat') || name.contains('pasta') || name.contains('bar') || name.contains('pub')) return 'Dining';
-    if (name.contains('park') || name.contains('nature') || name.contains('garden')) return 'Nature';
-    if (name.contains('art') || name.contains('museum') || name.contains('gallery')) return 'Art';
-    if (name.contains('shop') || name.contains('market') || name.contains('store')) return 'Retail';
-    return 'Place';
-  }
-
-  String get _emoji {
-    switch (_category) {
-      case 'Café':
-        return '☕';
-      case 'Dining':
-        return '🍴';
-      case 'Nature':
-        return '🌿';
-      case 'Art':
-        return '🎨';
-      case 'Retail':
-        return '🏬';
-      default:
-        return '📍';
-    }
-  }
-
   String get _scoreText {
     if (index == 0) return '🔥 Hot';
     if (index == 1 || index == 2) return '⬆ Rising';
@@ -2330,7 +2311,7 @@ class _TrendingPhotoCard extends StatelessWidget {
               color: _tint,
               child: Center(
                 child: Text(
-                  _emoji,
+                  _placeEmoji(place.name),
                   style: TextStyle(
                     fontSize: 46,
                     color: Colors.white.withValues(alpha: 0.45),
@@ -2410,7 +2391,7 @@ class _TrendingPhotoCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '$_category · $distance',
+                    '${_placeCategory(place.name)} · $distance',
                     style: const TextStyle(
                       fontSize: 10,
                       color: Color(0xBFFFFFFF),

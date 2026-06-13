@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'shared_voice_service.dart';
-import '../../core/places/place_service_provider.dart';
 import '../../features/photo_import/presentation/photo_checkin_inspection_screen.dart';
 
 /// Receives photos shared to ZON from the iOS Photos app via the Share Extension.
@@ -20,7 +19,6 @@ class SharedPhotosHandler {
   static Stream<List<InspectionGroup>> get stream => _controller.stream;
 
   static bool _initialized = false;
-  static StreamSubscription<List<Map<dynamic, dynamic>>>? _sub;
 
   /// Call once from [ZonApp.initState] after [SharedVoiceService] is set up.
   static void init(PlaceServiceFactory placeServiceFactory) {
@@ -28,14 +26,17 @@ class SharedPhotosHandler {
     _initialized = true;
 
     // Subscribe to the shared channel's photo stream.
-    _sub = SharedVoiceService.instance.photoStream.listen(
+    SharedVoiceService.instance.photoStream.listen(
       (raw) => _process(raw, placeServiceFactory),
     );
 
     // Cold-start poll — photos shared while the app was closed.
-    SharedVoiceService.instance.getPendingPhotos().then((raw) {
-      if (raw.isNotEmpty) _process(raw, placeServiceFactory);
-    }).catchError((e) => debugPrint('[SharedPhotos] getPending error: $e'));
+    SharedVoiceService.instance.getPendingPhotos().then(
+      (raw) {
+        if (raw.isNotEmpty) _process(raw, placeServiceFactory);
+      },
+      onError: (Object e) => debugPrint('[SharedPhotos] getPending error: $e'),
+    );
   }
 
   static Future<void> _process(

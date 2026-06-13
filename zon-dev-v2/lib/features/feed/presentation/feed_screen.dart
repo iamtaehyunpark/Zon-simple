@@ -156,7 +156,9 @@ class _FollowingTab extends ConsumerWidget {
                   itemCount: stamps.length,
                   itemBuilder: (ctx, i) {
                     if (i == stamps.length - 3) {
-                      ref.read(feedNotifierProvider.notifier).loadMore();
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        ref.read(feedNotifierProvider.notifier).loadMore();
+                      });
                     }
                     return StampCard(stamp: stamps[i]);
                   },
@@ -529,7 +531,7 @@ class StampCard extends ConsumerWidget {
     );
   }
 
-  String _timeAgo(DateTime dt) {
+  static String _timeAgo(DateTime dt) {
     final diff = DateTime.now().difference(dt);
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';

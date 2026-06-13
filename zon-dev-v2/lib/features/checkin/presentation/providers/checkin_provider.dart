@@ -71,6 +71,7 @@ class CheckinState with _$CheckinState {
 class CheckinNotifier extends _$CheckinNotifier {
   CheckinMode _mode = CheckinMode.checkIn;
   DateTime? _visitedAt;
+  String? _initialNote;
 
   @override
   CheckinState build() => const CheckinState.idle();
@@ -80,9 +81,11 @@ class CheckinNotifier extends _$CheckinNotifier {
     double? lng,
     CheckinMode mode = CheckinMode.checkIn,
     DateTime? visitedAt,
+    String? initialNote,
   }) async {
     _mode = mode;
     _visitedAt = visitedAt;
+    _initialNote = initialNote?.isEmpty == true ? null : initialNote;
     state = const CheckinState.locating();
     try {
       double resolvedLat = lat ?? 0;
@@ -189,6 +192,7 @@ class CheckinNotifier extends _$CheckinNotifier {
           lng: lng,
           externalPlaceId: place?.externalPlaceId,
           externalSource: place?.externalSource,
+          note: _initialNote,
         ),
       );
     }

@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../../core/photos/photo_service.dart';
-import '../../../core/places/place_models.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/repositories/stamp_repository.dart';
 import '../../../shared/widgets/place_search_field.dart';

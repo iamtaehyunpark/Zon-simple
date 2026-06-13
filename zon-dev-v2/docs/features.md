@@ -1,7 +1,7 @@
 # ZON — Feature & Logic Reference
 
 > Complete map of every screen, feature, data pipeline, and provider relationship in the codebase.  
-> Last updated: 2026-06-10 (branch: feature/flutter-ui-redesign)
+> Last updated: 2026-06-13 (pass 2)
 
 ---
 
@@ -422,7 +422,7 @@ queryRenderedFeatures(point, layerIds: [...all layers])
 
 ### Additional UI Controls
 
-- **Search bar:** `_onSearchChanged(q)` → `placeServiceFor.search(q)` → results dropdown → tap → `flyTo()` + draw search pin
+- **Search bar:** `_onSearchChanged(q)` → 400 ms debounce → `placeServiceFor.search(q)` → results dropdown → tap → `flyTo()` + draw search pin
 - **Category filter chips:** `PlaceCategory` enum → filter `_followedStamps` client-side by category
 - **Saved-only toggle:** switches between `_myStamps` and `_savedStamps` for own layer
 - **Legend:** auto-shows on map touch, hides after 3s (`Timer`)
@@ -450,9 +450,9 @@ TimelineNotifier.loadDay(date)  [keepAlive: true]
 ### Date Strip
 
 ```
-_slidableDays: last 180 days + any earlier selected day
+_slidableDays: last 180 days + any earlier selected day (memoized; rebuilds only when _day changes)
 _monthlyActivity: monthly_visit_counts RPC → badge dots
-_diaryDays: getDiaries() → which days have written entries (dots)
+_diaryDays: DiaryRepository.getDiaryDates(from) → which days have written entries (dots)
 
 Date tap
   → _load(selectedDay)
@@ -485,6 +485,13 @@ _maybeRedraw(bundle)
   → drawPins — check-ins (blue), stamps (purple), auto (grey)
   → tap pin → _showCheckInDetail() or context.push('/stamp/:id')
 ```
+
+### Voice Memo Playback (`_VoiceBar`)
+
+Compact audio player rendered beneath a voice-memo transcript node.
+
+- Uses `audioplayers` `AudioPlayer`; streams `onPlayerStateChanged`, `onPositionChanged`, `onDurationChanged`, and `onPlayerComplete` are all stored as `StreamSubscription` fields (`_stateSub`, `_posSub`, `_durSub`, `_completeSub`) and cancelled in `dispose()`.
+- Tap to play/pause; progress bar scrubs to position.
 
 ### AI Diary Generation
 
@@ -531,7 +538,7 @@ profileStampsNotifierProvider(targetId, publicOnly)
 | Own profile | Other profile |
 |---|---|
 | Avatar tap → ImagePicker → upload → `updateProfile()` | View-only avatar |
-| Settings icon → `/settings` | "⋯" icon (no-op for now) |
+| Settings icon → `/settings` | (no settings icon shown) |
 | Notification bell → `/activity` | Follow button (state-driven) |
 | Check-ins icon → `/check-ins` | Add Friend button |
 
@@ -610,6 +617,8 @@ Background tap → onMessageOpenedApp → notificationRouteStream.add(route)
 Status: Remote push BLOCKED (no APNs key — Apple paid enrollment required)
 Local notifications: WORKING
 ```
+
+**Subscription lifecycle:** `NotificationService` stores its three Firebase stream subscriptions (`_fgSub`, `_openedSub`, `_tokenSub`) and exposes `dispose()` to cancel them cleanly if the service is torn down.
 
 ### Bell Badge Count
 

@@ -38,7 +38,7 @@ import 'core/sharing/shared_photos_handler.dart';
 import 'core/places/place_service_provider.dart';
 import 'features/photo_import/presentation/photo_checkin_inspection_screen.dart';
 
-const kBrandPurple = Color(0xFF8B6EC4);
+const kBrandPurple = Z.brand;
 
 class _RouterRefreshNotifier extends ChangeNotifier {
   void notify() => notifyListeners();
@@ -141,6 +141,7 @@ final _routerProvider = Provider<GoRouter>((ref) {
             visitedAt: state.uri.queryParameters['time'] != null
                 ? DateTime.tryParse(state.uri.queryParameters['time']!)
                 : null,
+            initialNote: state.uri.queryParameters['note'],
           ),
         ),
       ),

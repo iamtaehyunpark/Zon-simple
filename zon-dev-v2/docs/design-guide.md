@@ -1,9 +1,9 @@
 # ZON — UI/UX Design Guide
 
-> Version 1.0 · 2026-06-07 
-> This is a ground-up design guide. The current app is a debugging POC — ignore it entirely.
-> Map discovery features (Phase A–E from `map-discovery-plan.md`) are not yet built;
-> their design considerations are marked **[MAP PLACEHOLDER]** throughout.
+> Version 1.1 · 2026-06-13
+> Map discovery features (Phase A–E from `map-discovery-plan.md`) are partially built:
+> Phase A (search bar, debounced) and Phase E (nearby hot list) are live.
+> Remaining phases are marked **[MAP PLACEHOLDER]** throughout.
 
 ---
 
@@ -457,7 +457,7 @@ empty state screen.
 
 ```
 ┌─────────────────────────────────────┐
-│  ‹   @username              [⋯ menu]│
+│  ‹   @username        [⚙ own only] │
 │  [Avatar]  Stamps  Friends  Followers│  ← stat row
 │  Display name                       │
 │  Bio                                │

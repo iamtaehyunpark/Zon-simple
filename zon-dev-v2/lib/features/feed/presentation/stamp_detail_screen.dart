@@ -183,16 +183,24 @@ class _StampDetailBodyState extends ConsumerState<_StampDetailBody> {
                                 color: Z.text,
                                 height: 1.2),
                           ),
-                          if (_subtitle() != null) ...[
-                            const SizedBox(height: 1),
-                            Text(
-                              _subtitle()!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  fontSize: 12, color: Z.textMuted),
-                            ),
-                          ],
+                          Builder(builder: (ctx) {
+                            final sub = _subtitle();
+                            if (sub == null) return const SizedBox.shrink();
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(height: 1),
+                                Text(
+                                  sub,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Z.textMuted),
+                                ),
+                              ],
+                            );
+                          }),
                         ],
                       ),
                     ),
@@ -788,9 +796,13 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
   Future<void> _fetchMentionSuggestions(String query) async {
     setState(() => _mentionLoading = true);
     try {
+      if (query.isEmpty) {
+        if (mounted) setState(() => _mentionLoading = false);
+        return;
+      }
       final results = await ref
           .read(profileRepositoryProvider)
-          .searchUsers(query.isEmpty ? ' ' : query);
+          .searchUsers(query);
       if (mounted && _mentionQuery == query) {
         setState(() {
           _mentionSuggestions = results.take(5).toList();
@@ -1036,7 +1048,7 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
 
 // ── Comment tile ──────────────────────────────────────────────
 
-class _CommentTile extends ConsumerWidget {
+class _CommentTile extends ConsumerStatefulWidget {
   final StampComment comment;
   final String stampId;
   final bool isReply;
@@ -1047,14 +1059,74 @@ class _CommentTile extends ConsumerWidget {
   });
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CommentTile> createState() => _CommentTileState();
+}
+
+class _CommentTileState extends ConsumerState<_CommentTile> {
+  final _recognizers = <TapGestureRecognizer>[];
+  late TextSpan _bodySpan;
+  String? _builtForBody;
+
+  @override
+  void dispose() {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    super.dispose();
+  }
+
+  TextSpan _buildBodySpan(String body) {
+    for (final r in _recognizers) {
+      r.dispose();
+    }
+    _recognizers.clear();
+
+    final spans = <InlineSpan>[];
+    final regex = RegExp(r'@(\w+)');
+    int last = 0;
+    for (final m in regex.allMatches(body)) {
+      if (m.start > last) {
+        spans.add(TextSpan(text: body.substring(last, m.start)));
+      }
+      final username = m.group(1)!;
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () async {
+          final results = await ref
+              .read(profileRepositoryProvider)
+              .searchUsers(username);
+          if (!mounted) return;
+          final match = results.firstWhere(
+            (u) => u.username.toLowerCase() == username.toLowerCase(),
+            orElse: () => results.first,
+          );
+          if (context.mounted) context.push('/profile/${match.id}');
+        };
+      _recognizers.add(recognizer);
+      spans.add(TextSpan(
+        text: m.group(0),
+        style: const TextStyle(color: Z.brand, fontWeight: FontWeight.w600),
+        recognizer: recognizer,
+      ));
+      last = m.end;
+    }
+    if (last < body.length) spans.add(TextSpan(text: body.substring(last)));
+    return TextSpan(children: spans);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final myId = ref.watch(currentUserProvider)?.id;
-    final isOwn = comment.userId == myId;
-    final avatarSize = isReply ? 22.0 : 30.0;
+    final isOwn = widget.comment.userId == myId;
+    final avatarSize = widget.isReply ? 22.0 : 30.0;
+
+    if (_builtForBody != widget.comment.body) {
+      _builtForBody = widget.comment.body;
+      _bodySpan = _buildBodySpan(widget.comment.body);
+    }
 
     return Padding(
       padding: EdgeInsets.only(
-        left: isReply ? 34 : 16,
+        left: widget.isReply ? 34 : 16,
         right: 16,
         top: 8,
         bottom: 8,
@@ -1063,7 +1135,7 @@ class _CommentTile extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
-            onTap: () => context.push('/profile/${comment.userId}'),
+            onTap: () => context.push('/profile/${widget.comment.userId}'),
             child: Container(
               width: avatarSize,
               height: avatarSize,
@@ -1072,16 +1144,17 @@ class _CommentTile extends ConsumerWidget {
                 color: Z.surface2,
               ),
               clipBehavior: Clip.antiAlias,
-              child: comment.avatarUrl != null
+              child: widget.comment.avatarUrl != null
                   ? CachedNetworkImage(
-                      imageUrl: comment.avatarUrl!, fit: BoxFit.cover)
+                      imageUrl: widget.comment.avatarUrl!, fit: BoxFit.cover)
                   : Center(
                       child: Text(
-                        comment.username != null && comment.username!.isNotEmpty
-                            ? comment.username![0].toUpperCase()
+                        widget.comment.username != null &&
+                                widget.comment.username!.isNotEmpty
+                            ? widget.comment.username![0].toUpperCase()
                             : '?',
                         style: TextStyle(
-                          fontSize: isReply ? 10 : 12,
+                          fontSize: widget.isReply ? 10 : 12,
                           fontWeight: FontWeight.bold,
                           color: Z.textMuted,
                         ),
@@ -1094,15 +1167,14 @@ class _CommentTile extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Inline: @user + body
                 Text.rich(
                   TextSpan(children: [
                     TextSpan(
-                      text: '@${comment.username ?? 'user'} ',
+                      text: '@${widget.comment.username ?? 'user'} ',
                       style: const TextStyle(
                           fontWeight: FontWeight.w600, color: Z.text),
                     ),
-                    ..._mentionSpan(comment.body, context, ref).children!,
+                    ..._bodySpan.children!,
                   ]),
                   style: const TextStyle(
                       fontSize: 13, height: 1.55, color: Z.text),
@@ -1110,15 +1182,15 @@ class _CommentTile extends ConsumerWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Text(_timeAgo(comment.createdAt),
+                    Text(_timeAgo(widget.comment.createdAt),
                         style: const TextStyle(
                             color: Z.textMuted, fontSize: 11)),
-                    if (!isReply) ...[
+                    if (!widget.isReply) ...[
                       const SizedBox(width: 14),
                       GestureDetector(
                         onTap: () => ref
-                            .read(replyTargetProvider(stampId).notifier)
-                            .state = comment,
+                            .read(replyTargetProvider(widget.stampId).notifier)
+                            .state = widget.comment,
                         child: const Text('Reply',
                             style: TextStyle(
                                 color: Z.textMuted,
@@ -1150,9 +1222,9 @@ class _CommentTile extends ConsumerWidget {
                           );
                           if (ok != true) return;
                           final repo = ref.read(commentRepositoryProvider);
-                          await repo.deleteComment(comment.id);
-                          ref.invalidate(stampCommentsProvider(stampId));
-                          ref.invalidate(stampDetailProvider(stampId));
+                          await repo.deleteComment(widget.comment.id);
+                          ref.invalidate(stampCommentsProvider(widget.stampId));
+                          ref.invalidate(stampDetailProvider(widget.stampId));
                         },
                         child: const Text('Delete',
                             style: TextStyle(
@@ -1169,34 +1241,6 @@ class _CommentTile extends ConsumerWidget {
         ],
       ),
     );
-  }
-
-  TextSpan _mentionSpan(String body, BuildContext context, WidgetRef ref) {
-    final spans = <InlineSpan>[];
-    final regex = RegExp(r'@(\w+)');
-    int last = 0;
-    for (final m in regex.allMatches(body)) {
-      if (m.start > last) spans.add(TextSpan(text: body.substring(last, m.start)));
-      final username = m.group(1)!;
-      spans.add(TextSpan(
-        text: m.group(0),
-        style: const TextStyle(color: Z.brand, fontWeight: FontWeight.w600),
-        recognizer: TapGestureRecognizer()
-          ..onTap = () async {
-            final results = await ref
-                .read(profileRepositoryProvider)
-                .searchUsers(username);
-            final match = results.firstWhere(
-              (u) => u.username.toLowerCase() == username.toLowerCase(),
-              orElse: () => results.first,
-            );
-            if (context.mounted) context.push('/profile/${match.id}');
-          },
-      ));
-      last = m.end;
-    }
-    if (last < body.length) spans.add(TextSpan(text: body.substring(last)));
-    return TextSpan(children: spans);
   }
 
   String _timeAgo(DateTime dt) {
