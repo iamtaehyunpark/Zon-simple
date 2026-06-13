@@ -905,9 +905,12 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     // check-in/stamp — notes must appear after visits in the timeline.
     final now = DateTime.now();
     var at = DateTime(_day.year, _day.month, _day.day, now.hour, now.minute, now.second);
-    final nonNotes = _items.where((i) => !i.isNote);
-    if (nonNotes.isNotEmpty && nonNotes.last.time.isAfter(at)) {
-      at = nonNotes.last.time.add(const Duration(minutes: 1));
+    final isToday = _day.year == now.year && _day.month == now.month && _day.day == now.day;
+    if (!isToday) {
+      final nonNotes = _items.where((i) => !i.isNote);
+      if (nonNotes.isNotEmpty && nonNotes.last.time.isAfter(at)) {
+        at = nonNotes.last.time.add(const Duration(minutes: 1));
+      }
     }
     await ref.read(timelineNoteRepositoryProvider).add(_day, text, at);
     _reload();
@@ -942,9 +945,12 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
     final now = DateTime.now();
     var at = DateTime(_day.year, _day.month, _day.day, now.hour, now.minute, now.second);
-    final nonNotes = _items.where((i) => !i.isNote);
-    if (nonNotes.isNotEmpty && nonNotes.last.time.isAfter(at)) {
-      at = nonNotes.last.time.add(const Duration(minutes: 1));
+    final isToday = _day.year == now.year && _day.month == now.month && _day.day == now.day;
+    if (!isToday) {
+      final nonNotes = _items.where((i) => !i.isNote);
+      if (nonNotes.isNotEmpty && nonNotes.last.time.isAfter(at)) {
+        at = nonNotes.last.time.add(const Duration(minutes: 1));
+      }
     }
     await ref.read(timelineNoteRepositoryProvider).add(
           _day,
@@ -1987,7 +1993,7 @@ class _AddNoteRowState extends State<_AddNoteRow> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(52, 4, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: !_active
           ? Row(
               children: [
@@ -1996,21 +2002,23 @@ class _AddNoteRowState extends State<_AddNoteRow> {
                     onTap: () => setState(() => _active = true),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                          horizontal: 14, vertical: 11),
                       decoration: BoxDecoration(
-                        border: Border.all(
-                            color: Z.outline2,
-                            style: BorderStyle.solid,
-                            width: 1.5),
-                        borderRadius: BorderRadius.circular(12),
+                        color: Z.surface2,
+                        borderRadius: Z.r12,
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(Icons.add, size: 18, color: Z.textMuted),
-                          SizedBox(width: 8),
-                          Text('Add a note',
-                              style:
-                                  TextStyle(fontSize: 14, color: Z.textMuted)),
+                          const Icon(Icons.add, size: 18, color: Z.textMuted),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Add a note',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              color: Z.textMuted,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -2123,12 +2131,12 @@ class _DiaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 0),
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
       child: Container(
         decoration: BoxDecoration(
           color: Z.surface1,
           border: Border.all(color: Z.outline),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: Z.r16,
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -2143,8 +2151,8 @@ class _DiaryCard extends StatelessWidget {
                 children: [
                   const Icon(Icons.menu_book, size: 20, color: Z.brand),
                   const SizedBox(width: 8),
-                  const Text('Diary',
-                      style: TextStyle(
+                  Text('Diary',
+                      style: GoogleFonts.poppins(
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: Z.text)),
@@ -2159,8 +2167,8 @@ class _DiaryCard extends StatelessWidget {
                             border: Border.all(color: Z.outline2),
                             borderRadius: BorderRadius.circular(9999)),
                         alignment: Alignment.center,
-                        child: const Text('Edit',
-                            style: TextStyle(
+                        child: Text('Edit',
+                            style: GoogleFonts.poppins(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 color: Z.textMuted)),
@@ -2195,7 +2203,7 @@ class _DiaryCard extends StatelessWidget {
                                   : diary.isNotEmpty
                                       ? 'Generated'
                                       : 'Generate',
-                              style: TextStyle(
+                              style: GoogleFonts.poppins(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
                                   color: diary.isNotEmpty
@@ -2234,16 +2242,16 @@ class _DiaryCard extends StatelessWidget {
                     )
                   : diary.isNotEmpty
                       ? Text(diary,
-                          style: const TextStyle(
+                          style: GoogleFonts.poppins(
                               fontSize: 14,
                               color: Z.text,
                               height: 1.7,
                               fontStyle: FontStyle.italic))
-                      : const Text(
+                      : Text(
                           'How was your day? Tap Generate to write your diary with AI.',
-                          style: TextStyle(
+                          style: GoogleFonts.poppins(
                               fontSize: 14,
-                              color: Z.textFaint,
+                              color: Z.textMuted,
                               height: 1.6,
                               fontStyle: FontStyle.italic)),
             ),
