@@ -445,16 +445,33 @@ class _MainShellState extends State<MainShell>
   @override
   Widget build(BuildContext context) {
     final active = _activeTab(context);
-    final bottomPad = MediaQuery.of(context).padding.bottom;
+    final mq = MediaQuery.of(context);
+    final bottomPad = mq.padding.bottom;
+    const barH = 83.0;
+
+    // The page sits above the tab bar, so the keyboard inset it sees must be
+    // reduced by the bar's height — otherwise its Scaffold over-lifts content
+    // by the (now keyboard-covered) bar. Clamped at 0 when no keyboard.
+    final pageInsets = mq.viewInsets.copyWith(
+      bottom: (mq.viewInsets.bottom - (barH + bottomPad))
+          .clamp(0.0, double.infinity),
+    );
 
     return Scaffold(
       backgroundColor: Z.surface0,
+      // Don't shrink the shell for the keyboard. The tab bar stays pinned at
+      // the bottom and the keyboard draws over it (rather than riding up above
+      // it); inner page Scaffolds still lift their own content via pageInsets.
+      resizeToAvoidBottomInset: false,
       body: Stack(
         children: [
           // Main screen content — leave room for tab bar (83 + system pad)
           Positioned.fill(
-            bottom: 83 + bottomPad,
-            child: widget.child,
+            bottom: barH + bottomPad,
+            child: MediaQuery(
+              data: mq.copyWith(viewInsets: pageInsets),
+              child: widget.child,
+            ),
           ),
 
           // FAB backdrop overlay

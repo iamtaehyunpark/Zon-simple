@@ -6,6 +6,7 @@ import '../../../data/repositories/profile_repository.dart';
 /// Present the user picker and return the chosen profile (or null).
 Future<UserProfile?> showUserPicker(BuildContext context) =>
     showModalBottomSheet<UserProfile>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       builder: (_) => const _UserPickerSheet(),
@@ -62,6 +63,7 @@ class _UserTagFieldState extends ConsumerState<UserTagField> {
 
   Future<void> _pick() async {
     final picked = await showModalBottomSheet<UserProfile>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       builder: (_) => const _UserPickerSheet(),

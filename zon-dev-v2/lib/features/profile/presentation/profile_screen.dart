@@ -217,6 +217,7 @@ class ProfileScreen extends ConsumerWidget {
                                     label: 'Edit',
                                     onTap: () {
                                       showModalBottomSheet<void>(
+                                        useRootNavigator: true,
                                         context: context,
                                         isScrollControlled: true,
                                         backgroundColor: Z.surface1,
@@ -400,6 +401,7 @@ class _SocialButtonsState extends ConsumerState<_SocialButtons> {
 
   void _showRespondMenu(BuildContext context, WidgetRef ref) {
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(

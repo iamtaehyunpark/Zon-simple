@@ -44,8 +44,15 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry>
 
   // Drag-to-dismiss state for the bottom sheet.
   double _sheetDrag = 0;
-  late final AnimationController _snapCtrl =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 220));
+  // Created lazily on first drag — but as a nullable, NOT a `late final` with an
+  // initializer. A `late final` would lazily construct in dispose() (via
+  // `_snapCtrl.dispose()`), and constructing an AnimationController calls
+  // createTicker() → an inherited-widget lookup on a defunct element, which
+  // throws and aborts dispose() before super.dispose(), leaking the Riverpod
+  // subscription and crashing every later provider mutation.
+  AnimationController? _snapCtrl;
+  AnimationController get _snap => _snapCtrl ??= AnimationController(
+      vsync: this, duration: const Duration(milliseconds: 220));
 
   void _dismiss() {
     ref.read(checkinNotifierProvider.notifier).reset();
@@ -53,7 +60,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry>
   }
 
   void _onSheetDragUpdate(DragUpdateDetails d) {
-    if (_snapCtrl.isAnimating) _snapCtrl.stop();
+    if (_snapCtrl?.isAnimating ?? false) _snapCtrl!.stop();
     setState(() => _sheetDrag = (_sheetDrag + d.delta.dy).clamp(0.0, 1000.0));
   }
 
@@ -64,10 +71,10 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry>
     } else {
       // Animate the sheet snapping back to rest.
       final anim = Tween(begin: _sheetDrag, end: 0.0).animate(
-          CurvedAnimation(parent: _snapCtrl, curve: Curves.easeOut));
+          CurvedAnimation(parent: _snap, curve: Curves.easeOut));
       void listener() => setState(() => _sheetDrag = anim.value);
       anim.addListener(listener);
-      _snapCtrl
+      _snap
         ..reset()
         ..forward().whenComplete(() => anim.removeListener(listener));
     }
@@ -77,6 +84,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       if (widget.fromCheckInId != null) {
         _startFromCheckIn(widget.fromCheckInId!);
       } else {
@@ -113,7 +121,7 @@ class _CheckinEntryState extends ConsumerState<CheckinEntry>
   @override
   void dispose() {
     _searchCtrl.dispose();
-    _snapCtrl.dispose();
+    _snapCtrl?.dispose();
     super.dispose();
   }
 

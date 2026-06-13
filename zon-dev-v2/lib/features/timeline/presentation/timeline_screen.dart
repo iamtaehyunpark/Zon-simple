@@ -276,6 +276,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
   Future<void> _pickDate() async {
     final picked = await showModalBottomSheet<DateTime>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       builder: (_) => _CalendarSheet(initial: _day),
@@ -673,6 +674,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     final ci = res.fold((_) => null, (c) => c);
     if (ci == null || !mounted) return;
     await showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       builder: (ctx) => _CheckInDetailSheet(
         checkIn: ci,
@@ -704,6 +706,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
         await ref.read(checkInRepositoryProvider).getCheckInPhotos(ci.id);
     if (!mounted) return;
     final result = await showModalBottomSheet<_CheckInEdit>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       builder: (_) => _EditCheckInSheet(checkIn: ci, existing: existing),
@@ -745,6 +748,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     }
 
     final into = await showModalBottomSheet<CheckIn>(
+      useRootNavigator: true,
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
@@ -811,20 +815,32 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   }
 
   Future<void> _mergeNote(_TlItem note) async {
-    final candidates = (_bundle?.checkIns ?? [])
+    // A note can merge into any other visible node — a check-in or another
+    // note — appending its text to the target's body.
+    final candidates = _items
+        .where((i) =>
+            i.id != note.id && (i.kind == _NodeKind.checkIn || i.isNote))
         .toList()
-      ..sort((a, b) => a.visitedAt.compareTo(b.visitedAt));
+      ..sort((a, b) => a.time.compareTo(b.time));
 
     if (candidates.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No check-ins today to merge into')),
+          const SnackBar(content: Text('Nothing else today to merge into')),
         );
       }
       return;
     }
 
-    final into = await showModalBottomSheet<CheckIn>(
+    String labelFor(_TlItem c) {
+      if (!c.isNote) return c.name;
+      final body = c.text?.trim() ?? '';
+      if (body.isNotEmpty) return body;
+      return c.isVoice ? 'Voice note' : 'Note';
+    }
+
+    final target = await showModalBottomSheet<_TlItem>(
+      useRootNavigator: true,
       context: context,
       builder: (ctx) => SafeArea(
         child: Column(
@@ -837,30 +853,46 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
                   style: Theme.of(ctx).textTheme.titleMedium),
             ),
             const Divider(height: 1),
-            for (final c in candidates)
-              ListTile(
-                leading: const Icon(Icons.pin_drop_outlined),
-                title: Text(c.placeName),
-                subtitle: Text(DateFormat('h:mm a').format(c.visitedAt)),
-                onTap: () => Navigator.pop(ctx, c),
+            // Scrolls when there are more candidates than fit the sheet,
+            // instead of overflowing the Column.
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 8),
+                children: [
+                  for (final c in candidates)
+                    ListTile(
+                      leading: Icon(c.isNote
+                          ? (c.isVoice
+                              ? Icons.mic_none
+                              : Icons.sticky_note_2_outlined)
+                          : Icons.pin_drop_outlined),
+                      title: Text(labelFor(c),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      subtitle: Text(DateFormat('h:mm a').format(c.time)),
+                      onTap: () => Navigator.pop(ctx, c),
+                    ),
+                ],
               ),
-            const SizedBox(height: 8),
+            ),
           ],
         ),
       ),
     );
-    if (into == null || !mounted) return;
+    if (target == null || !mounted) return;
 
     final noteText = note.text?.trim() ?? '';
-    final existing = into.note?.trim() ?? '';
+    final existing = target.text?.trim() ?? '';
     final merged = existing.isEmpty ? noteText : '$existing\n$noteText';
 
+    final targetLabel =
+        target.isNote ? (target.isVoice ? 'the voice note' : 'the note') : '"${target.name}"';
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Merge note?'),
         content: Text(
-            'This note\'s text will be added to "${into.placeName}" and the note will be deleted.'),
+            'This note\'s text will be added to $targetLabel and the note will be deleted.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -873,9 +905,14 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
     );
     if (ok != true || !mounted) return;
 
-    final ciRepo = ref.read(checkInRepositoryProvider);
     final noteRepo = ref.read(timelineNoteRepositoryProvider);
-    await ciRepo.updateCheckIn(into.id, {'note': merged});
+    if (target.isNote) {
+      await noteRepo.update(target.id, merged);
+    } else {
+      await ref
+          .read(checkInRepositoryProvider)
+          .updateCheckIn(target.id, {'note': merged});
+    }
     await noteRepo.delete(note.id);
 
     setState(() => _items.removeWhere((i) => i.id == note.id));
@@ -915,6 +952,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
   // rules) but additionally carries a playable audio bar.
   Future<void> _addVoiceMemo() async {
     final result = await showModalBottomSheet<_VoiceMemoResult>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -958,6 +996,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
   Future<void> _editDiary() async {
     final result = await showModalBottomSheet<String>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       builder: (_) => _EditDiarySheet(initial: _diary, day: _day),
@@ -1052,6 +1091,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
       // Pre-fill the edit sheet with the generated text; user saves or discards.
       final saved = await showModalBottomSheet<String>(
+        useRootNavigator: true,
         context: context,
         isScrollControlled: true,
         builder: (_) => _EditDiarySheet(initial: diary, day: _day),

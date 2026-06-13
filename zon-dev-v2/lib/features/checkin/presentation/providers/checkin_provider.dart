@@ -73,8 +73,15 @@ class CheckinNotifier extends _$CheckinNotifier {
   DateTime? _visitedAt;
   String? _initialNote;
 
+  // True once the provider is disposed (sheet popped). Writing `state` after
+  // that throws, so async continuations bail out on it.
+  bool _disposed = false;
+
   @override
-  CheckinState build() => const CheckinState.idle();
+  CheckinState build() {
+    ref.onDispose(() => _disposed = true);
+    return const CheckinState.idle();
+  }
 
   Future<void> startCheckin({
     double? lat,
@@ -93,6 +100,7 @@ class CheckinNotifier extends _$CheckinNotifier {
 
       if (lat == null || lng == null) {
         final position = await GpsService().currentPosition();
+        if (_disposed) return; // sheet dismissed during GPS lookup
         if (position == null) {
           state = const CheckinState.error('Could not get your location');
           return;
@@ -103,6 +111,7 @@ class CheckinNotifier extends _$CheckinNotifier {
 
       await selectPlace(resolvedLat, resolvedLng);
     } catch (e) {
+      if (_disposed) return;
       state = CheckinState.error(e.toString());
     }
   }
@@ -113,6 +122,7 @@ class CheckinNotifier extends _$CheckinNotifier {
       repo.nearbyStamps(lat, lng),
       _fetchSuggestions(lat, lng),
     ).wait;
+    if (_disposed) return; // sheet dismissed while results were loading
     final nearby = nearbyResult.getOrElse((_) => []);
 
     state = CheckinState.placeSelected(
@@ -225,6 +235,7 @@ class CheckinNotifier extends _$CheckinNotifier {
             photoUrls: urls,
             visitedAt: _visitedAt,
           );
+      if (_disposed) return;
       res.fold(
         (err) => state = CheckinState.error(err.message),
         (ci) {
@@ -259,6 +270,7 @@ class CheckinNotifier extends _$CheckinNotifier {
           sensoryTags: d.sensoryTags,
           taggedUserIds: d.taggedUserIds,
         );
+        if (_disposed) return;
         _onPromoted(promo);
         return;
       }
@@ -276,6 +288,7 @@ class CheckinNotifier extends _$CheckinNotifier {
         ),
         photoUrls: urls,
       );
+      if (_disposed) return;
       await ciRes.fold(
         (err) async => state = CheckinState.error(err.message),
         (ci) async {
@@ -286,6 +299,7 @@ class CheckinNotifier extends _$CheckinNotifier {
             sensoryTags: d.sensoryTags,
             taggedUserIds: d.taggedUserIds,
           );
+          if (_disposed) return;
           _onPromoted(promo);
         },
       );

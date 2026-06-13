@@ -447,6 +447,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _showEditProfile() async {
     await showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       isScrollControlled: true,
       backgroundColor: Z.surface1,

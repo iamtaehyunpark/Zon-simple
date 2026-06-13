@@ -684,6 +684,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           _find(_followedStamps, (s) => s.id == id);
       if (stamp == null) return;
       showModalBottomSheet<void>(
+        useRootNavigator: true,
         context: context,
         builder: (ctx) => _StampSheet(stamp: stamp),
       );
@@ -695,6 +696,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       if (checkIn == null) return;
       final isMine = mine != null;
       showModalBottomSheet<void>(
+        useRootNavigator: true,
         context: context,
         builder: (ctx) => _CheckInSheet(
           checkIn: checkIn,
@@ -714,6 +716,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     final fl = _find(_friendLocations, (f) => f.userId == userId);
     if (fl == null) return;
     showModalBottomSheet<void>(
+      useRootNavigator: true,
       context: context,
       builder: (ctx) => _FriendLocationSheet(
         location: fl,
