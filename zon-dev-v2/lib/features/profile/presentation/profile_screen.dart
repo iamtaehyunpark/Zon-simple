@@ -510,9 +510,20 @@ class _SocialButtonsState extends ConsumerState<_SocialButtons> {
         if (fs == FriendState.friends)
           PopupMenuButton<_FriendAction>(
             enabled: !_friendLoading,
-            onSelected: (a) {
+            onSelected: (a) async {
               if (a == _FriendAction.unfriend) {
-                _run(notifier.unfriend, 'Failed to unfriend', friend: true);
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Unfriend?'),
+                    content: const Text('You will no longer share live location with each other.'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                      TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Unfriend', style: TextStyle(color: Z.error))),
+                    ],
+                  ),
+                );
+                if (ok == true) _run(notifier.unfriend, 'Failed to unfriend', friend: true);
               }
             },
             itemBuilder: (_) => [
@@ -604,8 +615,24 @@ class _SocialButtonsState extends ConsumerState<_SocialButtons> {
         GestureDetector(
           onTap: _followLoading
               ? null
-              : () => _run(() => notifier.toggleFollow(widget.targetId),
-                  'Failed to update follow status', friend: false),
+              : () async {
+                  if (fw == FollowState.following) {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Unfollow?'),
+                        content: const Text('You will stop seeing their stamps in your feed.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Unfollow', style: TextStyle(color: Z.error))),
+                        ],
+                      ),
+                    );
+                    if (ok != true) return;
+                  }
+                  _run(() => notifier.toggleFollow(widget.targetId),
+                      'Failed to update follow status', friend: false);
+                },
           child: Container(
             height: 34,
             padding: const EdgeInsets.symmetric(horizontal: 14),

@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart' as geo;
@@ -14,12 +15,12 @@ import '../../../data/repositories/profile_repository.dart';
 import '../../../data/models/stamp.dart';
 import '../../../data/models/user_profile.dart';
 import '../../../shared/widgets/app_states.dart';
+import '../../../shared/widgets/full_screen_image_viewer.dart';
 import '../../../shared/widgets/mini_map.dart';
 import 'feed_screen.dart' show StampCard;
 import 'providers/feed_provider.dart';
 import '../../profile/presentation/providers/profile_provider.dart';
 import '../../../shared/utils/format.dart';
-import '../../checkin/presentation/user_tag_field.dart' show showUserPicker;
 
 part 'stamp_detail_screen.g.dart';
 
@@ -102,7 +103,7 @@ class _StampDetailBody extends ConsumerStatefulWidget {
 class _StampDetailBodyState extends ConsumerState<_StampDetailBody> {
   PageController? _gallery;
   int _page = 0;
-  bool _finalizedInitial = false;
+  bool _showingPhotos = true;
 
   Stamp get stamp => widget.stamp;
   String get stampId => widget.stampId;
@@ -113,29 +114,8 @@ class _StampDetailBodyState extends ConsumerState<_StampDetailBody> {
     super.dispose();
   }
 
-  // Build the page controller so the gallery opens on the first photo (index 1)
-  // per the v3 spec. Photos may resolve after the first frame; once they do,
-  // jump to the first photo if the user is still on the map slide. We reuse the
-  // single controller (no dispose/recreate) to avoid touching a controller the
-  // previous frame's PageView still holds.
-  void _ensureController(int slideCount, bool loaded) {
-    if (_gallery == null) {
-      final initial = slideCount > 1 ? 1 : 0;
-      _page = initial;
-      _gallery = PageController(initialPage: initial);
-      _finalizedInitial = loaded;
-      return;
-    }
-    if (!_finalizedInitial && loaded) {
-      _finalizedInitial = true;
-      if (_page == 0 && slideCount > 1) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && (_gallery?.hasClients ?? false) && _page == 0) {
-            _gallery!.jumpToPage(1);
-          }
-        });
-      }
-    }
+  void _ensureController() {
+    _gallery ??= PageController(initialPage: 0);
   }
 
   String? _subtitle() {
@@ -160,8 +140,7 @@ class _StampDetailBodyState extends ConsumerState<_StampDetailBody> {
     final isOwner = stamp.userId == ref.watch(currentUserProvider)?.id;
     final commentsAsync = ref.watch(stampCommentsProvider(stampId));
 
-    final slideCount = 1 + photoUrls.length; // map slide + photos
-    _ensureController(slideCount, photosAsync.hasValue);
+    _ensureController();
 
     return Column(
       children: [
@@ -260,13 +239,14 @@ class _StampDetailBodyState extends ConsumerState<_StampDetailBody> {
         ),
         const Divider(height: 0.5, color: Z.outline),
 
-        // ── Everything scrolls: gallery → actions → comments → more ──
+        // ── Gallery sits outside the scroll view so the map gets raw touches ──
+        Flexible(child: _buildGallery(photoUrls)),
+
+        // ── Scrollable content: actions → comments → more ─────────────────
         Expanded(
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
-              // Gallery
-              _buildGallery(photoUrls),
 
               // Actions + caption
               Container(
@@ -439,11 +419,6 @@ class _StampDetailBodyState extends ConsumerState<_StampDetailBody> {
                   );
                 },
               ),
-              Container(
-                color: Z.surface1,
-                child: _CommentInput(stampId: stampId),
-              ),
-
               // More from this place
               if (stamp.externalPlaceId != null)
                 _MoreFromPlace(
@@ -453,6 +428,16 @@ class _StampDetailBodyState extends ConsumerState<_StampDetailBody> {
                 ),
               const SizedBox(height: 24),
             ],
+          ),
+        ),
+
+        // ── Fixed comment input footer ───────────────────────
+        const Divider(height: 1, color: Z.outline),
+        SafeArea(
+          top: false,
+          child: Container(
+            color: Z.surface1,
+            child: _CommentInput(stampId: stampId),
           ),
         ),
       ],
@@ -488,30 +473,40 @@ class _StampDetailBodyState extends ConsumerState<_StampDetailBody> {
     }
   }
 
-  // ── Gallery: map slide (0) + photo slides ──────────────────
+  // ── Gallery: interactive map base + photo layer that slides in on top ─────
   Widget _buildGallery(List<String> photoUrls) {
     const h = 348.0;
-    final slides = <Widget>[
-      // Slide 0 — map
-      Stack(
+    const pillDecor = BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.all(Radius.circular(9999)),
+      boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 10, offset: Offset(0, 3))],
+    );
+
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxHeight: h),
+      child: Stack(
         fit: StackFit.expand,
         children: [
+          // ── Map — always rendered, fully interactive ───────────────
           MiniMap(
             lat: stamp.lat,
             lng: stamp.lng,
             zoom: 15.5,
+            interactive: true,
             markers: [
               MiniMapMarker(
-                  id: stamp.id,
-                  lat: stamp.lat,
-                  lng: stamp.lng,
-                  color: Z.brand.toARGB32(),
-                  radius: 8),
+                id: stamp.id,
+                lat: stamp.lat,
+                lng: stamp.lng,
+                color: Z.brand.toARGB32(),
+                radius: 8,
+              ),
             ],
           ),
+          // Place name chip
           Positioned(
             left: 16,
-            bottom: 28,
+            bottom: 20,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -525,65 +520,117 @@ class _StampDetailBodyState extends ConsumerState<_StampDetailBody> {
                   const SizedBox(width: 5),
                   Text(stamp.placeName,
                       style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Z.text)),
+                          fontSize: 11, fontWeight: FontWeight.w600, color: Z.text)),
                 ],
               ),
             ),
           ),
-        ],
-      ),
-      // Photo slides
-      for (final url in photoUrls)
-        CachedNetworkImage(
-          imageUrl: url,
-          fit: BoxFit.cover,
-          placeholder: (_, __) => const ColoredBox(color: Z.surface2),
-          errorWidget: (_, __, ___) => const ColoredBox(color: Z.surface2),
-        ),
-    ];
-
-    return SizedBox(
-      height: h,
-      child: Stack(
-        children: [
-          PageView(
-            controller: _gallery,
-            onPageChanged: (i) => setState(() => _page = i),
-            children: slides,
-          ),
-          // Indicators
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 10,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Map = teardrop pin indicator
-                Opacity(
-                  opacity: _page == 0 ? 1.0 : 0.38,
-                  child: const Icon(Icons.location_on,
-                      size: 13, color: Colors.white),
+          // Photos → button (fades out when photos are showing)
+          if (photoUrls.isNotEmpty)
+            Positioned(
+              right: 16,
+              bottom: 20,
+              child: AnimatedOpacity(
+                opacity: _showingPhotos ? 0.0 : 1.0,
+                duration: const Duration(milliseconds: 200),
+                child: IgnorePointer(
+                  ignoring: _showingPhotos,
+                  child: GestureDetector(
+                    onTap: () => setState(() { _showingPhotos = true; _page = 0; }),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: pillDecor,
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text('Photos',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Z.text)),
+                          SizedBox(width: 4),
+                          Icon(Icons.chevron_right, size: 18, color: Z.text),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-                for (int i = 0; i < photoUrls.length; i++) ...[
-                  const SizedBox(width: 6),
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 220),
-                    width: _page == i + 1 ? 18 : 6,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: _page == i + 1
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.4),
-                      borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+
+          // ── Photo layer — slides in from the right ─────────────────
+          if (photoUrls.isNotEmpty)
+            AnimatedSlide(
+              offset: _showingPhotos ? Offset.zero : const Offset(1.0, 0.0),
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Photo PageView
+                  PageView(
+                    controller: _gallery,
+                    onPageChanged: (i) => setState(() => _page = i),
+                    children: [
+                      for (final (i, url) in photoUrls.indexed)
+                        GestureDetector(
+                          onTap: () => FullScreenImageViewer.show(context, photoUrls, index: i),
+                          child: CachedNetworkImage(
+                            imageUrl: url,
+                            fit: BoxFit.cover,
+                            placeholder: (_, __) => const ColoredBox(color: Z.surface2),
+                            errorWidget: (_, __, ___) => const ColoredBox(color: Z.surface2),
+                          ),
+                        ),
+                    ],
+                  ),
+                  // Dot indicators
+                  if (photoUrls.length > 1)
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 10,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          for (int i = 0; i < photoUrls.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 6),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 220),
+                              width: _page == i ? 18 : 6,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: _page == i
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.4),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  // ← Map button
+                  Positioned(
+                    left: 16,
+                    bottom: 20,
+                    child: GestureDetector(
+                      onTap: () => setState(() => _showingPhotos = false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: pillDecor,
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.chevron_left, size: 18, color: Z.text),
+                            SizedBox(width: 4),
+                            Text('Map',
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Z.text)),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],
-              ],
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -695,8 +742,20 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
   final Set<String> _mentionIds = {};
   bool _sending = false;
 
+  // Inline @mention state
+  String? _mentionQuery; // non-null while user is typing after @
+  List<UserProfile> _mentionSuggestions = [];
+  bool _mentionLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl.addListener(_onTextChanged);
+  }
+
   @override
   void dispose() {
+    _ctrl.removeListener(_onTextChanged);
     _ctrl.dispose();
     super.dispose();
   }
@@ -704,16 +763,63 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
   void _clearReply() =>
       ref.read(replyTargetProvider(widget.stampId).notifier).state = null;
 
-  Future<void> _addMention() async {
-    final user = await showUserPicker(context);
-    if (user == null) return;
+  void _onTextChanged() {
+    final text = _ctrl.text;
+    final cursor = _ctrl.selection.baseOffset;
+    if (cursor < 0) return;
+
+    // Find the @ token the cursor is currently inside
+    final before = text.substring(0, cursor);
+    final match = RegExp(r'@(\w*)$').firstMatch(before);
+    if (match != null) {
+      final query = match.group(1)!;
+      if (_mentionQuery != query) {
+        _mentionQuery = query;
+        _fetchMentionSuggestions(query);
+      }
+    } else if (_mentionQuery != null) {
+      setState(() {
+        _mentionQuery = null;
+        _mentionSuggestions = [];
+      });
+    }
+  }
+
+  Future<void> _fetchMentionSuggestions(String query) async {
+    setState(() => _mentionLoading = true);
+    try {
+      final results = await ref
+          .read(profileRepositoryProvider)
+          .searchUsers(query.isEmpty ? ' ' : query);
+      if (mounted && _mentionQuery == query) {
+        setState(() {
+          _mentionSuggestions = results.take(5).toList();
+          _mentionLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _mentionLoading = false);
+    }
+  }
+
+  void _pickMention(UserProfile user) {
     _mentionIds.add(user.id);
-    final t = _ctrl.text;
-    final sep = t.isEmpty || t.endsWith(' ') ? '' : ' ';
-    _ctrl.text = '$t$sep@${user.username} ';
+    final text = _ctrl.text;
+    final cursor = _ctrl.selection.baseOffset.clamp(0, text.length);
+    final before = text.substring(0, cursor);
+    // Replace the trailing @query with @username + space
+    final replaced = before.replaceAllMapped(
+      RegExp(r'@\w*$'),
+      (_) => '@${user.username} ',
+    );
+    final after = text.substring(cursor);
+    _ctrl.text = replaced + after;
     _ctrl.selection =
-        TextSelection.fromPosition(TextPosition(offset: _ctrl.text.length));
-    setState(() {});
+        TextSelection.fromPosition(TextPosition(offset: replaced.length));
+    setState(() {
+      _mentionQuery = null;
+      _mentionSuggestions = [];
+    });
   }
 
   Future<void> _submit() async {
@@ -747,6 +853,7 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
         _ctrl.clear();
         _mentionIds.clear();
         _clearReply();
+        FocusManager.instance.primaryFocus?.unfocus();
         ref.invalidate(stampCommentsProvider(widget.stampId));
         ref.invalidate(stampDetailProvider(widget.stampId));
       },
@@ -758,16 +865,80 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
   Widget build(BuildContext context) {
     final replyTarget = ref.watch(replyTargetProvider(widget.stampId));
     final myId = ref.watch(currentUserProvider)?.id;
-    final myProfile = myId != null ? ref.watch(profileNotifierProvider(myId)).valueOrNull : null;
+    final myProfile = myId != null
+        ? ref.watch(profileNotifierProvider(myId)).valueOrNull
+        : null;
 
     return Padding(
-      padding: EdgeInsets.fromLTRB(
-          16, 8, 16, MediaQuery.of(context).padding.bottom + 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
         key: ValueKey('comment-input-${widget.stampId}'),
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // @mention suggestion list
+          if (_mentionQuery != null && (_mentionLoading || _mentionSuggestions.isNotEmpty))
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              decoration: BoxDecoration(
+                color: Z.surface1,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Z.outline),
+                boxShadow: const [
+                  BoxShadow(color: Color(0x14000000), blurRadius: 8, offset: Offset(0, -2)),
+                ],
+              ),
+              child: _mentionLoading && _mentionSuggestions.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Z.brand))),
+                    )
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: _mentionSuggestions.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1, color: Z.outline),
+                      itemBuilder: (_, i) {
+                        final u = _mentionSuggestions[i];
+                        return InkWell(
+                          onTap: () => _pickMention(u),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 14,
+                                  backgroundColor: Z.surface2,
+                                  backgroundImage: u.avatarUrl != null
+                                      ? CachedNetworkImageProvider(u.avatarUrl!)
+                                      : null,
+                                  child: u.avatarUrl == null
+                                      ? Text(u.username.isNotEmpty ? u.username[0].toUpperCase() : '?',
+                                          style: const TextStyle(fontSize: 11, color: Z.textMuted))
+                                      : null,
+                                ),
+                                const SizedBox(width: 10),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text('@${u.username}',
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Z.text)),
+                                    if (u.displayName != null && u.displayName!.isNotEmpty)
+                                      Text(u.displayName!,
+                                          style: const TextStyle(fontSize: 11, color: Z.textMuted)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+
+          // Reply banner
           if (replyTarget != null)
             Container(
               margin: const EdgeInsets.only(bottom: 8),
@@ -791,36 +962,27 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
                 ],
               ),
             ),
+
+          // Input row
           Row(
             children: [
-              // Current user avatar (34px)
               Container(
                 width: 34,
                 height: 34,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Z.surface2,
-                ),
+                decoration: const BoxDecoration(shape: BoxShape.circle, color: Z.surface2),
                 clipBehavior: Clip.antiAlias,
                 child: myProfile?.avatarUrl != null
-                    ? CachedNetworkImage(
-                        imageUrl: myProfile!.avatarUrl!,
-                        fit: BoxFit.cover,
-                      )
+                    ? CachedNetworkImage(imageUrl: myProfile!.avatarUrl!, fit: BoxFit.cover)
                     : Center(
                         child: Text(
                           myProfile?.username.isNotEmpty == true
                               ? myProfile!.username[0].toUpperCase()
                               : '?',
-                          style: const TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: Z.textMuted),
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Z.textMuted),
                         ),
                       ),
               ),
               const SizedBox(width: 10),
-              // Pill Input Box
               Expanded(
                 child: TextField(
                   controller: _ctrl,
@@ -829,11 +991,6 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
                     hintText: 'Add a comment...',
                     filled: true,
                     fillColor: Z.surface0,
-                    prefixIcon: IconButton(
-                      icon: const Icon(Icons.alternate_email, size: 18, color: Z.textMuted),
-                      onPressed: _addMention,
-                      padding: EdgeInsets.zero,
-                    ),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(24),
                       borderSide: const BorderSide(color: Z.outline),
@@ -846,8 +1003,7 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
                       borderRadius: BorderRadius.circular(24),
                       borderSide: const BorderSide(color: Z.brand, width: 1.5),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 8),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   ),
                   textInputAction: TextInputAction.send,
                   onSubmitted: (_) => _submit(),
@@ -863,10 +1019,7 @@ class _CommentInputState extends ConsumerState<_CommentInput> {
                   : Container(
                       width: 38,
                       height: 38,
-                      decoration: const BoxDecoration(
-                        color: Z.brandSoft,
-                        shape: BoxShape.circle,
-                      ),
+                      decoration: const BoxDecoration(color: Z.brandSoft, shape: BoxShape.circle),
                       child: IconButton(
                         icon: const Icon(Icons.send, size: 18, color: Z.brand),
                         onPressed: _submit,
@@ -949,7 +1102,7 @@ class _CommentTile extends ConsumerWidget {
                       style: const TextStyle(
                           fontWeight: FontWeight.w600, color: Z.text),
                     ),
-                    ..._mentionSpan(comment.body).children!,
+                    ..._mentionSpan(comment.body, context, ref).children!,
                   ]),
                   style: const TextStyle(
                       fontSize: 13, height: 1.55, color: Z.text),
@@ -977,6 +1130,25 @@ class _CommentTile extends ConsumerWidget {
                       const SizedBox(width: 14),
                       GestureDetector(
                         onTap: () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Delete comment?'),
+                              content: const Text('This cannot be undone.'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Delete',
+                                      style: TextStyle(color: Z.error)),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (ok != true) return;
                           final repo = ref.read(commentRepositoryProvider);
                           await repo.deleteComment(comment.id);
                           ref.invalidate(stampCommentsProvider(stampId));
@@ -999,15 +1171,27 @@ class _CommentTile extends ConsumerWidget {
     );
   }
 
-  static TextSpan _mentionSpan(String body) {
+  TextSpan _mentionSpan(String body, BuildContext context, WidgetRef ref) {
     final spans = <InlineSpan>[];
     final regex = RegExp(r'@(\w+)');
     int last = 0;
     for (final m in regex.allMatches(body)) {
       if (m.start > last) spans.add(TextSpan(text: body.substring(last, m.start)));
+      final username = m.group(1)!;
       spans.add(TextSpan(
         text: m.group(0),
         style: const TextStyle(color: Z.brand, fontWeight: FontWeight.w600),
+        recognizer: TapGestureRecognizer()
+          ..onTap = () async {
+            final results = await ref
+                .read(profileRepositoryProvider)
+                .searchUsers(username);
+            final match = results.firstWhere(
+              (u) => u.username.toLowerCase() == username.toLowerCase(),
+              orElse: () => results.first,
+            );
+            if (context.mounted) context.push('/profile/${match.id}');
+          },
       ));
       last = m.end;
     }

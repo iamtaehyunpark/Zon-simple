@@ -1362,6 +1362,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 
                         Widget child = _TimelineNode(
                           item: item,
+                          isFirst: i == 0,
                           isLast: i == _items.length - 1,
                           isSelected: _selectedId == item.id,
                           isExpanded: isEditing,
@@ -1491,6 +1492,7 @@ class _TimelineScreenState extends ConsumerState<TimelineScreen> {
 // ── Timeline node — zon-cards.jsx TimelineNode ────────────────────────────────
 class _TimelineNode extends StatelessWidget {
   final _TlItem item;
+  final bool isFirst;
   final bool isLast;
   final bool isSelected;
   final bool isExpanded;
@@ -1508,6 +1510,7 @@ class _TimelineNode extends StatelessWidget {
 
   const _TimelineNode({
     required this.item,
+    required this.isFirst,
     required this.isLast,
     required this.isSelected,
     required this.isExpanded,
@@ -1574,36 +1577,51 @@ class _TimelineNode extends StatelessWidget {
       onLongPress: onLongPress,
       child: Container(
         color: isSelected ? Z.brandSoft : Colors.transparent,
-        child: Row(
-          key: itemKey,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            // Left rail — 52px wide
-            SizedBox(
-              width: 52,
-              child: Column(
-                children: [
-                  const SizedBox(height: 14),
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: meta.soft,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: meta.color, width: 2),
-                    ),
-                    child: Icon(meta.icon, size: 14, color: meta.color),
-                  ),
-                  if (!isLast)
-                    Container(
-                      width: 2,
-                      height: 40,
-                      color: Z.outline,
-                      margin: const EdgeInsets.only(top: 4),
-                    ),
-                ],
+            if (!isFirst)
+              Positioned(
+                top: 0,
+                height: 14,
+                left: 25,
+                child: Container(
+                  width: 2,
+                  color: Z.outline,
+                ),
               ),
-            ),
+            if (!isLast)
+              Positioned(
+                top: 42,
+                bottom: 0,
+                left: 25,
+                child: Container(
+                  width: 2,
+                  color: Z.outline,
+                ),
+              ),
+            Row(
+              key: itemKey,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left rail — 52px wide
+                SizedBox(
+                  width: 52,
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 14),
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: meta.soft,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: meta.color, width: 2),
+                        ),
+                        child: Icon(meta.icon, size: 14, color: meta.color),
+                      ),
+                    ],
+                  ),
+                ),
             // Content
             Expanded(
               child: Padding(
@@ -1703,8 +1721,10 @@ class _TimelineNode extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
+      ],
+    ),
+  ),
+);
   }
 }
 

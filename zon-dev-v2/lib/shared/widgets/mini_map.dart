@@ -40,6 +40,11 @@ class MiniMap extends StatefulWidget {
   final List<List<double>>? hull; // [lng,lat] pairs — convex hull polygon (open ring)
   final int hullColor;
   final bool interactive;
+
+  /// Enables two-finger pan + pinch-zoom while keeping single-finger scroll
+  /// disabled, so the widget can sit inside a PageView without conflict.
+  final bool twoFingerInteractive;
+
   final void Function(MapboxMap map)? onMapReady;
 
   /// Called whenever the camera moves (pan/zoom). Useful for positioning
@@ -57,6 +62,7 @@ class MiniMap extends StatefulWidget {
     this.hull,
     this.hullColor = 0xFF8B6EC4,
     this.interactive = false,
+    this.twoFingerInteractive = false,
     this.onMapReady,
     this.onCameraChanged,
   });
@@ -81,7 +87,20 @@ class _MiniMapState extends State<MiniMap> {
 
   Future<void> _onCreated(MapboxMap map) async {
     _map = map;
-    if (!widget.interactive) {
+    if (widget.twoFingerInteractive) {
+      try {
+        await map.gestures.updateSettings(GesturesSettings(
+          scrollEnabled: false,
+          pitchEnabled: false,
+          rotateEnabled: false,
+          doubleTapToZoomInEnabled: false,
+          quickZoomEnabled: false,
+          pinchToZoomEnabled: true,
+          pinchPanEnabled: true,
+          doubleTouchToZoomOutEnabled: true,
+        ));
+      } catch (_) {}
+    } else if (!widget.interactive) {
       try {
         await map.gestures.updateSettings(GesturesSettings(
           rotateEnabled: false,
