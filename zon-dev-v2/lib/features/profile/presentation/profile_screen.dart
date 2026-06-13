@@ -241,9 +241,14 @@ class ProfileScreen extends ConsumerWidget {
                         IntrinsicHeight(
                           child: Row(
                             children: [
-                              _StatItem(
+                              Builder(
+                                builder: (builderCtx) => _StatItem(
                                   label: 'Stamps',
-                                  value: profile.stampCount),
+                                  value: profile.stampCount,
+                                  onTap: () => DefaultTabController.of(builderCtx)
+                                      .animateTo(1),
+                                ),
+                              ),
                               _vDivider(),
                               _StatItem(
                                   label: 'Friends',
@@ -337,6 +342,7 @@ class _StatItem extends StatelessWidget {
   Widget build(BuildContext context) => Expanded(
         child: GestureDetector(
           onTap: onTap,
+          behavior: HitTestBehavior.opaque,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
             child: Column(
@@ -938,7 +944,10 @@ class _MapTabState extends ConsumerState<_MapTab>
     if (widget.isOwnProfile) {
       final ciRes =
           await ref.read(checkInRepositoryProvider).getMyCheckIns(limit: 200);
-      checkIns = ciRes.getOrElse((_) => const []);
+      checkIns = ciRes
+          .getOrElse((_) => const [])
+          .where((c) => c.source != CheckInSource.auto)
+          .toList();
     }
     if (!mounted) return;
     setState(() {
@@ -1154,44 +1163,53 @@ class _MapTabState extends ConsumerState<_MapTab>
                     letterSpacing: 0.6)),
           ),
           for (final p in places.take(20))
-            Container(
-              decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: Z.outline))),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                        color: Z.brandSoft, borderRadius: Z.r12),
-                    alignment: Alignment.center,
-                    child: const Icon(Icons.location_on,
-                        size: 16, color: Z.brand),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(p.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Z.text)),
-                        const SizedBox(height: 2),
-                        Text('${p.count} stamp${p.count == 1 ? '' : 's'}',
-                            style: const TextStyle(
-                                fontSize: 11, color: Z.textMuted)),
-                      ],
+            GestureDetector(
+              onTap: () {
+                final match = _stamps.where((s) => s.placeName == p.name).firstOrNull;
+                if (match != null) {
+                  context.push('/stamp/${match.id}');
+                }
+              },
+              behavior: HitTestBehavior.opaque,
+              child: Container(
+                decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Z.outline))),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                          color: Z.brandSoft, borderRadius: Z.r12),
+                      alignment: Alignment.center,
+                      child: const Icon(Icons.location_on,
+                          size: 16, color: Z.brand),
                     ),
-                  ),
-                  Text(_distLabel(p.lat, p.lng),
-                      style: const TextStyle(
-                          fontSize: 11, color: Z.textMuted)),
-                ],
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(p.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: Z.text)),
+                          const SizedBox(height: 2),
+                          Text('${p.count} stamp${p.count == 1 ? '' : 's'}',
+                              style: const TextStyle(
+                                  fontSize: 11, color: Z.textMuted)),
+                        ],
+                      ),
+                    ),
+                    Text(_distLabel(p.lat, p.lng),
+                        style: const TextStyle(
+                            fontSize: 11, color: Z.textMuted)),
+                  ],
+                ),
               ),
             ),
         ],
