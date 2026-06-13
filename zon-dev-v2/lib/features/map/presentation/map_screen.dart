@@ -78,6 +78,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   // Friend live locations (Snap Map layer)
   List<FriendLocation> _friendLocations = [];
   final ValueNotifier<Map<String, Offset>> _friendScreenPosNotifier = ValueNotifier({});
+  // Show the name/time chip on friend bubbles only when zoomed in enough.
+  static const double _kFriendLabelZoom = 16.5;
+  double _currentZoom = 13.0;
 
   // Location broadcasting state
   DateTime? _lastBroadcast;
@@ -715,6 +718,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   void _showFriendSheet(String userId) {
     final fl = _find(_friendLocations, (f) => f.userId == userId);
     if (fl == null) return;
+    // Center + zoom onto the selected friend.
+    _map?.flyTo(
+      CameraOptions(
+        center: Point(coordinates: Position(fl.lng, fl.lat)),
+        zoom: 17.5,
+      ),
+      MapAnimationOptions(duration: 600),
+    );
     showModalBottomSheet<void>(
       useRootNavigator: true,
       context: context,
@@ -747,6 +758,40 @@ class _MapScreenState extends ConsumerState<MapScreen> {
       setState(() => _filter = f);
     }
     _load();
+  }
+
+  // ── Ghost Mode ────────────────────────────────────────────────────────────
+
+  Future<void> _toggleGhostMode(bool current) async {
+    final next = !current;
+    try {
+      await ref
+          .read(locationSharingRepositoryProvider)
+          .setGhostMode(next);
+      ref.invalidate(ghostModeProvider);
+      if (next) {
+        // Hide friends from view immediately while ghosting.
+        _friendScreenPosNotifier.value = const {};
+      } else {
+        _updateFriendScreenPositions();
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            duration: const Duration(seconds: 2),
+            content: Text(next
+                ? 'Ghost mode on — your location is hidden'
+                : 'Ghost mode off — sharing location with friends'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not update ghost mode')),
+        );
+      }
+    }
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -805,6 +850,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   zoom: 13.0,
                 ),
                 onCameraChangeListener: (data) {
+                  // Read zoom synchronously from the event to avoid a race
+                  // between concurrent async getCameraState() calls.
+                  _currentZoom = data.cameraState.zoom;
                   _updateFriendScreenPositions();
                   _updatePinScreenPosition();
                 },
@@ -834,6 +882,8 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
 
           // ── Friend avatar bubbles ───────────────────────────────────
+          // Hidden while ghosting: if you don't share, you don't see.
+          if (!ghostMode)
           ValueListenableBuilder<Map<String, Offset>>(
             valueListenable: _friendScreenPosNotifier,
             builder: (ctx, positions, _) {
@@ -843,11 +893,20 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                 if (fl != null) {
                   bubbles.add(
                     Positioned(
-                      left: entry.value.dx - 28,
-                      top: entry.value.dy - 80,
-                      child: _FriendBubble(
-                        location: fl,
-                        onTap: () => _showFriendSheet(fl.userId),
+                      // Anchor by the arrow tip: it sits 38px below the top of
+                      // the column (avatar 28 + 2px ring ×2 = 32, + 6px tip).
+                      // FractionalTranslation(-0.5 x) centers horizontally so
+                      // the tip lands on the exact coordinate regardless of the
+                      // name box width.
+                      left: entry.value.dx,
+                      top: entry.value.dy - 38,
+                      child: FractionalTranslation(
+                        translation: const Offset(-0.5, 0),
+                        child: _FriendBubble(
+                          location: fl,
+                          showLabel: _currentZoom >= _kFriendLabelZoom,
+                          onTap: () => _showFriendSheet(fl.userId),
+                        ),
                       ),
                     ),
                   );
@@ -1263,7 +1322,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                       Text(
                         _savedOnly
                             ? '${_savedStamps.length} saved'
-                            : '${_myStamps.length} stamps  ·  ${_friendLocations.length} friends live',
+                            : ghostMode
+                                ? '${_myStamps.length} stamps  ·  Location hidden'
+                                : '${_myStamps.length} stamps  ·  ${_friendLocations.length} friends live',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -1683,6 +1744,48 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           ),
         ),
 
+        // ── Ghost Mode toggle (top-left) ──
+        if (!_searchActive)
+          Positioned(
+            top: paddingTop + 100,
+            left: 16,
+            child: GestureDetector(
+              onTap: () => _toggleGhostMode(ghostMode),
+              child: Container(
+                width: 56,
+                height: 30,
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  // Filled (brand) only when ghosting = clearly "on".
+                  color: ghostMode ? Z.brand : Z.outline2,
+                  borderRadius: BorderRadius.circular(9999),
+                  boxShadow: const [
+                    BoxShadow(color: Color(0x22000000), blurRadius: 4, offset: Offset(0, 1)),
+                  ],
+                ),
+                child: AnimatedAlign(
+                  duration: const Duration(milliseconds: 180),
+                  curve: Curves.easeInOut,
+                  alignment:
+                      ghostMode ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      ghostMode ? Icons.visibility_off : Icons.visibility,
+                      size: 14,
+                      color: ghostMode ? Z.brand : Z.textMuted,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
         // ── Locate Me Button ──
         Positioned(
           bottom: effectiveExtent * mapScreenHeight + 12,
@@ -1944,8 +2047,13 @@ class _NearbyCard extends StatelessWidget {
 
 class _FriendBubble extends StatelessWidget {
   final FriendLocation location;
+  final bool showLabel;
   final VoidCallback onTap;
-  const _FriendBubble({required this.location, required this.onTap});
+  const _FriendBubble({
+    required this.location,
+    required this.onTap,
+    this.showLabel = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1958,13 +2066,13 @@ class _FriendBubble extends StatelessWidget {
           Container(
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2.5),
+              border: Border.all(color: Colors.white, width: 2),
               boxShadow: const [
                 BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
               ],
             ),
             child: CircleAvatar(
-              radius: 22,
+              radius: 14,
               backgroundImage: location.avatarUrl != null
                   ? CachedNetworkImageProvider(location.avatarUrl!)
                   : null,
@@ -1973,7 +2081,7 @@ class _FriendBubble extends StatelessWidget {
                   ? Text(
                       location.username[0].toUpperCase(),
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w700),
+                          fontSize: 11, fontWeight: FontWeight.w700),
                     )
                   : null,
             ),
@@ -1983,31 +2091,32 @@ class _FriendBubble extends StatelessWidget {
             size: const Size(10, 6),
             painter: _BubbleTipPainter(),
           ),
-          // Name + time chip
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
-                BoxShadow(color: Colors.black12, blurRadius: 4),
-              ],
+          // Name + time chip — only when zoomed in enough
+          if (showLabel)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(11),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 4),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    location.username,
+                    style: const TextStyle(
+                        fontSize: 10, fontWeight: FontWeight.w700),
+                  ),
+                  Text(
+                    location.timeLabel,
+                    style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+                  ),
+                ],
+              ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  location.username,
-                  style: const TextStyle(
-                      fontSize: 10, fontWeight: FontWeight.w700),
-                ),
-                Text(
-                  location.timeLabel,
-                  style: TextStyle(fontSize: 9, color: Colors.grey[600]),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
