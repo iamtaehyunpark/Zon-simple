@@ -58,6 +58,10 @@ class _LocationVisibilityScreenState
     } else {
       await repo.hideFromFriend(friendId);
     }
+    // Hiding/showing is reciprocal (RLS gates viewing both ways), so refresh the
+    // live map stream — otherwise a now-hidden friend lingers until their next
+    // position upsert triggers a re-fetch.
+    ref.invalidate(friendLocationsProvider);
   }
 
   @override
@@ -78,7 +82,8 @@ class _LocationVisibilityScreenState
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                       child: Text(
                         'Your location is visible to all mutual friends by default. '
-                        'Toggle off to hide from a specific friend.',
+                        'Toggle off to hide from a specific friend — this is mutual, '
+                        "so you won't see their location either.",
                         style: TextStyle(
                             fontSize: 13, color: Colors.grey[600]),
                       ),

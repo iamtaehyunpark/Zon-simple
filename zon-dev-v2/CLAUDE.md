@@ -362,9 +362,9 @@ Two overlapping relationship types:
 | Auto anchors | `my-auto-source` | Grey (tiny r=2.5) | Auto check-ins — today |
 | Following stamps | `followed-stamps-source` | Orange | Following users' public stamps — **filter window** |
 | Following stories | `followed-checkins-source` | Pink | Following users' public check-ins — always last 24h |
-| Friend bubbles | *(Stack overlay, not GeoJSON)* | Avatar | Accepted friends' live positions (Realtime-streamed) |
+| Friend bubbles | *(native PointAnnotations)* | Avatar | Accepted friends' live positions (Realtime-streamed) |
 
-**Friend location bubbles** — rendered as a Flutter `Stack` over the `MapWidget`, not as map layers. `pixelForCoordinate` converts each friend's `(lat, lng)` to screen coordinates; a 200ms timer refreshes positions as the camera moves. Stale (≥8h) positions are hidden. My own position is broadcast via `LocationSharingRepository.upsertMyLocation` (throttled ≥30s or ≥50m). Ghost mode (`is_ghost_mode` on `profiles`) and per-friend blocking (`location_hidden_from` table) suppress visibility.
+**Friend location bubbles** — rendered as native Mapbox `PointAnnotation`s (`PointAnnotationManager`), not a Flutter overlay. The avatar+tip is drawn to a bitmap icon (`_drawFriendBubble`, at device pixel ratio, cached by avatar URL); the name/time uses the annotation's built-in `textField`, shown only above `_kFriendLabelZoom`. Because the annotations live in the GL renderer, the globe occludes far-side friends automatically and they scale with the camera — no `pixelForCoordinate`, no per-frame screen-position timer. `_syncFriendAnnotations` reconciles annotations on each Realtime update and on zoom-tier flips (serialized via `_friendSyncInFlight`); taps route through `tapEvents` → `_showFriendSheet`. Stale (≥8h) positions are hidden. My own position is broadcast via `LocationSharingRepository.upsertMyLocation` (throttled ≥30s or ≥50m). Ghost mode (`is_ghost_mode` on `profiles`) and per-friend blocking (`location_hidden_from` table) suppress visibility.
 
 **Filter** (`MapFilter` enum): `today | week | month | year | all | custom` — applies to following stamps only. "Custom" opens Flutter's `showDateRangePicker`.
 

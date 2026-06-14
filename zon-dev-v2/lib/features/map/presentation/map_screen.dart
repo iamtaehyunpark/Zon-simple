@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -75,11 +78,22 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   List<Stamp> _followedStamps = [];
   List<CheckIn> _followedCheckIns = []; // public, last 24h always
 
-  // Friend live locations (Snap Map layer)
+  // Friend live locations (Snap Map layer) — rendered as native Mapbox
+  // PointAnnotations so the GL renderer owns occlusion (back-of-globe friends
+  // are culled automatically) and camera scaling, instead of a screen overlay.
   List<FriendLocation> _friendLocations = [];
-  final ValueNotifier<Map<String, Offset>> _friendScreenPosNotifier = ValueNotifier({});
-  // Show the name/time chip on friend bubbles only when zoomed in enough.
-  static const double _kFriendLabelZoom = 16.5;
+  PointAnnotationManager? _friendAnnMgr;
+  final Map<String, PointAnnotation> _friendAnnById = {}; // userId → annotation
+  final Map<String, String> _annIdToUser = {};            // annotation.id → userId
+  final Map<String, String> _friendAnnKey = {};           // userId → rendered bitmap key
+  final Map<String, Uint8List> _bubbleBmpCache = {};      // avatar key → drawn PNG
+  final Map<String, ui.Image> _avatarImgCache = {};       // avatarUrl → decoded image
+  final Dio _avatarDio = Dio();
+  bool _friendSyncInFlight = false;
+  bool _friendSyncQueued = false;
+  double _dpr = 3.0; // device pixel ratio; set in build, used to render crisp bubbles
+  // Show the name/time chip on friend bubbles only once zoomed in past this.
+  static const double _kFriendLabelZoom = 14.0;
   double _currentZoom = 13.0;
 
   // Location broadcasting state
@@ -147,7 +161,6 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   void dispose() {
     _sheetController.dispose();
-    _friendScreenPosNotifier.dispose();
     _pinScreenPosNotifier.dispose();
     _legendTimer?.cancel();
     _searchDebounce?.cancel();
@@ -488,32 +501,287 @@ class _MapScreenState extends ConsumerState<MapScreen> {
     });
   }
 
-  // ── Friend avatar overlay ─────────────────────────────────────────────────
+  // ── Friend annotation layer ───────────────────────────────────────────────
+  // Friends are native Mapbox PointAnnotations: the avatar+tip is drawn to a
+  // bitmap icon, the name/time uses the annotation's built-in text. The GL
+  // renderer handles globe occlusion and camera scaling — no per-frame
+  // pixelForCoordinate, no screen overlay.
 
   void _onFriendLocationsChanged(List<FriendLocation> locations) {
     if (!mounted) return;
     setState(() => _friendLocations = locations.where((f) => !f.isStale).toList());
-    _updateFriendScreenPositions();
+    _syncFriendAnnotations();
   }
 
-  Future<void> _updateFriendScreenPositions() async {
-    final map = _map;
-    if (map == null || _friendLocations.isEmpty) {
-      _friendScreenPosNotifier.value = const {};
+  /// Reconcile the on-map friend annotations with [_friendLocations].
+  /// Serialized via [_friendSyncInFlight] so overlapping triggers (Realtime
+  /// updates + zoom-tier flips) don't race on the annotation manager.
+  Future<void> _syncFriendAnnotations({bool? ghost}) async {
+    final mgr = _friendAnnMgr;
+    if (mgr == null) return;
+    if (_friendSyncInFlight) {
+      _friendSyncQueued = true;
       return;
     }
-    final positions = <String, Offset>{};
-    for (final fl in _friendLocations) {
-      try {
-        final sc = await map.pixelForCoordinate(
-          Point(coordinates: Position(fl.lng, fl.lat)),
-        );
-        positions[fl.userId] = Offset(sc.x, sc.y);
-      } catch (e) {
-        debugPrint('[MapScreen] pixelForCoordinate failed for ${fl.userId}: $e');
+    _friendSyncInFlight = true;
+    try {
+      final hidden = ghost ?? (ref.read(ghostModeProvider).valueOrNull ?? false);
+      // Ghosting hides everyone: if you don't share, you don't see.
+      final wanted = hidden ? const <FriendLocation>[] : _friendLocations;
+
+      // Read the real current zoom (the map may have loaded already zoomed in,
+      // before any camera-change event updated _currentZoom). Without this the
+      // label tier can be computed from a stale zoom and never appear.
+      final map = _map;
+      if (map != null) {
+        try {
+          _currentZoom = (await map.getCameraState()).zoom;
+        } catch (_) {/* keep last known */}
+      }
+      final showLabel = _currentZoom >= _kFriendLabelZoom;
+      final wantedIds = wanted.map((f) => f.userId).toSet();
+
+      // Remove annotations for friends that dropped off.
+      for (final uid in _friendAnnById.keys.toList()) {
+        if (!wantedIds.contains(uid)) {
+          final ann = _friendAnnById.remove(uid)!;
+          _annIdToUser.remove(ann.id);
+          _friendAnnKey.remove(uid);
+          try {
+            await mgr.delete(ann);
+          } catch (_) {/* manager may be gone */}
+        }
+      }
+
+      // Reconcile the rest. The whole bubble (avatar + tip + name/time chip) is
+      // baked into one icon bitmap, padded so the tip apex is the image's center
+      // — IconAnchor.CENTER drops the apex on the coordinate. When the bitmap
+      // changes (label toggles, avatar loads, time updates) we delete + recreate
+      // rather than mutating `image`, because swapping an existing annotation's
+      // icon doesn't reliably re-render.
+      for (final fl in wanted) {
+        final geometry = Point(coordinates: Position(fl.lng, fl.lat));
+        final key = _friendBitmapKey(fl, showLabel);
+        final existing = _friendAnnById[fl.userId];
+        if (existing != null && _friendAnnKey[fl.userId] == key) {
+          // Same bitmap — only the position may have moved.
+          existing.geometry = geometry;
+          try {
+            await mgr.update(existing);
+          } catch (_) {/* manager may be gone */}
+          continue;
+        }
+        if (existing != null) {
+          _annIdToUser.remove(existing.id);
+          try {
+            await mgr.delete(existing);
+          } catch (_) {/* manager may be gone */}
+        }
+        final bmp = await _friendBitmap(fl, showLabel: showLabel);
+        final ann = await mgr.create(PointAnnotationOptions(
+          geometry: geometry,
+          image: bmp,
+          iconAnchor: IconAnchor.CENTER,
+          // Bitmap is rendered at _dpr for crispness; Mapbox draws image pixels
+          // 1:1 with physical screen pixels at iconSize 1 (UIImage scale =
+          // UIScreen.main.scale natively), landing it at its intended size.
+          iconSize: 1.0,
+        ));
+        _friendAnnById[fl.userId] = ann;
+        _annIdToUser[ann.id] = fl.userId;
+        _friendAnnKey[fl.userId] = key;
+      }
+    } finally {
+      _friendSyncInFlight = false;
+      if (_friendSyncQueued) {
+        _friendSyncQueued = false;
+        _syncFriendAnnotations();
       }
     }
-    _friendScreenPosNotifier.value = positions;
+  }
+
+  /// Identifies a bubble bitmap by everything that affects its pixels — so the
+  /// sync loop can tell when an annotation needs recreating.
+  String _friendBitmapKey(FriendLocation fl, bool showLabel) {
+    final avatarKey = fl.avatarUrl ?? 'init:${_friendInitial(fl)}';
+    // When the label is hidden, the chip text doesn't affect the pixels — so
+    // omit it, and a friend just moving (not the time changing) needs no recreate.
+    if (!showLabel) return '$avatarKey|nolabel|$_dpr';
+    return '$avatarKey|label|${fl.username}|${fl.timeLabel}|$_dpr';
+  }
+
+  /// Full bubble bitmap for [fl]. The decoded avatar is cached by URL (the
+  /// network fetch is the only expensive part); the composited PNG is cached by
+  /// its [_friendBitmapKey] so re-syncs are free when nothing changed.
+  Future<Uint8List> _friendBitmap(FriendLocation fl, {required bool showLabel}) async {
+    final compositeKey = _friendBitmapKey(fl, showLabel);
+    final cached = _bubbleBmpCache[compositeKey];
+    if (cached != null) return cached;
+
+    ui.Image? avatar;
+    final url = fl.avatarUrl;
+    if (url != null) {
+      avatar = _avatarImgCache[url];
+      if (avatar == null) {
+        try {
+          final resp = await _avatarDio.get<List<int>>(
+            url,
+            options: Options(responseType: ResponseType.bytes),
+          );
+          final codec = await ui.instantiateImageCodec(
+            Uint8List.fromList(resp.data!),
+          );
+          avatar = (await codec.getNextFrame()).image;
+          _avatarImgCache[url] = avatar;
+        } catch (_) {
+          avatar = null; // fall back to the initial chip
+        }
+      }
+    }
+    final bmp = await _drawFriendBubble(fl, avatar, showLabel);
+    _bubbleBmpCache[compositeKey] = bmp;
+    return bmp;
+  }
+
+  String _friendInitial(FriendLocation fl) =>
+      fl.username.isNotEmpty ? fl.username[0].toUpperCase() : '?';
+
+  /// Replicates the original `_FriendBubble` widget as a bitmap: a white-ringed,
+  /// shadowed circular avatar, a downward speech-bubble tip, and — when zoomed in
+  /// past [_kFriendLabelZoom] ([showLabel]) — a white rounded name/time chip
+  /// below. Rendered at [_dpr] for crispness and padded so the tip apex sits at
+  /// the bitmap's exact center — letting IconAnchor.CENTER drop the apex on the
+  /// coordinate (see _syncFriendAnnotations).
+  Future<Uint8List> _drawFriendBubble(
+      FriendLocation fl, ui.Image? avatar, bool showLabel) async {
+    const double avatarR = 14, ring = 2, tipH = 6, tipW = 10;
+    const double block = (avatarR + ring) * 2; // 32 — avatar incl. ring
+    const double avatarTopToApex = block + tipH; // avatar + tip
+    const double chipPadH = 7, chipPadV = 3, chipRadius = 11;
+    const double padTop = 6, padBottom = 5, padSide = 6; // shadow breathing room
+    // BoxShadow blurRadius → MaskFilter sigma (Flutter: r * 0.57735 + 0.5).
+    const double avatarShadowSigma = 5.12; // matches blurRadius 8
+    const double chipShadowSigma = 2.81; // matches blurRadius 4
+
+    // Measure the name/time chip (only when shown) to size the canvas.
+    TextPainter? namePainter, timePainter;
+    double chipW = 0, chipH = 0;
+    if (showLabel) {
+      namePainter = TextPainter(
+        text: TextSpan(
+          text: fl.username,
+          style: const TextStyle(
+              fontSize: 10, fontWeight: FontWeight.w700, color: Colors.black87),
+        ),
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+      timePainter = TextPainter(
+        text: TextSpan(
+          text: fl.timeLabel,
+          style: TextStyle(fontSize: 9, color: Colors.grey[600]),
+        ),
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+      chipW = math.max(namePainter.width, timePainter.width) + chipPadH * 2;
+      chipH = namePainter.height + timePainter.height + chipPadV * 2;
+    }
+
+    // Pad vertically so the tip apex lands at the image's vertical center.
+    const double aboveExtent = padTop + avatarTopToApex;
+    final double belowExtent = showLabel ? (padBottom + chipH) : padBottom;
+    final double half = math.max(aboveExtent, belowExtent);
+    final double imageH = half * 2;
+    final double apexY = half;
+    final double contentW = math.max(block, chipW) + padSide * 2;
+    final double cx = contentW / 2;
+    final Offset avatarCenter = Offset(cx, apexY - tipH - (avatarR + ring));
+
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    canvas.scale(_dpr);
+
+    // Avatar drop shadow (black26, offset 0,2).
+    canvas.drawCircle(
+      avatarCenter.translate(0, 2),
+      avatarR + ring,
+      Paint()
+        ..color = const Color(0x42000000)
+        ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, avatarShadowSigma),
+    );
+    // White ring.
+    canvas.drawCircle(avatarCenter, avatarR + ring, Paint()..color = Colors.white);
+    // Avatar image (center-cropped to square) clipped to the circle, or initial.
+    if (avatar != null) {
+      canvas.save();
+      canvas.clipPath(Path()..addOval(Rect.fromCircle(center: avatarCenter, radius: avatarR)));
+      canvas.drawImageRect(
+        avatar,
+        _squareCrop(avatar),
+        Rect.fromCircle(center: avatarCenter, radius: avatarR),
+        Paint()
+          ..filterQuality = FilterQuality.high
+          ..isAntiAlias = true,
+      );
+      canvas.restore();
+    } else {
+      canvas.drawCircle(avatarCenter, avatarR, Paint()..color = const Color(0xFFE1BEE7));
+      final tp = TextPainter(
+        text: TextSpan(
+          text: _friendInitial(fl),
+          style: const TextStyle(
+              fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black),
+        ),
+        textDirection: ui.TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, avatarCenter - Offset(tp.width / 2, tp.height / 2));
+    }
+
+    // Downward tip (apex at the coordinate).
+    final double tipTop = apexY - tipH;
+    canvas.drawPath(
+      Path()
+        ..moveTo(cx - tipW / 2, tipTop)
+        ..lineTo(cx, apexY)
+        ..lineTo(cx + tipW / 2, tipTop)
+        ..close(),
+      Paint()..color = Colors.white,
+    );
+
+    // White name/time chip directly below the apex.
+    if (showLabel) {
+      final double chipY = apexY; // chip sits directly below the apex
+      final chipRect = RRect.fromRectAndRadius(
+        Rect.fromLTWH(cx - chipW / 2, chipY, chipW, chipH),
+        const Radius.circular(chipRadius),
+      );
+      canvas.drawRRect(
+        chipRect,
+        Paint()
+          ..color = const Color(0x1F000000) // black12
+          ..maskFilter = const ui.MaskFilter.blur(ui.BlurStyle.normal, chipShadowSigma),
+      );
+      canvas.drawRRect(chipRect, Paint()..color = Colors.white);
+      final double textY = chipY + chipPadV;
+      namePainter!.paint(canvas, Offset(cx - namePainter.width / 2, textY));
+      timePainter!.paint(
+        canvas,
+        Offset(cx - timePainter.width / 2, textY + namePainter.height),
+      );
+    }
+
+    final picture = recorder.endRecording();
+    final image =
+        await picture.toImage((contentW * _dpr).round(), (imageH * _dpr).round());
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    return bytes!.buffer.asUint8List();
+  }
+
+  /// Center-crop source rect so a non-square avatar fills the circle without
+  /// stretching (BoxFit.cover semantics).
+  Rect _squareCrop(ui.Image img) {
+    final double w = img.width.toDouble(), h = img.height.toDouble();
+    final double s = math.min(w, h);
+    return Rect.fromLTWH((w - s) / 2, (h - s) / 2, s, s);
   }
 
   // ── Location broadcasting ─────────────────────────────────────────────────
@@ -769,12 +1037,9 @@ class _MapScreenState extends ConsumerState<MapScreen> {
           .read(locationSharingRepositoryProvider)
           .setGhostMode(next);
       ref.invalidate(ghostModeProvider);
-      if (next) {
-        // Hide friends from view immediately while ghosting.
-        _friendScreenPosNotifier.value = const {};
-      } else {
-        _updateFriendScreenPositions();
-      }
+      // Pass the new state explicitly — the provider invalidation above is async
+      // and may not reflect `next` yet when we read it.
+      _syncFriendAnnotations(ghost: next);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -799,6 +1064,7 @@ class _MapScreenState extends ConsumerState<MapScreen> {
   @override
   Widget build(BuildContext context) {
     final pos = ref.watch(gpsNotifierProvider).valueOrNull;
+    _dpr = MediaQuery.devicePixelRatioOf(context);
     final bottomPad = MediaQuery.of(context).padding.bottom;
     final mapScreenHeight = MediaQuery.of(context).size.height - 83 - bottomPad;
     final paddingTop = MediaQuery.of(context).padding.top;
@@ -850,10 +1116,14 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                   zoom: 13.0,
                 ),
                 onCameraChangeListener: (data) {
-                  // Read zoom synchronously from the event to avoid a race
-                  // between concurrent async getCameraState() calls.
+                  // Friend annotations are anchored to coordinates and move with
+                  // the camera natively. Re-sync only when the name/time chip
+                  // crosses its zoom threshold, to add/remove the label.
+                  final prevTier = _currentZoom >= _kFriendLabelZoom;
                   _currentZoom = data.cameraState.zoom;
-                  _updateFriendScreenPositions();
+                  if ((_currentZoom >= _kFriendLabelZoom) != prevTier) {
+                    _syncFriendAnnotations();
+                  }
                   _updatePinScreenPosition();
                 },
                 onStyleLoadedListener: (styleLoadedEventData) {
@@ -863,60 +1133,34 @@ class _MapScreenState extends ConsumerState<MapScreen> {
                     _centerOnUserInitial(posVal);
                   }
                 },
-                onMapCreated: (controller) {
+                onMapCreated: (controller) async {
                   _map = controller;
                   controller.addInteraction(TapInteraction.onMap(_onMapTap));
                   controller.addInteraction(LongTapInteraction.onMap(_onMapLongPress));
                   _updateLayers();
-                  
+
                   // Center camera immediately if location is already resolved
                   final posVal = ref.read(gpsNotifierProvider).valueOrNull;
                   if (posVal != null) {
                     _centerOnUserInitial(posVal);
                   }
-                  
-                  _updateFriendScreenPositions();
+
+                  // Friend live-location layer (native annotations).
+                  _friendAnnMgr =
+                      await controller.annotations.createPointAnnotationManager();
+                  _friendAnnMgr!.tapEvents(onTap: (ann) {
+                    final uid = _annIdToUser[ann.id];
+                    if (uid != null) _showFriendSheet(uid);
+                  });
+                  _syncFriendAnnotations();
                 },
               ),
             ),
           ),
 
-          // ── Friend avatar bubbles ───────────────────────────────────
-          // Hidden while ghosting: if you don't share, you don't see.
-          if (!ghostMode)
-          ValueListenableBuilder<Map<String, Offset>>(
-            valueListenable: _friendScreenPosNotifier,
-            builder: (ctx, positions, _) {
-              final bubbles = <Widget>[];
-              for (final entry in positions.entries) {
-                final fl = _find(_friendLocations, (f) => f.userId == entry.key);
-                if (fl != null) {
-                  bubbles.add(
-                    Positioned(
-                      // Anchor by the arrow tip: it sits 38px below the top of
-                      // the column (avatar 28 + 2px ring ×2 = 32, + 6px tip).
-                      // FractionalTranslation(-0.5 x) centers horizontally so
-                      // the tip lands on the exact coordinate regardless of the
-                      // name box width.
-                      left: entry.value.dx,
-                      top: entry.value.dy - 38,
-                      child: FractionalTranslation(
-                        translation: const Offset(-0.5, 0),
-                        child: _FriendBubble(
-                          location: fl,
-                          showLabel: _currentZoom >= _kFriendLabelZoom,
-                          onTap: () => _showFriendSheet(fl.userId),
-                        ),
-                      ),
-                    ),
-                  );
-                }
-              }
-              return Stack(
-                children: bubbles,
-              );
-            },
-          ),
+          // Friend avatar bubbles are now native Mapbox PointAnnotations
+          // (see _syncFriendAnnotations) — rendered inside the GL layer so the
+          // globe occludes far-side friends and they scale with the camera.
 
           // ── Pinned location emoji ───────────────────────────────────
           ValueListenableBuilder<Offset?>(
@@ -2040,103 +2284,6 @@ class _NearbyCard extends StatelessWidget {
       ),
     );
   }
-}
-
-// ── Friend avatar bubble (Snapchat-style) ─────────────────────────────────────
-
-
-class _FriendBubble extends StatelessWidget {
-  final FriendLocation location;
-  final bool showLabel;
-  final VoidCallback onTap;
-  const _FriendBubble({
-    required this.location,
-    required this.onTap,
-    this.showLabel = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Circular avatar with white ring
-          Container(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.white, width: 2),
-              boxShadow: const [
-                BoxShadow(color: Colors.black26, blurRadius: 8, offset: Offset(0, 2)),
-              ],
-            ),
-            child: CircleAvatar(
-              radius: 14,
-              backgroundImage: location.avatarUrl != null
-                  ? CachedNetworkImageProvider(location.avatarUrl!)
-                  : null,
-              backgroundColor: Colors.purple[100],
-              child: location.avatarUrl == null
-                  ? Text(
-                      location.username[0].toUpperCase(),
-                      style: const TextStyle(
-                          fontSize: 11, fontWeight: FontWeight.w700),
-                    )
-                  : null,
-            ),
-          ),
-          // Small downward pointer (speech bubble tip)
-          CustomPaint(
-            size: const Size(10, 6),
-            painter: _BubbleTipPainter(),
-          ),
-          // Name + time chip — only when zoomed in enough
-          if (showLabel)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(11),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 4),
-                ],
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    location.username,
-                    style: const TextStyle(
-                        fontSize: 10, fontWeight: FontWeight.w700),
-                  ),
-                  Text(
-                    location.timeLabel,
-                    style: TextStyle(fontSize: 9, color: Colors.grey[600]),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _BubbleTipPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()..color = Colors.white;
-    final path = Path()
-      ..moveTo(0, 0)
-      ..lineTo(size.width / 2, size.height)
-      ..lineTo(size.width, 0)
-      ..close();
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
 }
 
 // ── Friend location bottom sheet ──────────────────────────────────────────────
