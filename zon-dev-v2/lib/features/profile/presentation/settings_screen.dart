@@ -6,6 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../shared/theme/app_theme.dart';
+import '../../../shared/utils/format.dart';
+import '../../../core/errors/app_exception.dart';
+import 'providers/profile_provider.dart';
 import '../../../core/photos/photo_service.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/repositories/profile_repository.dart';
@@ -24,6 +27,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   final _displayNameCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
   String? _avatarUrl;
+  String _currentUsername = '';
   bool _isPrivate = false;
   bool _isGhostMode = false;
   UserPrivacy _privacy = const UserPrivacy();
@@ -55,6 +59,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       (e) => debugPrint('[Settings] profile load error: ${e.message}'),
       (p) {
         _usernameCtrl.text = p.username;
+        _currentUsername = p.username;
         _displayNameCtrl.text = p.displayName ?? '';
         _bioCtrl.text = p.bio ?? '';
         _avatarUrl = p.avatarUrl;
@@ -82,22 +87,55 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) setState(() => _avatarUrl = url);
   }
 
-  Future<void> _saveProfile() async {
+  /// Returns true on a successful save (so the sheet can close).
+  Future<bool> _saveProfile() async {
+    final repo = ref.read(profileRepositoryProvider);
+    final id = _usernameCtrl.text.trim();
+
+    final formatErr = usernameError(id);
+    if (formatErr != null) {
+      _showMsg(formatErr);
+      return false;
+    }
+
     setState(() => _savingProfile = true);
-    final res = await ref.read(profileRepositoryProvider).updateProfile({
-      'username': _usernameCtrl.text.trim(),
+
+    // Only check availability when the ID actually changed.
+    if (id.toLowerCase() != _currentUsername.toLowerCase()) {
+      final available = await repo.isUsernameAvailable(id);
+      if (!mounted) return false;
+      if (!available) {
+        setState(() => _savingProfile = false);
+        _showMsg('That ID is already taken.');
+        return false;
+      }
+    }
+
+    final res = await repo.updateProfile({
+      'username': id,
       'display_name': _displayNameCtrl.text.trim(),
       'bio': _bioCtrl.text.trim(),
     });
-    if (mounted) {
-      setState(() => _savingProfile = false);
-      res.fold(
-        (e) => ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: ${e.message}'))),
-        (_) => ScaffoldMessenger.of(context)
-            .showSnackBar(const SnackBar(content: Text('Profile saved'))),
-      );
-    }
+    if (!mounted) return false;
+    setState(() => _savingProfile = false);
+    return res.fold(
+      (e) {
+        _showMsg(e is ValidationError ? e.message : 'Error: ${e.message}');
+        return false;
+      },
+      (p) {
+        _currentUsername = p.username;
+        ref.invalidate(profileNotifierProvider(p.id));
+        _showMsg('Profile saved');
+        return true;
+      },
+    );
+  }
+
+  void _showMsg(String msg) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(msg)));
   }
 
   Future<void> _updatePrivacy(Map<String, dynamic> updates, UserPrivacy next) async {
@@ -151,7 +189,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final sections = [
       _Section('PROFILE', [
-        _Row(icon: Icons.person, label: 'Edit name & bio',
+        _Row(icon: Icons.person, label: 'Edit ID, name & bio',
             onTap: _showEditProfile),
         _Row(icon: Icons.photo_camera, label: 'Change avatar',
             avatarUrl: _avatarUrl,
@@ -470,7 +508,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _usernameCtrl,
-                decoration: const InputDecoration(labelText: 'Username'),
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: const InputDecoration(
+                  labelText: 'ID',
+                  prefixText: '@',
+                  helperText: 'Unique. Lowercase letters, numbers, . or _',
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -491,8 +535,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   onPressed: _savingProfile
                       ? null
                       : () async {
-                           await _saveProfile();
-                           if (mounted) Navigator.pop(context);
+                           final ok = await _saveProfile();
+                           if (ok && mounted) Navigator.pop(context);
                          },
                   child: _savingProfile
                       ? const SizedBox(

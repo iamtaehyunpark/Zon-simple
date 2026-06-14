@@ -10,6 +10,7 @@ import '../../../data/models/stamp.dart';
 import '../../../data/models/check_in.dart';
 import '../../../data/models/enums.dart';
 import '../../../data/models/user_profile.dart';
+import '../../../core/errors/app_exception.dart';
 import '../../../data/repositories/profile_repository.dart';
 import '../../../data/repositories/diary_repository.dart';
 import '../../../data/repositories/stamp_repository.dart';
@@ -1359,15 +1360,18 @@ class _EditProfileSheet extends ConsumerStatefulWidget {
 }
 
 class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
+  late final TextEditingController _usernameCtrl;
   late final TextEditingController _displayNameCtrl;
   late final TextEditingController _bioCtrl;
   String? _avatarUrl;
+  String? _idError;
   bool _uploadingAvatar = false;
   bool _saving = false;
 
   @override
   void initState() {
     super.initState();
+    _usernameCtrl = TextEditingController(text: widget.profile.username);
     _displayNameCtrl = TextEditingController(text: widget.profile.displayName ?? '');
     _bioCtrl = TextEditingController(text: widget.profile.bio ?? '');
     _avatarUrl = widget.profile.avatarUrl;
@@ -1375,6 +1379,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
 
   @override
   void dispose() {
+    _usernameCtrl.dispose();
     _displayNameCtrl.dispose();
     _bioCtrl.dispose();
     super.dispose();
@@ -1403,21 +1408,51 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
   }
 
   Future<void> _save() async {
-    setState(() => _saving = true);
+    final id = _usernameCtrl.text.trim();
+    final formatErr = usernameError(id);
+    if (formatErr != null) {
+      setState(() => _idError = formatErr);
+      return;
+    }
+
+    setState(() {
+      _idError = null;
+      _saving = true;
+    });
     final repo = ref.read(profileRepositoryProvider);
+
+    // Only check availability when the ID actually changed.
+    if (id.toLowerCase() != widget.profile.username.toLowerCase()) {
+      final available = await repo.isUsernameAvailable(id);
+      if (!mounted) return;
+      if (!available) {
+        setState(() {
+          _saving = false;
+          _idError = 'That ID is already taken.';
+        });
+        return;
+      }
+    }
+
     final res = await repo.updateProfile({
+      'username': id,
       'display_name': _displayNameCtrl.text.trim(),
       'bio': _bioCtrl.text.trim(),
       'avatar_url': _avatarUrl,
     });
-    
+
     res.fold(
       (err) {
         if (mounted) {
-          setState(() => _saving = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to save profile: ${err.message}')),
-          );
+          setState(() {
+            _saving = false;
+            if (err is ValidationError) _idError = err.message;
+          });
+          if (err is! ValidationError) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Failed to save profile: ${err.message}')),
+            );
+          }
         }
       },
       (updatedProfile) {
@@ -1500,6 +1535,28 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
                 ),
               ),
               const SizedBox(height: 24),
+              TextField(
+                controller: _usernameCtrl,
+                autocorrect: false,
+                enableSuggestions: false,
+                textInputAction: TextInputAction.next,
+                style: const TextStyle(fontSize: 14, color: Z.text),
+                onChanged: (_) {
+                  if (_idError != null) setState(() => _idError = null);
+                },
+                decoration: InputDecoration(
+                  labelText: 'ID',
+                  prefixText: '@',
+                  helperText: 'Unique. Lowercase letters, numbers, . or _',
+                  errorText: _idError,
+                  labelStyle: const TextStyle(color: Z.textMuted),
+                  border: const OutlineInputBorder(),
+                  focusedBorder: const OutlineInputBorder(
+                    borderSide: BorderSide(color: Z.brand, width: 1.5),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: _displayNameCtrl,
                 style: const TextStyle(fontSize: 14, color: Z.text),

@@ -16,3 +16,10 @@ class AuthError extends AppException {
   final String message;
   const AuthError(this.message);
 }
+
+/// User-facing input problem (e.g. an ID that's already taken or malformed).
+class ValidationError extends AppException {
+  @override
+  final String message;
+  const ValidationError(this.message);
+}

@@ -60,8 +60,32 @@ class ProfileRepository with BaseRepository {
           .select()
           .single();
       return right(_fromRow(data));
+    } on PostgrestException catch (e) {
+      // Unique violation on the username index → ID already taken.
+      if (e.code == '23505') {
+        return left(const ValidationError('That ID is already taken.'));
+      }
+      return left(NetworkError(e.message));
     } catch (e) {
       return left(NetworkError(e.toString()));
+    }
+  }
+
+  /// Whether [username] is free to use (case-insensitive). The current user's
+  /// own existing ID counts as available so re-saving an unchanged ID is fine.
+  Future<bool> isUsernameAvailable(String username) async {
+    final candidate = username.trim();
+    if (candidate.isEmpty) return false;
+    try {
+      final row = await client
+          .from('profiles')
+          .select('id')
+          .ilike('username', candidate)
+          .maybeSingle();
+      return row == null || row['id'] == userId;
+    } catch (_) {
+      // On a lookup failure, don't block — the DB unique index is the backstop.
+      return true;
     }
   }
 
